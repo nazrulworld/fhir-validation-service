@@ -9,8 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Base test container class that initializes PostgreSQL and Redis containers
+ * Base test container class that initializes PostgreSQL container
  * for integration testing.
+ * 
+ * @author Md Nazrul Islam
  */
 public class BaseTestContainer {
     private static final Logger logger = LoggerFactory.getLogger(BaseTestContainer.class);
@@ -22,25 +24,8 @@ public class BaseTestContainer {
     protected static final String POSTGRES_PASSWORD = "Test1234";
     private static final int POSTGRES_PORT = 5432;
 
-    // Redis configuration
-    private static final String REDIS_IMAGE = "redis:7.4.2";
-    private static final int REDIS_PORT = 6379;
-
     // Containers
     protected static PostgreSQLContainer<?> postgresContainer;
-    protected static GenericContainer<?> redisContainer;
-
-    /**
-     * Creates a Redis container with the specified configuration
-     * @return Redis container
-     */
-    private static GenericContainer<?> createRedisContainer() {
-        try (GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(REDIS_IMAGE))
-                .withExposedPorts(REDIS_PORT)) {
-            // Return the container without starting it
-            return container;
-        }
-    }
 
     @BeforeAll
     public static void startContainers() {
@@ -89,43 +74,6 @@ public class BaseTestContainer {
                     postgresContainer.getHost(), 
                     postgresContainer.getMappedPort(POSTGRES_PORT));
         }
-
-        // Initialize Redis container if not already initialized
-        if (redisContainer == null) {
-            logger.info("Initializing Redis container");
-            try (GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(REDIS_IMAGE))
-                    .withExposedPorts(REDIS_PORT)) {
-
-                // Start the container
-                container.start();
-
-                // Assign to static field (container will be managed by JUnit lifecycle)
-                redisContainer = container;
-
-                // Set system properties for Redis connection
-                System.setProperty("REDIS_HOST", redisContainer.getHost());
-                System.setProperty("REDIS_PORT", String.valueOf(redisContainer.getMappedPort(REDIS_PORT)));
-
-                logger.info("Redis container started at {}:{}", 
-                        redisContainer.getHost(), 
-                        redisContainer.getMappedPort(REDIS_PORT));
-
-                // Suppress closing of the container when exiting the try-with-resources block
-                container.close();
-            }
-        } else if (!redisContainer.isRunning()) {
-            // Start Redis container if not already running
-            logger.info("Starting Redis container");
-            redisContainer.start();
-
-            // Set system properties for Redis connection
-            System.setProperty("REDIS_HOST", redisContainer.getHost());
-            System.setProperty("REDIS_PORT", String.valueOf(redisContainer.getMappedPort(REDIS_PORT)));
-
-            logger.info("Redis container started at {}:{}", 
-                    redisContainer.getHost(), 
-                    redisContainer.getMappedPort(REDIS_PORT));
-        }
     }
 
     @AfterAll
@@ -133,11 +81,6 @@ public class BaseTestContainer {
         if (postgresContainer != null && postgresContainer.isRunning()) {
             logger.info("Stopping PostgreSQL container");
             postgresContainer.stop();
-        }
-
-        if (redisContainer != null && redisContainer.isRunning()) {
-            logger.info("Stopping Redis container");
-            redisContainer.stop();
         }
     }
 
@@ -165,27 +108,4 @@ public class BaseTestContainer {
         return postgresContainer.getMappedPort(POSTGRES_PORT);
     }
 
-    /**
-     * Get the host for the Redis container
-     * @return Redis host
-     */
-    public static String getRedisHost() {
-        return redisContainer.getHost();
-    }
-
-    /**
-     * Get the mapped port for the Redis container
-     * @return Redis port
-     */
-    public static Integer getRedisPort() {
-        return redisContainer.getMappedPort(REDIS_PORT);
-    }
-
-    /**
-     * Get the Redis connection string
-     * @return Redis connection string in the format redis://host:port
-     */
-    public static String getRedisConnectionString() {
-        return String.format("redis://%s:%d", getRedisHost(), getRedisPort());
-    }
 }

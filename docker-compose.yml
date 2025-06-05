@@ -1,23 +1,19 @@
-version: '3.8'
-
 services:
   fhir-validator:
     build:
       context: .
       # Use default platform or override with DOCKER_DEFAULT_PLATFORM env var
     ports:
-      - "8080:8080"
+      - "8880:8880"
     environment:
       - PG_HOST=postgres
-      - REDIS_HOST=redis
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
+      interval: 30s
+      start_period: 40s
       timeout: 3s
       retries: 3
 
@@ -37,18 +33,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    # Use default platform or override with DOCKER_DEFAULT_PLATFORM env var
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -58,7 +42,6 @@ services:
     depends_on:
       - fhir-validator
       - postgres-exporter
-      - redis-exporter
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter
@@ -70,16 +53,5 @@ services:
       postgres:
         condition: service_healthy
 
-  redis-exporter:
-    image: oliver006/redis_exporter
-    environment:
-      REDIS_ADDR: "redis:6379"
-    ports:
-      - "9121:9121"
-    depends_on:
-      redis:
-        condition: service_healthy
-
 volumes:
   postgres-data:
-  redis-data:

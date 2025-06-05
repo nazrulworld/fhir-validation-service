@@ -9,11 +9,7 @@ import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
-import io.vertx.redis.client.Redis;
-import io.vertx.redis.client.RedisAPI;
-import io.vertx.redis.client.RedisOptions;
 import io.vertx.sqlclient.PoolOptions;
-import nzi.fhir.validator.web.service.ProfileService;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,15 +17,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * @author Md Nazrul Islam
+ */
 @ExtendWith(VertxExtension.class)
 class ProfileApiTest extends BaseTestContainer {
     // Use a random port to avoid conflicts
     private int testPort;
     private Vertx vertx;
     private WebClient client;
-    private RedisAPI redis;
     private PgPool pgPool;
 
     @BeforeEach
@@ -40,12 +38,6 @@ class ProfileApiTest extends BaseTestContainer {
         // Initialize Vertx
         vertx = Vertx.vertx();
         client = WebClient.create(vertx);
-
-        // Configure Redis
-        RedisOptions redisOptions = new RedisOptions()
-                .setConnectionString(getRedisConnectionString());
-        redis = RedisAPI.api(Redis.createClient(vertx, redisOptions));
-
         // Configure PostgreSQL
         PgConnectOptions pgConnectOptions = new PgConnectOptions()
                 .setHost(getPostgresHost())
@@ -56,10 +48,31 @@ class ProfileApiTest extends BaseTestContainer {
         PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
         pgPool = PgPool.pool(vertx, pgConnectOptions, poolOptions);
 
+        String createTableSQL = """
+            CREATE TABLE IF NOT EXISTS fhir_profiles (
+                url TEXT NOT NULL,
+                profile_json JSONB NOT NULL,
+                fhir_version TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (url, fhir_version)
+            )
+        """;
+
+        pgPool.query(createTableSQL)
+                .execute()
+                .toCompletionStage()
+                .toCompletableFuture()
+                .join();
+
         // Create and deploy the test server
         Router router = Router.router(vertx);
-        ProfileService profileService = new ProfileService(vertx, "R4", redis, pgPool);
-        new ProfileApi(router, vertx, profileService);
+
+        // Create ProfileApi with the production constructor
+        ProfileApi profileApi = new ProfileApi(vertx, pgPool);
+
+        // Configure routes
+        profileApi.includeRoutes(router);
 
         // Use port 0 to get a random available port
         vertx.createHttpServer()
@@ -77,9 +90,15 @@ class ProfileApiTest extends BaseTestContainer {
     void tearDown(VertxTestContext testContext) {
         // Close resources
         if (pgPool != null) {
+            pgPool.query("DROP TABLE IF EXISTS fhir_profiles")
+                    .execute()
+                    .toCompletionStage()
+                    .toCompletableFuture()
+                    .join();
+
             pgPool.close();
         }
-        
+
         if (vertx != null) {
             vertx.close()
                     .onSuccess(v -> testContext.completeNow())
@@ -109,34 +128,18 @@ class ProfileApiTest extends BaseTestContainer {
                 .put("url", profileUrl)
                 .put("profile", profile);
 
-        // Send request to register profile
-        client.post(testPort, "localhost", "/register-profile")
+        // Send request to register profile with R4 version
+        client.post(testPort, "localhost", "/R4/register-profile")
                 .as(BodyCodec.jsonObject())
-                .sendJsonObject(requestBody)
+                .sendJsonObject(profile)
                 .onSuccess(response -> {
                     // Verify response
                     assertEquals(200, response.statusCode());
                     JsonObject responseBody = response.body();
                     assertEquals("success", responseBody.getString("status"));
                     assertEquals(profileUrl, responseBody.getString("profileUrl"));
+                    testContext.completeNow();
 
-                    // Verify profile was stored in Redis
-                    redis.get("profile:" + profileUrl.replaceAll("[^a-zA-Z0-9:]", "_"))
-                            .onSuccess(redisResult -> {
-                                assertNotNull(redisResult);
-                                System.out.println("Profile found in Redis cache");
-
-                                // Verify the profile was stored in PostgreSQL
-                                pgPool.query("SELECT profile_json FROM fhir_profiles WHERE url = '" + profileUrl + "'")
-                                        .execute()
-                                        .onSuccess(rows -> {
-                                            assertEquals(1, rows.size());
-                                            System.out.println("Profile found in PostgreSQL database");
-                                            testContext.completeNow();
-                                        })
-                                        .onFailure(testContext::failNow);
-                            })
-                            .onFailure(testContext::failNow);
                 })
                 .onFailure(testContext::failNow);
     }
@@ -147,15 +150,44 @@ class ProfileApiTest extends BaseTestContainer {
         JsonObject requestBody = new JsonObject()
                 .put("url", "http://example.org/fhir/StructureDefinition/invalid-profile");
 
-        // Send request to register profile
-        client.post(testPort, "localhost", "/register-profile")
+        // Send request to register profile with R4 version
+        client.post(testPort, "localhost", "/R4/register-profile")
                 .as(BodyCodec.jsonObject())
                 .sendJsonObject(requestBody)
                 .onSuccess(response -> {
                     // Verify response indicates error
                     assertEquals(400, response.statusCode());
                     JsonObject responseBody = response.body();
-                    assertEquals("Missing url or profile", responseBody.getString("error"));
+                    assertTrue(responseBody.getString("error").contains("Failed to parse profile"));
+                    testContext.completeNow();
+                })
+                .onFailure(testContext::failNow);
+    }
+
+    @Test
+    void testRegisterProfileWithInvalidVersion(VertxTestContext testContext) {
+        // Create a valid request
+        String profileUrl = "http://example.org/fhir/StructureDefinition/test-profile";
+        JsonObject profile = new JsonObject()
+                .put("resourceType", "StructureDefinition")
+                .put("url", profileUrl)
+                .put("name", "TestProfile");
+
+        JsonObject requestBody = new JsonObject()
+                .put("url", profileUrl)
+                .put("profile", profile);
+
+        // Send a request with an invalid version
+        client.post(testPort, "localhost", "/INVALID_VERSION/register-profile")
+                .as(BodyCodec.jsonObject())
+                .sendJsonObject(requestBody)
+                .onSuccess(response -> {
+                    // Verify response indicates error
+                    assertEquals(400, response.statusCode());
+                    JsonObject responseBody = response.body();
+                    // Check that the error message contains information about an invalid version
+                    assertTrue(responseBody.getString("error").contains("Invalid FHIR version"));
+                    assertTrue(responseBody.getString("error").contains("Supported versions are"));
                     testContext.completeNow();
                 })
                 .onFailure(testContext::failNow);

@@ -36,5 +36,8 @@ run-redis:
 	--name fhir_server_redis$(REDIS_CONTAINER_SUFFIX) \
 	-t $(REDIS_IMAGE_PREFIX)redis:$(redis_version)
 
+run-ollama:
+	ollama serve
+
 stop-all:
 	docker kill $$(docker ps -q)

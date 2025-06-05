@@ -15,11 +15,12 @@
     <properties>
         <testcontainers.version>1.19.7</testcontainers.version>
         <jackson.version>2.17.1</jackson.version>
-        <vertx.version>4.5.3</vertx.version>
+        <vertx.version>4.5.14</vertx.version>
         <hapi-fhir.version>8.0.0</hapi-fhir.version>
-        <fhir-utilities.version>6.5.21</fhir-utilities.version>
+        <fhir.version>6.5.7</fhir.version>
+        <fhir.utilities.version>6.5.7</fhir.utilities.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>11</java.version>
+        <java.version>17</java.version>
     </properties>
 
     <dependencies>
@@ -70,16 +71,10 @@
             <artifactId>vertx-config</artifactId>
             <version>${vertx.version}</version>
         </dependency>
-        <!-- Vert.x PostgreSQL Client -->
+        <!-- Vert.x PostgresSQL Client -->
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-pg-client</artifactId>
-            <version>${vertx.version}</version>
-        </dependency>
-        <!-- Vert.x Redis Client -->
-        <dependency>
-            <groupId>io.vertx</groupId>
-            <artifactId>vertx-redis-client</artifactId>
             <version>${vertx.version}</version>
         </dependency>
         <!-- Vert.x Web Client -->
@@ -87,6 +82,18 @@
             <groupId>io.vertx</groupId>
             <artifactId>vertx-web-client</artifactId>
             <version>${vertx.version}</version>
+        </dependency>
+        <!-- HL7 FHIR  -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>org.hl7.fhir.validation</artifactId>
+            <version>${fhir.version}</version>
+        </dependency>
+        <!-- HL7 FHIR Utilities (for NpmPackage) -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>org.hl7.fhir.utilities</artifactId>
+            <version>${fhir.utilities.version}</version>
         </dependency>
         <!-- HAPI FHIR Core -->
         <dependency>
@@ -106,28 +113,54 @@
             <artifactId>hapi-fhir-structures-r4</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
+        <!-- HAPI FHIR R4B Structures -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-structures-r4b</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
         <!-- HAPI FHIR R5 Structures -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-structures-r5</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
-        <!-- HL7 FHIR Utilities (for NpmPackage) -->
+        <!-- HAPI Caching support -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
-            <artifactId>org.hl7.fhir.utilities</artifactId>
-            <version>${fhir-utilities.version}</version>
+            <artifactId>hapi-fhir-caching-caffeine</artifactId>
+            <version>${hapi-fhir.version}</version>
         </dependency>
         <!-- Logging -->
+        <!-- slf4j-api v2 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.9</version>
+        </dependency>
+        <!-- Log4j implementation for SLF4J 2.x -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.20.0</version>
+        </dependency>
+
+        <!-- Required log4j core dependencies -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>2.20.0</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
-            <version>2.20.0</version>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>11.8.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>11.8.2</version>
+            <scope>runtime</scope>
         </dependency>
         <!-- Testing -->
         <dependency>
@@ -160,6 +193,17 @@
             <artifactId>jcl-over-slf4j</artifactId>
             <version>2.0.16</version>
         </dependency>
+        <!-- Apache common forced version -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.14.0</version> <!-- or the latest available -->
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.26.1</version>
+        </dependency>
 
     <!-- Testcontainers core -->
     <dependency>
@@ -182,6 +226,21 @@
         <groupId>com.ongres.scram</groupId>
         <artifactId>client</artifactId>
         <version>2.1</version>
+        <scope>test</scope>
+    </dependency>
+
+    <!-- Mockito for testing -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>5.10.0</version>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-junit-jupiter</artifactId>
+        <version>5.10.0</version>
+        <scope>test</scope>
     </dependency>
 </dependencies>
 

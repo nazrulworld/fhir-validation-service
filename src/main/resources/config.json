@@ -1,15 +1,17 @@
 {
   "http": {
-    "port": 8080,
-    "host": "0.0.0.0"
+    "port": 8880,
+    "timeout": 30000,
+    "retries": 3,
+    "backoff": {
+      "initial": 1000,
+      "max": 10000
+    }
   },
-  "validation": {
-    "defaultFhirVersion": "R4",
-    "strictMode": false
-  },
-  "swagger": {
-    "ui": {
-      "version": "4.15.5"
+  "package": {
+    "servers": {
+      "maxConcurrent": 3,
+      "timeout": 30000
     }
   }
 }

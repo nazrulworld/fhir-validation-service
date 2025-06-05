@@ -1,47 +1,41 @@
 package nzi.fhir.validator.web.service;
 
+import ca.uhn.fhir.parser.DataFormatException;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
-import io.vertx.sqlclient.Pool;
-import io.vertx.redis.client.RedisAPI;
-import io.vertx.sqlclient.Tuple;
+import io.vertx.sqlclient.*;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.hl7.fhir.exceptions.FHIRException;
+import org.hl7.fhir.exceptions.FHIRFormatError;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
 public class ProfileService {
     private static final String PROFILE_CACHE_PREFIX = "profile:";
-    private static final long CACHE_TTL_SECONDS = 3600;
     private static final Logger logger = LogManager.getLogger(ProfileService.class);
 
     private final Vertx vertx;
     private final FhirContext fhirContext;
     private final IParser jsonParser;
-    private final RedisAPI redis;
     private final Pool pgPool;
+    private static final CachingService cachingService;
 
-    public ProfileService(Vertx vertx, String fhirVersion, RedisAPI redis, Pool pgPool) {
-        this.vertx = vertx;
-        this.fhirContext = "R5".equalsIgnoreCase(fhirVersion) ? FhirContext.forR5() : FhirContext.forR4();
-        this.jsonParser = fhirContext.newJsonParser();
-        this.redis = redis;
-        this.pgPool = pgPool;
-        initializeDatabase();
+    static {
+        cachingService = CachingService.create();
     }
 
-    private void initializeDatabase() {
-        pgPool.query(
-                "CREATE TABLE IF NOT EXISTS fhir_profiles (" +
-                        "    id SERIAL PRIMARY KEY," +
-                        "    url TEXT NOT NULL UNIQUE," +
-                        "    profile_json JSONB NOT NULL," +
-                        "    fhir_version TEXT NOT NULL," +
-                        "    created_at TIMESTAMPTZ DEFAULT NOW()" +
-                        ")"
-        ).execute().onFailure(e -> logger.error("Failed to initialize database: {}", e.getMessage(), e));
+    private ProfileService(Vertx vertx, FhirContext fhirContext, Pool pgPool) {
+        this.vertx = vertx;
+        this.fhirContext = fhirContext;
+        this.jsonParser = fhirContext.newJsonParser();
+        this.pgPool = pgPool;
+    }
+
+    public static ProfileService create(Vertx vertx, FhirContext fhirContext, Pool pgPool){
+        return new ProfileService(vertx, fhirContext, pgPool);
     }
 
     public Future<IBaseResource> getProfile(String profileUrl) {
@@ -50,60 +44,128 @@ public class ProfileService {
             return Future.failedFuture("Profile URL cannot be null or empty");
         }
 
-        String cacheKey = PROFILE_CACHE_PREFIX + profileUrl.replaceAll("[^a-zA-Z0-9:]", "_");
+        String cacheKey = getCacheKey(profileUrl) ;
         logger.debug("Fetching profile: {}", profileUrl);
-
-        return redis.get(cacheKey)
-                .compose(redisRes -> {
-                    if (redisRes != null) {
-                        logger.debug("Cache hit for profile: {}", profileUrl);
-                        return Future.succeededFuture(jsonParser.parseResource(redisRes.toString()));
-                    }
-                    logger.debug("Cache miss for profile: {}", profileUrl);
-                    return loadFromDatabase(profileUrl)
-                            .compose(profile -> {
-                                String profileJson = jsonParser.encodeResourceToString(profile);
-                                return redis.setex(cacheKey, String.valueOf(CACHE_TTL_SECONDS), profileJson)
-                                        .map(profile);
-                            });
+        IBaseResource profile = (IBaseResource) cachingService.get(cacheKey);
+        if (profile != null) {
+            logger.debug("Cache hit for profile: {}", profileUrl);
+            return Future.succeededFuture(profile);
+        }
+        return loadFromDatabase(profileUrl)
+                .compose(profileRaw -> {
+                    cachingService.put(cacheKey, profileRaw);
+                    return Future.succeededFuture(profileRaw);
                 });
     }
 
-    public Future<Void> registerProfile(String profileUrl, JsonObject profile) {
-        if (profileUrl == null || profileUrl.isEmpty() || profile == null || profile.isEmpty()) {
-            logger.error("Invalid profile URL or profile JSON");
-            return Future.failedFuture("Profile URL and profile JSON cannot be null or empty");
+    public Future<Void> registerProfile(JsonObject profile) {
+        try {
+            validateProfile(profile);
+        } catch (DataFormatException e){
+            logger.error("Failed to parse profile JSON: {}", e.getMessage(), e);
+            return Future.failedFuture("Failed to parse profile: " + e.getMessage());
+        }
+        catch (FHIRException e) {
+            logger.error("Failed to validate profile JSON: {}", e.getMessage(), e);
+            return Future.failedFuture("Failed to validate profile: " + e.getMessage());
         }
 
-        String cacheKey = PROFILE_CACHE_PREFIX + profileUrl.replaceAll("[^a-zA-Z0-9:]", "_");
-        String profileJson = profile.encode();
-        String fhirVersion = fhirContext.getVersion().getVersion().name();
+        String profileUrl = profile.getString("url");
+        String cacheKey = getCacheKey(profileUrl);
+        
+        return pgPool.withTransaction(client -> {
+            String profileJson = profile.encode();
+            String fhirVersion = fhirContext.getVersion().getVersion().getFhirVersionString();
 
-        return pgPool.preparedQuery(
-                        "INSERT INTO fhir_profiles (url, profile_json, fhir_version)" +
-                                " VALUES ($1, $2, $3)" +
-                                " ON CONFLICT (url) DO UPDATE SET" +
-                                "     profile_json = $2, fhir_version = $3"
-                )
-                .execute(Tuple.of(profileUrl, profileJson, fhirVersion))
-                .compose(res -> redis.setex(cacheKey, String.valueOf(CACHE_TTL_SECONDS), profileJson)
-                        .map(v -> (Void) null))
-                .onSuccess(v -> logger.info("Registered profile: {}", profileUrl))
-                .onFailure(e -> logger.error("Failed to register profile: {}", e.getMessage(), e));
+            return client.preparedQuery(
+                    "INSERT INTO fhir_profiles (url, profile_json, fhir_version)" +
+                            " VALUES ($1, $2, $3)" +
+                            " ON CONFLICT (url, fhir_version) DO UPDATE SET " +
+                            " profile_json = $2, modified_at = NOW()"
+            )
+            .execute(Tuple.of(profileUrl, profileJson, fhirVersion))
+            .onSuccess(v -> {
+                logger.info("Registered profile in transaction: {}", profileUrl);
+                cachingService.remove(cacheKey);
+            })
+            .mapEmpty(); // Convert RowSet to Void since we don't need the result
+        });
+    }
+
+    public Future<Void> registerProfiles(JsonObject[] profiles) {
+        return pgPool.withTransaction(client -> {
+            Future<Void> compositeFuture = Future.succeededFuture();
+            
+            for (JsonObject profile : profiles) {
+                try {
+                    validateProfile(profile);
+                } catch (FHIRException e) {
+                    logger.error("Failed to validate profile JSON: {}", e.getMessage(), e);
+                    return Future.failedFuture("Failed to validate profile: " + e.getMessage());
+                }
+                String profileUrl = profile.getString("url");
+
+                compositeFuture = compositeFuture.compose(v -> {
+                    String profileJson = profile.encode();
+                    String fhirVersion = fhirContext.getVersion().getVersion().getFhirVersionString();
+
+                    return client.preparedQuery(
+                            "INSERT INTO fhir_profiles (url, profile_json, fhir_version)" +
+                                    " VALUES ($1, $2, $3)" +
+                                    " ON CONFLICT (url, fhir_version) DO UPDATE SET" +
+                                    " profile_json = $2, modified_at = NOW()"
+                    )
+                    .execute(Tuple.of(profileUrl, profileJson, fhirVersion))
+                    .map(result -> {
+                        logger.info("Registered profile in batch: {}", profileUrl);
+                        cachingService.remove(getCacheKey(profileUrl));
+                        return null;
+                    });
+                });
+            }
+            
+            return compositeFuture;
+        });
     }
 
     private Future<IBaseResource> loadFromDatabase(String profileUrl) {
-        return pgPool.preparedQuery(
-                        "SELECT profile_json FROM fhir_profiles WHERE url = $1"
-                )
-                .execute(Tuple.of(profileUrl))
-                .compose(rows -> {
-                    if (rows.size() == 0) {
-                        logger.warn("Profile not found in database: {}", profileUrl);
-                        return Future.failedFuture("Profile not found: " + profileUrl);
-                    }
-                    String profileJson = rows.iterator().next().getJsonObject(0).encode();
+        return pgPool.withTransaction(client -> 
+            client.preparedQuery(
+                "SELECT profile_json FROM fhir_profiles WHERE url = $1 AND fhir_version = $2"
+            )
+            .execute(Tuple.of(profileUrl, fhirContext.getVersion().getVersion().getFhirVersionString()))
+            .compose(rows -> {
+                if (rows.size() == 0) {
+                    logger.warn("Profile not found in database for URL: {} and FHIR version: {}",
+                            profileUrl, fhirContext.getVersion().getVersion().getFhirVersionString());
+                    return Future.failedFuture("Profile not found: " + profileUrl);
+                }
+                String profileJson = rows.iterator().next().getString(0);
+                try {
                     return Future.succeededFuture(jsonParser.parseResource(profileJson));
-                });
+                } catch (Exception e) {
+                    logger.error("Failed to parse profile JSON: {}", e.getMessage(), e);
+                    return Future.failedFuture("Failed to parse profile: " + e.getMessage());
+                }
+            })
+        );
+    }
+
+    private String getCacheKey(String profileUrl) {
+        return PROFILE_CACHE_PREFIX + fhirContext.getVersion().getVersion().getFhirVersionString() + "_" +profileUrl.replaceAll("[^a-zA-Z0-9:]", "_");
+    }
+    private void validateProfile(JsonObject profileJson) throws FHIRException {
+        if (profileJson == null || profileJson.isEmpty()) {
+            throw new FHIRFormatError("Profile JSON cannot be null or empty");
+        }
+        String profileUrl = profileJson.getString("url");
+        if (profileUrl == null || profileUrl.isEmpty()) {
+            logger.error("Profile URL must be existing in JSON: {}", profileJson.encode());
+            throw new FHIRFormatError("Profile URL cannot be null or empty");
+        }
+        IBaseResource profileResource = fhirContext.newJsonParser().parseResource(profileJson.encode());
+        if (!profileResource.fhirType().equals("StructureDefinition")){
+            throw new FHIRFormatError("Profile JSON must be a valid FHIR StructureDefinition");
+        }
     }
 }

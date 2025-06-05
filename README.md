@@ -13,7 +13,8 @@ Key features:
 - Persistent storage with PostgreSQL
 - Monitoring with Prometheus
 - Cross-platform compatibility (x86 and ARM architectures)
-
+## // Will automatically fetch and cache `hl7.fhir.r4.core` and any others you load
+npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
 ## Prerequisites
 
 - Java 11 or higher
@@ -161,3 +162,39 @@ mvn test
 - [HAPI FHIR Library](https://hapifhir.io/)
 - [Vert.x Framework](https://vertx.io/)
 - [Official FHIR Validator](https://validator.fhir.org/)
+
+{
+"name" : "hl7.fhir.dk.core",
+"version" : "3.4.0",
+"tools-version" : 3,
+"type" : "IG",
+"date" : "20250201191800",
+"license" : "CC0-1.0",
+"canonical" : "http://hl7.dk/fhir/core",
+"url" : "http://hl7.dk/fhir/core/3.4.0",
+"title" : "HL7 FHIR Implementation Guide: DK Core",
+"description" : "A FHIR Implementation Guide for the Danish common needs across healthcare sectors (built Sat, Feb 1, 2025 19:18+0100+01:00)",
+"fhirVersions" : ["4.0.1"],
+"dependencies" : {
+"hl7.fhir.r4.core" : "4.0.1",
+"hl7.terminology.r4" : "6.2.0",
+"hl7.fhir.uv.extensions.r4" : "5.1.0",
+"hl7.fhir.uv.phd" : "1.1.0",
+"hl7.fhir.uv.ipa" : "1.0.0"
+},
+"author" : "HL7 Denmark",
+"maintainers" : [
+{
+"name" : "HL7 Denmark",
+"email" : "jenskristianvilladsen@gmail.com",
+"url" : "http://www.hl7.dk"
+}
+],
+"directories" : {
+"lib" : "package",
+"example" : "example"
+},
+"jurisdiction" : "urn:iso:std:iso:3166#DK"
+}
+
+

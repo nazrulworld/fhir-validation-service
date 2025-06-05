@@ -1,20 +1,15 @@
 package nzi.fhir.validator.web;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.sqlclient.Pool;
-import io.vertx.redis.client.Redis;
-import io.vertx.redis.client.RedisAPI;
 import io.vertx.sqlclient.PoolOptions;
 import nzi.fhir.validator.web.config.PgConfig;
-import nzi.fhir.validator.web.config.RedisConfig;
+import nzi.fhir.validator.web.config.VerticleConfig;
 import nzi.fhir.validator.web.endpoint.*;
 import nzi.fhir.validator.web.service.*;
 import org.apache.logging.log4j.LogManager;
@@ -22,17 +17,30 @@ import org.apache.logging.log4j.Logger;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.ext.web.handler.CorsHandler;
 
+/**
+ * @author Md Nazrul Islam
+ */
 public class MainVerticle extends AbstractVerticle {
     private static final Logger logger = LogManager.getLogger(MainVerticle.class);
 
     public static void main(String[] args) {
-        Vertx.vertx().deployVerticle(new MainVerticle());
+        Vertx.vertx().deployVerticle(new MainVerticle(), res -> {
+            if (res.succeeded()) {
+                System.out.println("MainVerticle deployed successfully");
+            } else {
+                System.err.println("Failed to deploy MainVerticle: " + res.cause().getMessage());
+                res.cause().printStackTrace();
+            }
+        });
     }
+
 
     @Override
     public void start(Promise<Void> startPromise) {
-        ConfigRetriever.create(vertx)
-        .getConfig()
+
+        ConfigRetriever retriever = ConfigRetriever.create(vertx, VerticleConfig.getConfigRetrieverOptions());
+
+        retriever.getConfig()
         .compose(config -> {
             Router router = Router.router(vertx);
 
@@ -49,31 +57,31 @@ public class MainVerticle extends AbstractVerticle {
                 .allowedHeader("X-Requested-With")
                 .allowedHeader("Accept"));
 
-            // Initialize Redis
-            RedisAPI redis = RedisConfig.createRedisClient(vertx);
-
-            // Initialize PostgreSQL
+            // Initialize PostgresSQL
             PgConnectOptions connectOptions = PgConfig.createPgOptions();
-            PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
+            PoolOptions poolOptions = new PoolOptions().setMaxSize(15).setIdleTimeout(300000).setConnectionTimeout(5000);
             Pool pgPool = PgBuilder.pool()
                 .with(poolOptions)
                 .connectingTo(connectOptions)
                 .using(vertx)
                 .build();
 
-            // Initialize WebClient
-            WebClient webClient = WebClient.create(vertx);
+            // Register API endpoints
+            ValidationApi validationApi = new ValidationApi(vertx, pgPool);
+            validationApi.includeRoutes(router);
+
+            ProfileApi profileApi = new ProfileApi(vertx, pgPool);
+            profileApi.includeRoutes(router);
 
             // Initialize services
-            String fhirVersion = config.getString("fhirVersion", "R4");
-            IgService igService = new IgService(vertx, pgPool, redis);
-            ProfileService profileService = new ProfileService(vertx, fhirVersion, redis, pgPool);
-            FhirValidationService validationService = new FhirValidationService(vertx, fhirVersion, profileService, igService);
+            IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
 
-            // Register API endpoints
-            new ValidationApi(router, vertx, validationService);
-            new ProfileApi(router, vertx, profileService);
-            new IgApi(router, vertx, igService, webClient);
+            IgPackageApi igPackageApi = new IgPackageApi(vertx, igPackageService);
+            igPackageApi.includeRoutes(router);
+
+            HealthService healthService = new HealthService(vertx, pgPool);
+            new HealthApi(router, vertx, healthService);
+
 
             // Start HTTP server
             int port = config.getInteger("http.port", 8080);

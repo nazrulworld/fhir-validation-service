@@ -1,0 +1,39 @@
+# Version control
+.git
+.github
+.gitignore
+
+# Build output
+target/
+dependency/
+
+# Docker-related files
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.yaml
+
+# Documentation and logs
+*.md
+*.log
+
+# IDE and OS files
+.DS_Store
+.idea/
+*.iml
+
+# Local Maven repository
+.m2/
+
+# Node.js (if unused, keep for safety)
+node_modules/
+
+# Temporary and cache files
+*.tmp
+temp/
+build/
+dist/
+out/
+
+# Environment files (optional, include if sensitive)
+.env
