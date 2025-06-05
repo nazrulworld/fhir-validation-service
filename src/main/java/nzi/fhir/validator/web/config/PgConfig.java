@@ -1,6 +1,8 @@
 package nzi.fhir.validator.web.config;
 
 import io.vertx.pgclient.PgConnectOptions;
+
+import java.util.HashMap;
 import java.util.Properties;
 import java.io.InputStream;
 import java.io.IOException;
@@ -17,6 +19,9 @@ public class PgConfig {
                 .setDatabase(ApplicationConfig.get("pg.database", "fhir_validator"))
                 .setUser(ApplicationConfig.get("pg.user", "postgres"))
                 .setPassword(ApplicationConfig.get("pg.password", "Test1234"))
+                .setProperties(new HashMap<String, String>() {{
+                    put("authenticationPluginClassName", "com.ongres.scram.client.ScramClient");
+                }})
                 .setCachePreparedStatements(true);
     }
 }

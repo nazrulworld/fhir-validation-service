@@ -16,6 +16,9 @@ public class HealthService {
     private static final Logger logger = LogManager.getLogger(HealthService.class);
     private final Vertx vertx;
     private final Pool pgPool;
+    private static final String STATUS_UP = "UP";
+    private static final String STATUS_DOWN = "DOWN";
+    private static final String POSTGRES_HEALTH_QUERY = "SELECT 1";
 
     public HealthService(Vertx vertx, Pool pgPool) {
         this.vertx = vertx;
@@ -23,30 +26,36 @@ public class HealthService {
     }
 
     public Future<JsonObject> checkHealth() {
-        JsonObject health = new JsonObject()
-                .put("status", "UP")
-                .put("timestamp", System.currentTimeMillis());
-
-        return checkPostgres()
-                .compose(pgStatus -> {
-                    health.put("postgres", pgStatus);
-                    return Future.succeededFuture(health);
-                })
+        long timestamp = System.currentTimeMillis();
+        return checkPostgresConnection(timestamp)
+                .map(pgStatus -> new JsonObject()
+                        .put("status", STATUS_UP)
+                        .put("timestamp", timestamp)
+                        .put("postgres", pgStatus))
                 .recover(err -> {
                     logger.error("Health check failed", err);
-                    health.put("status", "DOWN")
-                            .put("error", err.getMessage());
-                    return Future.succeededFuture(health);
+                    return Future.succeededFuture(new JsonObject()
+                            .put("status", STATUS_DOWN)
+                            .put("timestamp", timestamp)
+                            .put("error", err.getMessage()));
                 });
     }
 
-    private Future<JsonObject> checkPostgres() {
-        return pgPool.query("SELECT 1").execute()
-                .map(result -> new JsonObject()
-                        .put("status", "UP")
-                        .put("responseTime", System.currentTimeMillis()))
-                .recover(err -> Future.succeededFuture(new JsonObject()
-                        .put("status", "DOWN")
-                        .put("error", err.getMessage())));
+    private Future<JsonObject> checkPostgresConnection(long timestamp) {
+        return pgPool.query(POSTGRES_HEALTH_QUERY).execute()
+                .map(result -> createSuccessResponse(timestamp))
+                .recover(err -> Future.succeededFuture(createErrorResponse(err)));
+    }
+
+    private JsonObject createSuccessResponse(long timestamp) {
+        return new JsonObject()
+                .put("status", STATUS_UP)
+                .put("responseTime", timestamp);
+    }
+
+    private JsonObject createErrorResponse(Throwable error) {
+        return new JsonObject()
+                .put("status", STATUS_DOWN)
+                .put("error", error.getMessage());
     }
 }

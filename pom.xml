@@ -19,6 +19,7 @@
         <hapi-fhir.version>8.0.0</hapi-fhir.version>
         <fhir.version>6.5.7</fhir.version>
         <fhir.utilities.version>6.5.7</fhir.utilities.version>
+        <ph_schematron_version>7.1.2</ph_schematron_version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
     </properties>
@@ -131,6 +132,18 @@
             <artifactId>hapi-fhir-caching-caffeine</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.helger.schematron</groupId>
+            <artifactId>ph-schematron-api</artifactId>
+            <version>${ph_schematron_version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.helger.schematron</groupId>
+            <artifactId>ph-schematron-xslt</artifactId>
+            <version>${ph_schematron_version}</version>
+        </dependency>
+
         <!-- Logging -->
         <!-- slf4j-api v2 -->
         <dependency>
@@ -204,6 +217,16 @@
             <artifactId>commons-compress</artifactId>
             <version>1.26.1</version>
         </dependency>
+        <dependency>
+            <groupId>org.codehaus.woodstox</groupId>
+            <artifactId>woodstox-core-asl</artifactId>
+            <version>4.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.ongres.scram</groupId>
+            <artifactId>client</artifactId>
+            <version>2.1</version>
+        </dependency>
 
     <!-- Testcontainers core -->
     <dependency>
@@ -271,20 +294,20 @@
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
-                                        <exclude>module-info.class</exclude>
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
-                                        <exclude>META-INF/DEPENDENCIES</exclude>
-                                        <exclude>META-INF/io.netty.versions.properties</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>nzi.fhir.validation.MainVerticle</mainClass>
+                                    <manifestEntries>
+                                        <Main-Class>nzi.fhir.validator.web.MainVerticle</Main-Class>
+                                        <Main-Verticle>nzi.fhir.validator.web.MainVerticle</Main-Verticle>
+                                    </manifestEntries>
                                 </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
                         </configuration>

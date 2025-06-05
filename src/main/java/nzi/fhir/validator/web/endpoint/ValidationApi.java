@@ -2,6 +2,7 @@ package nzi.fhir.validator.web.endpoint;
 
 import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
@@ -26,6 +27,54 @@ import java.util.HashMap;
  */
 public class ValidationApi {
     private static final Logger logger = LogManager.getLogger(ValidationApi.class);
+    private  Vertx vertx;
+    private  Pool pgPool;
+
+    public static Future<ValidationApi> create(Vertx vertx, Pool pgPool) {
+        return Future.future(promise -> {
+            FhirContextLoader fhirContextLoader = FhirContextLoader.getInstance();
+
+            // Create FhirContext instances for different FHIR versions
+            FhirContext fhirContextR4 = fhirContextLoader.getContext(SupportedFhirVersion.R4);
+            FhirContext fhirContextR4B = fhirContextLoader.getContext(SupportedFhirVersion.R4B);
+            FhirContext fhirContextR5 = fhirContextLoader.getContext(SupportedFhirVersion.R5);
+
+            // Create profile services for different FHIR versions
+            ProfileService profileServiceR4 = ProfileService.create(vertx, fhirContextR4, pgPool);
+            ProfileService profileServiceR4B = ProfileService.create(vertx, fhirContextR4B, pgPool);
+            ProfileService profileServiceR5 = ProfileService.create(vertx, fhirContextR5, pgPool);
+
+            // Create IG services for different FHIR versions
+            IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
+
+            // Create validation services for different FHIR versions
+            IGPackageIdentity igPackageIdentityR4 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4);
+            IGPackageIdentity igPackageIdentityR4B = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4B);
+            IGPackageIdentity igPackageIdentityR5 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR5);
+
+            CompositeFuture.all(
+                FhirValidationService.create(vertx, igPackageIdentityR4, igPackageService, profileServiceR4)
+                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4, service)),
+                FhirValidationService.create(vertx, igPackageIdentityR4B, igPackageService, profileServiceR4B)
+                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4B, service)),
+                FhirValidationService.create(vertx, igPackageIdentityR5, igPackageService, profileServiceR5)
+                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR5, service))
+            ).onComplete(ar -> {
+                if (ar.succeeded()) {
+                    promise.complete(new ValidationApi(vertx, pgPool));
+                } else {
+                    logger.error("Failed to initialize validation services", ar.cause());
+                    promise.fail(ar.cause());
+                }
+            });
+        });
+    }
+
+    // Private constructor
+    private ValidationApi(Vertx vertx, Pool pgPool) {
+        this.vertx = vertx;
+        this.pgPool = pgPool;
+    }
 
     /**
      * Constructor for production use that initializes validation services internally.
@@ -33,6 +82,7 @@ public class ValidationApi {
      * @param vertx The Vert.x instance
      * @param pgPool The PostgresSQL connection pool
      */
+    /*
     public ValidationApi(Vertx vertx, Pool pgPool) {
 
         FhirContextLoader fhirContextLoader = FhirContextLoader.getInstance();
@@ -68,6 +118,7 @@ public class ValidationApi {
         });
 
     }
+     */
 
     /**
      * Constructor for testing purposes that allows injection of validation services.

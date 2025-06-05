@@ -71,53 +71,48 @@ public class FhirValidationService {
 
     private static Future<FhirValidator> createValidator(IGPackageIdentity igPackageIdentity, IgPackageService igPackageService, ProfileService profileService) {
         return Future.future(promise -> {
-            try {
-                FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
-                ValidationSupportChain validationSupportChain = new ValidationSupportChain();
-                validationSupportChain.addValidationSupport(new CustomProfileValidationSupport(fhirContext, profileService));
+            Vertx.currentContext().executeBlocking(blockingPromise -> {
+                try {
+                    FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
+                    ValidationSupportChain validationSupportChain = new ValidationSupportChain();
+                    validationSupportChain.addValidationSupport(new CustomProfileValidationSupport(fhirContext, profileService));
 
-                // Create base validation supports
-                DefaultProfileValidationSupport defaultSupport = new DefaultProfileValidationSupport(fhirContext);
-                InMemoryTerminologyServerValidationSupport inMemoryTerminology = new InMemoryTerminologyServerValidationSupport(fhirContext);
-                CommonCodeSystemsTerminologyService commonTerminology = new CommonCodeSystemsTerminologyService(fhirContext);
-                
-                validationSupportChain.addValidationSupport(defaultSupport);
-                validationSupportChain.addValidationSupport(inMemoryTerminology);
-                validationSupportChain.addValidationSupport(commonTerminology);
-
-                if (!igPackageIdentity.getName().equals(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME)) {
-                    Validate.notNull(igPackageService, "IG service must not be null");
+                    // Create base validation supports
+                    DefaultProfileValidationSupport defaultSupport = new DefaultProfileValidationSupport(fhirContext);
+                    InMemoryTerminologyServerValidationSupport inMemoryTerminology = new InMemoryTerminologyServerValidationSupport(fhirContext);
+                    CommonCodeSystemsTerminologyService commonTerminology = new CommonCodeSystemsTerminologyService(fhirContext);
                     
-                    CustomNpmPackageValidationSupport.getValidationSupport(igPackageIdentity, igPackageService)
-                        .onSuccess(npmSupport -> {
-                            if (npmSupport != null) {
-                                validationSupportChain.addValidationSupport(npmSupport);
-                            } else {
-                                logger.warn("No NPM package validation support found for IG package: {}", 
-                                    igPackageIdentity.getName());
-                            }
-                            
-                            // Create and configure validator after NPM support is handled
-                            FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
-                            FhirValidator validator = fhirContext.newValidator();
-                            validator.registerValidatorModule(instanceValidator);
-                            promise.complete(validator);
-                        })
-                        .onFailure(err -> {
-                            logger.error("Failed to get NPM package validation support", err);
-                            promise.fail(err);
-                        });
-                } else {
-                    // If no NPM package is needed, create validator directly
-                    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
-                    FhirValidator validator = fhirContext.newValidator();
-                    validator.registerValidatorModule(instanceValidator);
-                    promise.complete(validator);
+                    validationSupportChain.addValidationSupport(defaultSupport);
+                    validationSupportChain.addValidationSupport(inMemoryTerminology);
+                    validationSupportChain.addValidationSupport(commonTerminology);
+
+                    if (!igPackageIdentity.getName().equals(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME)) {
+                        Validate.notNull(igPackageService, "IG service must not be null");
+                        
+                        CustomNpmPackageValidationSupport.getValidationSupport(igPackageIdentity, igPackageService)
+                            .onComplete(ar -> {
+                                if (ar.succeeded()) {
+                                    if (ar.result() != null) {
+                                        validationSupportChain.addValidationSupport(ar.result());
+                                    }
+                                    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
+                                    FhirValidator validator = fhirContext.newValidator();
+                                    validator.registerValidatorModule(instanceValidator);
+                                    blockingPromise.complete(validator);
+                                } else {
+                                    blockingPromise.fail(ar.cause());
+                                }
+                            });
+                    } else {
+                        FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
+                        FhirValidator validator = fhirContext.newValidator();
+                        validator.registerValidatorModule(instanceValidator);
+                        blockingPromise.complete(validator);
+                    }
+                } catch (Exception e) {
+                    blockingPromise.fail(e);
                 }
-            } catch (Exception e) {
-                logger.error("Error creating FHIR validator", e);
-                promise.fail(e);
-            }
+            }, promise);
         });
     }
 

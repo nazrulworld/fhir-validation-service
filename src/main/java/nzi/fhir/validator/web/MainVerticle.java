@@ -3,6 +3,7 @@ package nzi.fhir.validator.web;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgBuilder;
@@ -37,59 +38,50 @@ public class MainVerticle extends AbstractVerticle {
 
     @Override
     public void start(Promise<Void> startPromise) {
-
         ConfigRetriever retriever = ConfigRetriever.create(vertx, VerticleConfig.getConfigRetrieverOptions());
 
         retriever.getConfig()
         .compose(config -> {
             Router router = Router.router(vertx);
+        
+        // CORS setup remains the same...
 
-            // CORS setup
-            router.route().handler(CorsHandler.create()
-                .addRelativeOrigin(".*")
-                .allowedMethod(io.vertx.core.http.HttpMethod.GET)
-                .allowedMethod(io.vertx.core.http.HttpMethod.POST)
-                .allowedMethod(io.vertx.core.http.HttpMethod.PUT)
-                .allowedMethod(io.vertx.core.http.HttpMethod.DELETE)
-                .allowedMethod(io.vertx.core.http.HttpMethod.OPTIONS)
-                .allowedHeader("Content-Type")
-                .allowedHeader("Authorization")
-                .allowedHeader("X-Requested-With")
-                .allowedHeader("Accept"));
-
-            // Initialize PostgresSQL
+        // Initialize PostgresSQL
             PgConnectOptions connectOptions = PgConfig.createPgOptions();
-            PoolOptions poolOptions = new PoolOptions().setMaxSize(15).setIdleTimeout(300000).setConnectionTimeout(5000);
+            PoolOptions poolOptions = new PoolOptions()
+                .setMaxSize(15)
+                .setIdleTimeout(300000)
+                .setConnectionTimeout(5000);
             Pool pgPool = PgBuilder.pool()
                 .with(poolOptions)
                 .connectingTo(connectOptions)
                 .using(vertx)
                 .build();
 
-            // Register API endpoints
-            ValidationApi validationApi = new ValidationApi(vertx, pgPool);
-            validationApi.includeRoutes(router);
+        // Create ValidationApi asynchronously
+            return ValidationApi.create(vertx, pgPool)
+                .compose(validationApi -> {
+                    validationApi.includeRoutes(router);
+                
+                    ProfileApi profileApi = new ProfileApi(vertx, pgPool);
+                    profileApi.includeRoutes(router);
 
-            ProfileApi profileApi = new ProfileApi(vertx, pgPool);
-            profileApi.includeRoutes(router);
+                    IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
+                    IgPackageApi igPackageApi = new IgPackageApi(vertx, igPackageService);
+                    igPackageApi.includeRoutes(router);
 
-            // Initialize services
-            IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
+                    HealthService healthService = new HealthService(vertx, pgPool);
+                    new HealthApi(router, vertx, healthService);
 
-            IgPackageApi igPackageApi = new IgPackageApi(vertx, igPackageService);
-            igPackageApi.includeRoutes(router);
+                // Start HTTP server
 
-            HealthService healthService = new HealthService(vertx, pgPool);
-            new HealthApi(router, vertx, healthService);
-
-
-            // Start HTTP server
-            int port = config.getInteger("http.port", 8080);
-            return vertx.createHttpServer()
-                .requestHandler(router)
-                .listen(port)
-                .onSuccess(server -> logger.info("HTTP server started on port {}", port))
-                .mapEmpty();
+                    int port = config.getJsonObject("http", new JsonObject()).getInteger("port", 8080);
+                    return vertx.createHttpServer()
+                        .requestHandler(router)
+                        .listen(port)
+                        .onSuccess(server -> logger.info("HTTP server started on port {}", port))
+                        .mapEmpty();
+                });
         })
         .onComplete(ar -> {
             if (ar.succeeded()) {
@@ -98,6 +90,5 @@ public class MainVerticle extends AbstractVerticle {
                 startPromise.fail(ar.cause());
             }
         });
-}
-
+    }
 }

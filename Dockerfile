@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM --platform=$TARGETPLATFORM eclipse-temurin:17-jre-jammy as runtime
 
 # Create non-root user
-RUN groupadd -r appuser && useradd -r -s /bin/false -g appuser appuser
+RUN groupadd -r fhiruser && useradd -r -s /bin/false -g fhiruser fhiruser
 
 # Install necessary tools with version pinning
 RUN set -ex && \
@@ -46,13 +46,17 @@ RUN set -ex && \
 # COPY --from=builder /app/target/dependency/META-INF /app/META-INF
 # COPY --from=builder /app/target/dependency/BOOT-INF/classes /app/classes
 COPY --from=builder /app/target/fhir-validation-service-1.0-SNAPSHOT.jar /app/app.jar
+COPY --chown=fhiruser:appuser src/main/resources/config.json /app/config/config.json
+
+# Then update the environment to point to the correct config location
+ENV CONFIG_PATH=/app/config/config.json
 # Copy configuration and scripts
-COPY --chown=appuser:appuser src/main/resources/config.json ./config/
-COPY --chown=appuser:appuser docker/init-scripts/ ./init-scripts/
-COPY --chown=appuser:appuser src/main/resources/application-docker.properties ./application.properties
+COPY --chown=fhiruser:fhiruser docker/init-scripts/ ./init-scripts/
+RUN chmod +x ./init-scripts/*.sh
+COPY --chown=fhiruser:appuser src/main/resources/application-docker.properties /app/application-docker.properties
 
 # Switch to non-root user
-USER appuser
+USER fhiruser
 
 # Add these health-related environment variables
 ENV WAIT_TIMEOUT=60
@@ -75,4 +79,9 @@ ENTRYPOINT ["/bin/sh", "-c", "\
          -XX:MaxRAMPercentage=75.0 \
          -Djava.security.egd=file:/dev/./urandom \
          -Dvertx.environment=docker \
+         -Dapplication.config.path=/app/application-docker.properties \
+         -Dvertx.config.path=${CONFIG_PATH} \
+         -Dvertx.preferNativeTransport=true \
+         -Dvertx.disableDnsResolver=false \
+         -Dvertx.addressResolverOptions.servers=[\"8.8.8.8\",\"8.8.4.4\"] \
          -jar /app/app.jar"]
