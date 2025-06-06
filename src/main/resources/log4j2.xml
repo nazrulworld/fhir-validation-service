@@ -10,5 +10,6 @@
             <AppenderRef ref="Console"/>
         </Root>
         <Logger name="nzi.fhir.validator" level="debug"/>
+        <Logger name="org.flywaydb.core" level="debug" />
     </Loggers>
 </Configuration>

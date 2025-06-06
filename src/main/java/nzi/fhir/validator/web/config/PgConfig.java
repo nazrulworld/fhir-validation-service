@@ -19,9 +19,6 @@ public class PgConfig {
                 .setDatabase(ApplicationConfig.get("pg.database", "fhir_validator"))
                 .setUser(ApplicationConfig.get("pg.user", "postgres"))
                 .setPassword(ApplicationConfig.get("pg.password", "Test1234"))
-                .setProperties(new HashMap<String, String>() {{
-                    put("authenticationPluginClassName", "com.ongres.scram.client.ScramClient");
-                }})
                 .setCachePreparedStatements(true);
     }
 }

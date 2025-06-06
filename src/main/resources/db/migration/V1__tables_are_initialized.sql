@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS fhir_implementation_guides (
 );
 
 -- Create a GIN index for ig_package_meta
-CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_package_meta 
-ON fhir_implementation_guides USING GIN (ig_package_meta);
+CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_package_meta
+    ON fhir_implementation_guides USING GIN (ig_package_meta);
 
 -- Create a GIN index for dependencies array
-CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_dependencies 
-ON fhir_implementation_guides USING GIN (dependencies);
+CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_dependencies
+    ON fhir_implementation_guides USING GIN (dependencies);
