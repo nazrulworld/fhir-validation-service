@@ -16,9 +16,9 @@
         <testcontainers.version>1.19.7</testcontainers.version>
         <jackson.version>2.17.1</jackson.version>
         <vertx.version>4.5.14</vertx.version>
-        <hapi-fhir.version>8.0.0</hapi-fhir.version>
-        <fhir.version>6.5.7</fhir.version>
-        <fhir.utilities.version>6.5.7</fhir.utilities.version>
+
+        <hapi-fhir.version>8.2.0</hapi-fhir.version>
+        <fhir.utilities.version>6.5.18</fhir.utilities.version>
         <ph_schematron_version>7.1.2</ph_schematron_version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
@@ -84,12 +84,6 @@
             <artifactId>vertx-web-client</artifactId>
             <version>${vertx.version}</version>
         </dependency>
-        <!-- HL7 FHIR  -->
-        <dependency>
-            <groupId>ca.uhn.hapi.fhir</groupId>
-            <artifactId>org.hl7.fhir.validation</artifactId>
-            <version>${fhir.version}</version>
-        </dependency>
         <!-- HL7 FHIR Utilities (for NpmPackage) -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
@@ -108,10 +102,27 @@
             <artifactId>hapi-fhir-validation</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
+        <!-- HAPI FHIR DSTU3 Structures -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-structures-dstu3</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-validation-resources-dstu3</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+
         <!-- HAPI FHIR R4 Structures -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-structures-r4</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-validation-resources-r4</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
         <!-- HAPI FHIR R4B Structures -->
@@ -120,12 +131,24 @@
             <artifactId>hapi-fhir-structures-r4b</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-validation-resources-r4b</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+
         <!-- HAPI FHIR R5 Structures -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-structures-r5</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-validation-resources-r5</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+
         <!-- HAPI Caching support -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>

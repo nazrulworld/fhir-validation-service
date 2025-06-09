@@ -4,6 +4,7 @@ import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
+import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.hl7.fhir.utilities.npm.NpmPackage;
@@ -19,13 +20,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.CompletionException;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(VertxExtension.class)
 class IgPackageServiceTest extends BaseTestContainer {
 
     private Vertx vertx;
-    private PgPool pgPool;
     private IgPackageService igPackageService;
     private static final String US_CORE_PACKAGE_PATH = "/hl7.fhir.us.core-7.0.0.tgz";
     private static final String PACKAGE_NAME = "hl7.fhir.us.core";
@@ -34,41 +35,13 @@ class IgPackageServiceTest extends BaseTestContainer {
     @BeforeEach
     void setUp() {
         startContainers();
-
         vertx = Vertx.vertx();
-
-        PgConnectOptions connectOptions = new PgConnectOptions()
-                .setHost(getPostgresHost())
-                .setPort(getPostgresPort())
-                .setDatabase(POSTGRES_DATABASE)
-                .setUser(POSTGRES_USERNAME)
-                .setPassword(POSTGRES_PASSWORD);
-
-        PoolOptions poolOptions = new PoolOptions()
-                .setMaxSize(5);
-
-        pgPool = PgPool.pool(vertx, connectOptions, poolOptions);
+        Pool pgPool = getPgPool(vertx);
+        initDatabaseScheme(pgPool);
         igPackageService = IgPackageService.create(vertx, pgPool);
 
         // Create the necessary table
-        String createTableSQL = """
-            CREATE TABLE IF NOT EXISTS fhir_implementation_guides (
-                ig_package_id TEXT NOT NULL,
-                ig_package_version TEXT NOT NULL,
-                ig_package_meta JSONB NOT NULL,
-                content_raw BYTEA NOT NULL,
-                dependencies TEXT[],
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (ig_package_id, ig_package_version)
-            )
-        """;
-
-        pgPool.query(createTableSQL)
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
+        createTables(pgPool);
     }
 
     private byte[] loadUsCorePackage() throws IOException {
@@ -169,17 +142,13 @@ class IgPackageServiceTest extends BaseTestContainer {
 
     @AfterEach
     void tearDown() {
-        if (pgPool != null) {
-            pgPool.query("DROP TABLE IF EXISTS fhir_implementation_guides")
-                    .execute()
-                    .toCompletionStage()
-                    .toCompletableFuture()
-                    .join();
-
-            pgPool.close();
-        }
-        
         if (vertx != null) {
+            if(hasPgPool()){
+                Pool pool = getPgPool(vertx);
+                dropTables(pool);
+                pool.close();
+                removePgPool();
+            }
             vertx.close();
         }
     }

@@ -10,7 +10,7 @@ public class ValidationRequestOptions {
 
     private final ArrayList<String> profilesToValidate;
 
-    private   ValidationRequestOptions(ArrayList<String> profilesToValidate) {
+    public  ValidationRequestOptions(ArrayList<String> profilesToValidate) {
         this.profilesToValidate = profilesToValidate;
     }
     public static ValidationRequestOptions fromRequest(HttpServerRequest request){

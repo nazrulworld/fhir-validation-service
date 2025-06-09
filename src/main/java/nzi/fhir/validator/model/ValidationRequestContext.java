@@ -15,7 +15,7 @@ public class ValidationRequestContext {
      final SupportedContentType acceptedContentType;
      final ValidationRequestOptions validationOptions;
 
-    private ValidationRequestContext(SupportedContentType contentType, SupportedFhirVersion fhirVersion,
+    public ValidationRequestContext(SupportedContentType contentType, SupportedFhirVersion fhirVersion,
                                     SupportedContentType acceptedContentType, ValidationRequestOptions validationOptions) {
          this.contentType = contentType;
          this.fhirVersion = fhirVersion;

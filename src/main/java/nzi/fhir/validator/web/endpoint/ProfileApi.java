@@ -8,6 +8,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
+import nzi.fhir.validator.web.service.FhirContextLoader;
 import nzi.fhir.validator.web.service.ProfileService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,7 +19,7 @@ import java.util.HashMap;
  */
 public class ProfileApi {
     private static final Logger logger = LogManager.getLogger(ProfileApi.class);
-    private final HashMap<String, ProfileService> profileServices;
+    private final HashMap<SupportedFhirVersion, ProfileService> profileServices;
 
     /**
      * Constructor for production use that initializes profile services internally.
@@ -30,15 +31,11 @@ public class ProfileApi {
         // Initialize profile services for all supported FHIR versions
         this.profileServices = new HashMap<>();
 
-        // Create FhirContext instances for different FHIR versions
-        FhirContext fhirContextR4 = FhirContext.forR4();
-        FhirContext fhirContextR4B = FhirContext.forR4B();
-        FhirContext fhirContextR5 = FhirContext.forR5();
-
         // Create profile services for different FHIR versions
-        this.profileServices.put("R4",  ProfileService.create(vertx, fhirContextR4, pgPool));
-        this.profileServices.put("R4B", ProfileService.create(vertx, fhirContextR4B, pgPool));
-        this.profileServices.put("R5",  ProfileService.create(vertx, fhirContextR5, pgPool));
+        this.profileServices.put(SupportedFhirVersion.STU3,  ProfileService.create(vertx, FhirContextLoader.getInstance().getContext(SupportedFhirVersion.STU3), pgPool));
+        this.profileServices.put(SupportedFhirVersion.R4,  ProfileService.create(vertx, FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4), pgPool));
+        this.profileServices.put(SupportedFhirVersion.R4B, ProfileService.create(vertx, FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4B), pgPool));
+        this.profileServices.put(SupportedFhirVersion.R5,  ProfileService.create(vertx, FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R5), pgPool));
     }
 
     /**
@@ -47,7 +44,7 @@ public class ProfileApi {
      * @param vertx The Vert.x instance
      * @param profileServices The pre-initialized profile services
      */
-    public ProfileApi(Vertx vertx, HashMap<String, ProfileService> profileServices) {
+    public ProfileApi(Vertx vertx, HashMap<SupportedFhirVersion, ProfileService> profileServices) {
         this.profileServices = profileServices;
     }
 
@@ -83,7 +80,7 @@ public class ProfileApi {
         String version = versionEnum.name();
 
         // Get the appropriate profile service based on the version
-        ProfileService service = profileServices.getOrDefault(version, profileServices.get(SupportedFhirVersion.getDefault().name()));
+        ProfileService service = profileServices.getOrDefault(versionEnum, profileServices.get(SupportedFhirVersion.getDefault()));
         if (service == null) {
             logger.error("No profile service available for version: {}", version);
             ctx.response().setStatusCode(400).end(new JsonObject()

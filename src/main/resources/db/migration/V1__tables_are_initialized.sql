@@ -1,3 +1,7 @@
+-- Create Schema
+CREATE SCHEMA IF NOT EXISTS fhir_validator_schema;
+-- Set the search path
+SET search_path TO fhir_validator_schema;
 -- Create an enum type if not exists
 DO $$
     BEGIN
@@ -8,7 +12,7 @@ END
 $$;
 
 -- Create fhir_profiles table
-CREATE TABLE IF NOT EXISTS fhir_profiles (
+CREATE TABLE IF NOT EXISTS fhir_validator_schema.fhir_profiles (
      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
      url TEXT NOT NULL,
      profile_json JSONB NOT NULL,
@@ -19,7 +23,7 @@ CREATE TABLE IF NOT EXISTS fhir_profiles (
 );
 
 -- Create fhir_implementation_guides table
-CREATE TABLE IF NOT EXISTS fhir_implementation_guides (
+CREATE TABLE IF NOT EXISTS fhir_validator_schema.fhir_implementation_guides (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     ig_package_id VARCHAR(127) NOT NULL,
     ig_package_version VARCHAR(16) NOT NULL,
@@ -33,8 +37,8 @@ CREATE TABLE IF NOT EXISTS fhir_implementation_guides (
 
 -- Create a GIN index for ig_package_meta
 CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_package_meta
-    ON fhir_implementation_guides USING GIN (ig_package_meta);
+    ON fhir_validator_schema.fhir_implementation_guides USING GIN (ig_package_meta);
 
 -- Create a GIN index for dependencies array
 CREATE INDEX IF NOT EXISTS idx_fhir_implementation_guides_dependencies
-    ON fhir_implementation_guides USING GIN (dependencies);
+    ON fhir_validator_schema.fhir_implementation_guides USING GIN (dependencies);

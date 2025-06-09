@@ -28,6 +28,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+
 /**
  * PostgresSQL-based package cache manager for FHIR IG packages.
  */
@@ -82,7 +84,7 @@ public class PostgresPackageCacheManager extends AsyncBasePackageCacheManager {
 
     protected Future<NpmPackage> loadPackageFromCache(IgPackageName igPackageName) {
 
-        String query = "SELECT content_raw FROM fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2";
+        String query = "SELECT content_raw FROM %s.fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2".formatted(DB_POSTGRES_SCHEMA_NAME);
         return pgPool.preparedQuery(query)
                 .execute(Tuple.of(igPackageName.getName(), igPackageName.getVersion()))
                 .map(rows -> {
@@ -133,7 +135,7 @@ protected Future<NpmPackage> addPackageToCache(ByteArrayInputStream stream) {
         String[] dependenciesArray = npmPackage.dependencies().toArray(String[]::new);
 
         String sql = """
-            INSERT INTO fhir_implementation_guides 
+            INSERT INTO %s.fhir_implementation_guides 
                 (ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (ig_package_id, ig_package_version) 
@@ -141,7 +143,7 @@ protected Future<NpmPackage> addPackageToCache(ByteArrayInputStream stream) {
                 ig_package_meta = $3,
                 content_raw = $4,
                 dependencies = $5
-            """;
+            """.formatted(DB_POSTGRES_SCHEMA_NAME);
 
         return pgPool.withTransaction(client -> 
             client.preparedQuery(sql)
@@ -313,7 +315,7 @@ protected Future<NpmPackage> addPackageToCache(ByteArrayInputStream stream) {
 
     private Future<String> getLatestVersionFromCache(String lgPackageId) {
         Validate.notNull(lgPackageId, "Package id cannot be null");
-        String query = "SELECT ig_package_version FROM fhir_implementation_guides WHERE ig_package_id = $1 ORDER BY created_at DESC LIMIT 1";
+        String query = "SELECT ig_package_version FROM %s.fhir_implementation_guides WHERE ig_package_id = $1 ORDER BY created_at DESC LIMIT 1".formatted(DB_POSTGRES_SCHEMA_NAME);
         return pgPool.preparedQuery(query)
                 .execute(Tuple.of(lgPackageId))
                 .map(rows -> {
@@ -325,20 +327,20 @@ protected Future<NpmPackage> addPackageToCache(ByteArrayInputStream stream) {
     }
 
     public Future<Void> clear() {
-        return pgPool.preparedQuery("DELETE FROM fhir_implementation_guides")
+        return pgPool.preparedQuery("DELETE FROM %s.fhir_implementation_guides".formatted(DB_POSTGRES_SCHEMA_NAME))
                 .execute()
                 .mapEmpty();
     }
     public Future<Boolean> isPackageExists(IgPackageName igPackageName) {
         return pgPool.preparedQuery(
-            "SELECT EXISTS(SELECT 1 FROM fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2)")
+            "SELECT EXISTS(SELECT 1 FROM %s.fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2)".formatted(DB_POSTGRES_SCHEMA_NAME))
         .execute(Tuple.of(igPackageName.getName(), igPackageName.getVersion()))
         .map(rows -> rows.iterator().next().getBoolean(0));
 
     }
 
     public Future<Void> removePackage(String id, String version) {
-        return pgPool.preparedQuery("DELETE FROM fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2")
+        return pgPool.preparedQuery("DELETE FROM %s.fhir_implementation_guides WHERE ig_package_id = $1 AND ig_package_version = $2".formatted(DB_POSTGRES_SCHEMA_NAME))
                 .execute(Tuple.of(id, version))
                 .mapEmpty();
     }

@@ -27,6 +27,7 @@ public class HealthApi {
                                         .setStatusCode(statusCode)
                                         .putHeader("Content-Type", "application/json")
                                         .end(health.encode());
+                                logger.debug("Health report was {}", health.encode());
                             })
                             .onFailure(err -> {
                                 logger.error("Health check failed", err);

@@ -38,6 +38,7 @@ public class FhirContextLoader {
     private void initializeContexts() {
         logger.info("Initializing FHIR contexts");
         try {
+            contextMap.put(SupportedFhirVersion.STU3, FhirContext.forDstu3());
             contextMap.put(SupportedFhirVersion.R4, FhirContext.forR4());
             contextMap.put(SupportedFhirVersion.R4B, FhirContext.forR4B());
             contextMap.put(SupportedFhirVersion.R5, FhirContext.forR5());

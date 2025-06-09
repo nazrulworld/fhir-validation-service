@@ -6,11 +6,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.impl.NoStackTraceThrowable;
 import io.vertx.core.json.JsonObject;
-import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.PoolOptions;
-import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Pool;
+import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.junit.jupiter.api.AfterEach;
@@ -20,12 +17,12 @@ import org.junit.jupiter.api.DisplayName;
 
 import java.util.concurrent.CompletionException;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProfileServiceTest extends BaseTestContainer {
 
     private Vertx vertx;
-    private PgPool pgPool;
     private FhirContext fhirContext;
     private ProfileService profileService;
     private static final String TEST_PROFILE_URL = "http://example.com/fhir/StructureDefinition/test-profile";
@@ -35,39 +32,14 @@ class ProfileServiceTest extends BaseTestContainer {
     void setUp() {
         // Ensure the container is started before accessing ports
         startContainers();
-
         vertx = Vertx.vertx();
+        Pool pgPool = getPgPool(vertx);
+        initDatabaseScheme(pgPool);
 
-        PgConnectOptions connectOptions = new PgConnectOptions()
-            .setHost(getPostgresHost())
-            .setPort(getPostgresPort())
-            .setDatabase(POSTGRES_DATABASE)
-            .setUser(POSTGRES_USERNAME)
-            .setPassword(POSTGRES_PASSWORD);
-
-        PoolOptions poolOptions = new PoolOptions()
-            .setMaxSize(5);
-
-        pgPool = PgPool.pool(vertx, connectOptions, poolOptions);
-        fhirContext = FhirContext.forR4();
+        fhirContext = FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4);
         profileService = ProfileService.create(vertx, fhirContext, pgPool);
 
-        String createTableSQL = """
-            CREATE TABLE IF NOT EXISTS fhir_profiles (
-                url TEXT NOT NULL,
-                profile_json JSONB NOT NULL,
-                fhir_version TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (url, fhir_version)
-            )
-        """;
-
-        pgPool.query(createTableSQL)
-            .execute()
-            .toCompletionStage()
-            .toCompletableFuture()
-            .join();
+        createTables(pgPool);
     }
 
     @Test
@@ -231,8 +203,8 @@ class ProfileServiceTest extends BaseTestContainer {
         
         profileService.registerProfile(profile)
             .compose(v -> {
-                // Simulate server restart by creating new service instance
-                profileService = ProfileService.create(vertx, fhirContext, pgPool);
+                // Simulate server restart by creating a new service instance
+                profileService = ProfileService.create(vertx, fhirContext, getPgPool(vertx));
                 return profileService.getProfile(TEST_PROFILE_URL);
             })
             .onComplete(ar -> {
@@ -245,17 +217,13 @@ class ProfileServiceTest extends BaseTestContainer {
 
     @AfterEach
     void tearDown() {
-        if (pgPool != null) {
-            pgPool.query("DROP TABLE IF EXISTS fhir_profiles")
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
-
-            pgPool.close();
-        }
-        
         if (vertx != null) {
+            if(hasPgPool()){
+                Pool pool = getPgPool(vertx);
+                dropTables(pool);
+                pool.close();
+                removePgPool();
+            }
             vertx.close();
         }
     }

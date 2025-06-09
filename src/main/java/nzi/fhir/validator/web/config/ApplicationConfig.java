@@ -15,12 +15,16 @@ import org.apache.logging.log4j.Logger;
 public class ApplicationConfig {
     private static final Logger logger = LogManager.getLogger(ApplicationConfig.class);
     private static Properties applicationProperties;
-
+    public static final String DB_POSTGRES_SCHEMA_NAME = "fhir_validator_schema";
     public static String get(String key) {
         return get(key, "");
     }
 
     public static String get(String key, String defaultValue) {
+        String propValue = System.getProperty(key, null);
+        if (propValue != null){
+            return propValue;
+        }
         String envValue = System.getenv(key.toUpperCase().replace('.', '_'));
         if (envValue != null) {
             return envValue;

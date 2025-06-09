@@ -19,7 +19,7 @@ services:
       retries: 3
 
   postgres:
-    image: postgres:14-alpine
+    image: postgres:16.8-alpine3.21
     # Use default platform or override with DOCKER_DEFAULT_PLATFORM env var
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

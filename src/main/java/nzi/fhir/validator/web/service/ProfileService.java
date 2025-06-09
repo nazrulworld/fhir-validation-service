@@ -13,6 +13,8 @@ import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+
 public class ProfileService {
     private static final String PROFILE_CACHE_PREFIX = "profile:";
     private static final Logger logger = LogManager.getLogger(ProfileService.class);
@@ -78,7 +80,7 @@ public class ProfileService {
             String fhirVersion = fhirContext.getVersion().getVersion().getFhirVersionString();
 
             return client.preparedQuery(
-                    "INSERT INTO fhir_profiles (url, profile_json, fhir_version)" +
+                    "INSERT INTO %s.fhir_profiles (url, profile_json, fhir_version)".formatted(DB_POSTGRES_SCHEMA_NAME) +
                             " VALUES ($1, $2, $3)" +
                             " ON CONFLICT (url, fhir_version) DO UPDATE SET " +
                             " profile_json = $2, modified_at = NOW()"
@@ -110,7 +112,7 @@ public class ProfileService {
                     String fhirVersion = fhirContext.getVersion().getVersion().getFhirVersionString();
 
                     return client.preparedQuery(
-                            "INSERT INTO fhir_profiles (url, profile_json, fhir_version)" +
+                            "INSERT INTO %s.fhir_profiles (url, profile_json, fhir_version)".formatted(DB_POSTGRES_SCHEMA_NAME) +
                                     " VALUES ($1, $2, $3)" +
                                     " ON CONFLICT (url, fhir_version) DO UPDATE SET" +
                                     " profile_json = $2, modified_at = NOW()"
@@ -131,7 +133,7 @@ public class ProfileService {
     private Future<IBaseResource> loadFromDatabase(String profileUrl) {
         return pgPool.withTransaction(client -> 
             client.preparedQuery(
-                "SELECT profile_json FROM fhir_profiles WHERE url = $1 AND fhir_version = $2"
+                "SELECT profile_json FROM %s.fhir_profiles WHERE url = $1 AND fhir_version = $2".formatted(DB_POSTGRES_SCHEMA_NAME)
             )
             .execute(Tuple.of(profileUrl, fhirContext.getVersion().getVersion().getFhirVersionString()))
             .compose(rows -> {

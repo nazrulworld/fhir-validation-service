@@ -65,13 +65,13 @@ public class FhirValidationService {
 
         FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
 
-        return createValidator(igPackageIdentity, igPackageService, profileService)
+        return createValidator(vertx, igPackageIdentity, igPackageService, profileService)
                 .map(validator -> new FhirValidationService(vertx, fhirContext, validator));
     }
 
-    private static Future<FhirValidator> createValidator(IGPackageIdentity igPackageIdentity, IgPackageService igPackageService, ProfileService profileService) {
+    private static Future<FhirValidator> createValidator(Vertx vertx, IGPackageIdentity igPackageIdentity, IgPackageService igPackageService, ProfileService profileService) {
         return Future.future(promise -> {
-            Vertx.currentContext().executeBlocking(blockingPromise -> {
+            vertx.executeBlocking(blockingPromise -> {
                 try {
                     FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
                     ValidationSupportChain validationSupportChain = new ValidationSupportChain();
@@ -117,7 +117,7 @@ public class FhirValidationService {
     }
 
     public Future<JsonObject> validate(String content, ValidationRequestContext validationRequestContext) {
-        return vertx.executeBlocking(() -> {
+        return vertx.executeBlocking(promise -> {
             try {
                 IBaseResource parsedResource;
                 // Parse the resource
@@ -128,15 +128,24 @@ public class FhirValidationService {
                     parsedResource = fhirXMLParser.parseResource(content);
                 }
                 // Add profiles if specified in options
-                if (!validationRequestContext.getValidationOptions().getProfilesToValidate().isEmpty() &&
-                        parsedResource instanceof IAnyResource) {
+                if (validationRequestContext.getValidationOptions().getProfilesToValidate() != null && 
+                    !validationRequestContext.getValidationOptions().getProfilesToValidate().isEmpty() &&
+                    parsedResource instanceof IAnyResource) {
                     addProfilesToResource(parsedResource, validationRequestContext.getValidationOptions());
                 }
                 // Use the cached validator
                 ValidationResult result = validator.validateWithResult(parsedResource);
-                return convertToJson(result);
+                promise.complete(convertToJson(result));
+            } catch (ca.uhn.fhir.parser.DataFormatException e) {
+                logger.debug("Invalid FHIR formatted data: {}", e.getMessage(), e);
+                JsonObject error =  new JsonObject()
+                        .put("valid", false)
+                        .put("messages", new JsonArray().add(new JsonObject().put("severity", "error").put("message", e.getMessage()).put("location", "")));
+                promise.complete(error);
             } catch (Exception e) {
                 logger.error("Validation failed: {}", e.getMessage(), e);
+                // we will enable this after more testing
+                //promise.fail(new RuntimeException("Validation failed", e));
                 throw new RuntimeException("Validation failed", e);
             }
         });

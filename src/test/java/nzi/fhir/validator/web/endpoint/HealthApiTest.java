@@ -7,9 +7,7 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.codec.BodyCodec;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
-import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.web.service.HealthService;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.junit.jupiter.api.AfterEach;
@@ -31,7 +29,6 @@ class HealthApiTest extends BaseTestContainer {
     private int testPort;
     private Vertx vertx;
     private WebClient client;
-    private PgPool pgPool;
 
     @BeforeEach
     void setUp(VertxTestContext testContext) {
@@ -40,18 +37,8 @@ class HealthApiTest extends BaseTestContainer {
 
         // Initialize Vertx
         vertx = Vertx.vertx();
+        Pool pgPool = getPgPool(vertx);
         client = WebClient.create(vertx);
-
-        // Configure PostgresSQL
-        PgConnectOptions pgConnectOptions = new PgConnectOptions()
-                .setHost(getPostgresHost())
-                .setPort(getPostgresPort())
-                .setDatabase(POSTGRES_DATABASE)
-                .setUser(POSTGRES_USERNAME)
-                .setPassword(POSTGRES_PASSWORD);
-        PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
-        pgPool = PgPool.pool(vertx, pgConnectOptions, poolOptions);
-
         // Create and deploy the test server
         Router router = Router.router(vertx);
         HealthService healthService = new HealthService(vertx, pgPool);
@@ -72,8 +59,10 @@ class HealthApiTest extends BaseTestContainer {
     @AfterEach
     void tearDown(VertxTestContext testContext) {
         // Close resources
-        if (pgPool != null) {
-            pgPool.close();
+        if(hasPgPool()){
+            Pool pool = getPgPool(vertx);
+            pool.close();
+            removePgPool();
         }
 
         if (vertx != null) {

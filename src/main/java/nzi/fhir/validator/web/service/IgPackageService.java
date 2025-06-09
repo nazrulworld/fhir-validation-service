@@ -15,6 +15,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.stream.Collectors;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+
 /**
  * Service for managing FHIR Implementation Guide packages.
  */
@@ -57,7 +59,7 @@ public class IgPackageService {
 
         return pgPool.withTransaction(client -> 
             client.preparedQuery(
-                "INSERT INTO fhir_implementation_guides " +
+                "INSERT INTO %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME) +
                 "(ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies) " +
                 "VALUES ($1, $2, $3, $4, $5) " +
                 "ON CONFLICT (ig_package_id, ig_package_version) DO UPDATE SET " +
@@ -92,7 +94,7 @@ public class IgPackageService {
         }
 
         return pgPool.preparedQuery(
-            "SELECT dependencies FROM fhir_implementation_guides " +
+            "SELECT dependencies FROM %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME) +
             "WHERE ig_package_id = $1 AND ig_package_version = $2"
         )
         .execute(Tuple.of(name, version))

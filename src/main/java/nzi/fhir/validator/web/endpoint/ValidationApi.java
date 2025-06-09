@@ -146,11 +146,11 @@ public class ValidationApi {
     public void includeRoutes(Router router) {
         router.post("/:version/validate")
                 .handler(BodyHandler.create())
-                .handler(this::handle);
+                .handler(this::handleDoValidate);
     }
 
 
-    private void handle(RoutingContext ctx) {
+    private void handleDoValidate(RoutingContext ctx) {
         // Validate content
         if (ctx.body().isEmpty()) {
             logger.error("Missing resource in request");
@@ -166,9 +166,16 @@ public class ValidationApi {
             return;
         }
         ValidationRequestContext validationRequestContext = ValidationRequestContext.fromRoutingContext(ctx);
+        logger.debug("ValidationRequest has been constructed from routing context. FHIR version was {}", validationRequestContext.getFhirVersion().name());
 
+        FhirContext fhirContext = FhirContextLoader.getInstance().getContext(validationRequestContext.getFhirVersion());
+        logger.debug("Validator is initiating using FHIR Context {}, for FHIR version {}", fhirContext.toString(), fhirContext.getVersion().getVersion());
+
+        // create identity
+        IGPackageIdentity igPackageIdentity = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContext);
+        logger.debug("IGPackageIdentity has been created for FHIR Context {}", igPackageIdentity.toString());
         // Get the appropriate validation service based on the version
-        FhirValidationService service = FhirValidationService.get(IGPackageIdentity.createIGPackageIdentityForCorePackage(FhirContextLoader.getInstance().getContext(validationRequestContext.getFhirVersion())));
+        FhirValidationService service = FhirValidationService.get(igPackageIdentity);
         if (service == null) {
             logger.error("No validation service available for version: {}", validationRequestContext.getFhirVersion());
             ctx.response().setStatusCode(400).end(new JsonObject()

@@ -3,9 +3,7 @@ package nzi.fhir.validator.npm;
 import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
-import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.model.IgPackageName;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.junit.jupiter.api.*;
@@ -17,13 +15,13 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(VertxExtension.class)
 class PostgresPackageCacheManagerTest extends BaseTestContainer {
 
     private Vertx vertx;
-    private PgPool pgPool;
     private PostgresPackageCacheManager cacheManager;
     private static final String TEST_PACKAGE_PATH = "/hl7.fhir.us.core-7.0.0.tgz";
     private static final String PACKAGE_ID = "hl7.fhir.us.core";
@@ -34,48 +32,11 @@ class PostgresPackageCacheManagerTest extends BaseTestContainer {
         startContainers();
         
         vertx = Vertx.vertx();
-        pgPool = createPgPool();
+        Pool pgPool = getPgPool(vertx);
+        initDatabaseScheme(pgPool);
         cacheManager = new PostgresPackageCacheManager(vertx, pgPool);
         
-        createTables();
-    }
-
-    private PgPool createPgPool() {
-        PgConnectOptions connectOptions = new PgConnectOptions()
-                .setHost(getPostgresHost())
-                .setPort(getPostgresPort())
-                .setDatabase(POSTGRES_DATABASE)
-                .setUser(POSTGRES_USERNAME)
-                .setPassword(POSTGRES_PASSWORD);
-
-        PoolOptions poolOptions = new PoolOptions()
-                .setMaxSize(5)
-                .setIdleTimeout(300)
-                .setConnectionTimeout(2000)
-                .setMaxWaitQueueSize(10);
-        
-        return PgPool.pool(vertx, connectOptions, poolOptions);
-    }
-
-    private void createTables() {
-        String createTableSQL = """
-            CREATE TABLE IF NOT EXISTS fhir_implementation_guides (
-                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                ig_package_id VARCHAR(127) NOT NULL,
-                ig_package_version VARCHAR(16) NOT NULL,
-                ig_package_meta JSONB NOT NULL,
-                content_raw BYTEA NOT NULL,
-                dependencies TEXT[] NOT NULL DEFAULT '{}',
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE (ig_package_id, ig_package_version)
-            );
-        """;
-
-        pgPool.query(createTableSQL)
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
+        createTables(pgPool);
     }
 
     private byte[] loadTestPackage() throws IOException {
@@ -196,17 +157,18 @@ class PostgresPackageCacheManagerTest extends BaseTestContainer {
 
     @AfterEach
     void tearDown() {
-        if (pgPool != null) {
-            pgPool.query("DROP TABLE IF EXISTS fhir_implementation_guides")
-                    .execute()
-                    .toCompletionStage()
-                    .toCompletableFuture()
-                    .join();
 
-            pgPool.close();
-        }
-        
         if (vertx != null) {
+            if(hasPgPool()){
+                Pool pool = getPgPool(vertx);
+                pool.query("DROP TABLE IF EXISTS %s.fhir_implementation_guides".formatted(DB_POSTGRES_SCHEMA_NAME))
+                        .execute()
+                        .toCompletionStage()
+                        .toCompletableFuture()
+                        .join();
+                pool.close();
+                removePgPool();
+            }
             vertx.close();
         }
     }

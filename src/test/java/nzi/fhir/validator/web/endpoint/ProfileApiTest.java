@@ -7,15 +7,14 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.codec.BodyCodec;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
-import io.vertx.pgclient.PgConnectOptions;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,28 +27,19 @@ class ProfileApiTest extends BaseTestContainer {
     private int testPort;
     private Vertx vertx;
     private WebClient client;
-    private PgPool pgPool;
 
     @BeforeEach
     void setUp(VertxTestContext testContext) {
         // Start containers if not already started
         startContainers();
-
         // Initialize Vertx
         vertx = Vertx.vertx();
+        Pool pgPool = getPgPool(vertx);
+        initDatabaseScheme(pgPool);
         client = WebClient.create(vertx);
-        // Configure PostgreSQL
-        PgConnectOptions pgConnectOptions = new PgConnectOptions()
-                .setHost(getPostgresHost())
-                .setPort(getPostgresPort())
-                .setDatabase(POSTGRES_DATABASE)
-                .setUser(POSTGRES_USERNAME)
-                .setPassword(POSTGRES_PASSWORD);
-        PoolOptions poolOptions = new PoolOptions().setMaxSize(5);
-        pgPool = PgPool.pool(vertx, pgConnectOptions, poolOptions);
 
         String createTableSQL = """
-            CREATE TABLE IF NOT EXISTS fhir_profiles (
+            CREATE TABLE IF NOT EXISTS %s.fhir_profiles (
                 url TEXT NOT NULL,
                 profile_json JSONB NOT NULL,
                 fhir_version TEXT NOT NULL,
@@ -57,8 +47,7 @@ class ProfileApiTest extends BaseTestContainer {
                 modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (url, fhir_version)
             )
-        """;
-
+        """.formatted(DB_POSTGRES_SCHEMA_NAME);
         pgPool.query(createTableSQL)
                 .execute()
                 .toCompletionStage()
@@ -89,16 +78,16 @@ class ProfileApiTest extends BaseTestContainer {
     @AfterEach
     void tearDown(VertxTestContext testContext) {
         // Close resources
-        if (pgPool != null) {
-            pgPool.query("DROP TABLE IF EXISTS fhir_profiles")
+        if(hasPgPool()){
+            Pool pool = getPgPool(vertx);
+            pool.query("DROP TABLE IF EXISTS %s.fhir_profiles".formatted(DB_POSTGRES_SCHEMA_NAME))
                     .execute()
                     .toCompletionStage()
                     .toCompletableFuture()
                     .join();
-
-            pgPool.close();
+            pool.close();
+            removePgPool();
         }
-
         if (vertx != null) {
             vertx.close()
                     .onSuccess(v -> testContext.completeNow())

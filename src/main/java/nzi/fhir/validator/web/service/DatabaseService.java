@@ -9,6 +9,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.flywaydb.core.Flyway;
 
+import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+
 /**
  * @author Md Nazrul Islam
  */
@@ -32,7 +34,7 @@ public class DatabaseService {
         
         vertx.executeBlocking(blocking -> {
             try {
-                String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?DatabaseType=postgresql",
                         dbOptions.getHost(),
                         dbOptions.getPort(),
                         dbOptions.getDatabase());
@@ -43,7 +45,7 @@ public class DatabaseService {
                                 dbOptions.getUser(),
                                 dbOptions.getPassword()
                         )
-                        .schemas("public")
+                        .schemas(DB_POSTGRES_SCHEMA_NAME)
                         .locations("classpath:db/migration")
                         .baselineOnMigrate(true)
                         .baselineVersion("0")
