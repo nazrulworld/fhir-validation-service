@@ -85,18 +85,13 @@ class ProfileServiceTest extends BaseTestContainer {
     @DisplayName("Should fail when trying to get a non-existent profile")
     void whenGetNonExistentProfile_thenFails() {
         String nonExistentUrl = "http://example.com/fhir/StructureDefinition/non-existent";
+        IBaseResource profileResource = profileService.getProfile(nonExistentUrl)
+            .toCompletionStage()
+            .toCompletableFuture()
+            .join();
+        System.out.printf("###Profile resource: %s%n", profileResource);
+        assertNull(profileResource);
 
-        try {
-            profileService.getProfile(nonExistentUrl)
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
-            fail("Expected CompletionException to be thrown");
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause();
-            assertInstanceOf(NoStackTraceThrowable.class, cause);
-            assertEquals("Profile not found: " + nonExistentUrl, cause.getMessage());
-        }
     }
 
     @Test

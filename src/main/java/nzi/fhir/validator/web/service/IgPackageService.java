@@ -1,5 +1,6 @@
 package nzi.fhir.validator.web.service;
 
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
@@ -13,6 +14,9 @@ import org.hl7.fhir.utilities.npm.NpmPackage;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
@@ -40,25 +44,42 @@ public class IgPackageService {
     }
 
     public Future<NpmPackage> registerIg(String name, String version) {
-        return cacheManager.loadPackage(name +"#"+version, false)
+        return cacheManager.loadPackage(name +"#"+version, false, false)
+                .onSuccess(npmPackage -> logger.info("Successfully registered IG: {}#{}", name, version))
+                .onFailure(e -> logger.error("Failed to register IG: {}#{} - {}", name, version, e.getMessage()));
+    }
+
+    public Future<NpmPackage> registerIg(String name, String version, boolean loadDependencies) {
+        return cacheManager.loadPackage(name +"#"+version, false, loadDependencies)
                 .onSuccess(npmPackage -> logger.info("Successfully registered IG: {}#{}", name, version))
                 .onFailure(e -> logger.error("Failed to register IG: {}#{} - {}", name, version, e.getMessage()));
     }
 
     public Future<NpmPackage> registerIg(byte[] igPackageBytes) {
+        return registerIg(igPackageBytes, false);
+    }
+
+    public Future<NpmPackage> registerIg(byte[] igPackageBytes, boolean loadDependencies) {
+        if (igPackageBytes == null) {
+            return Future.failedFuture("IG package bytes cannot be null");
+        }
+
         NpmPackage npmPackage;
-        try {
-            npmPackage = NpmPackage.fromPackage(new ByteArrayInputStream(igPackageBytes));
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(igPackageBytes)) {
+            npmPackage = NpmPackage.fromPackage(bis);
         } catch (Exception e) {
             logger.error("Invalid IG package: {}", e.getMessage(), e);
             return Future.failedFuture("Invalid IG package: " + e.getMessage());
         }
 
         JsonObject packageMeta = PostgresPackageCacheManager.createNpmPackageMeta(npmPackage);
-        String[] dependenciesArray = npmPackage.dependencies().toArray(String[]::new);
+        String[] dependenciesArray = Optional.ofNullable(npmPackage.dependencies())
+            .map(deps -> deps.toArray(String[]::new))
+            .orElse(new String[0]);
 
         return pgPool.withTransaction(client -> 
             client.preparedQuery(
+                // Consider using bind parameter for schema name
                 "INSERT INTO %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME) +
                 "(ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies) " +
                 "VALUES ($1, $2, $3, $4, $5) " +
@@ -74,7 +95,25 @@ public class IgPackageService {
             ))
             .map(rowSet -> npmPackage)
         )
-        .onSuccess(v -> logger.info("Registered IG: {}#{}", npmPackage.name(), npmPackage.version()))
+        .compose(registeredPackage -> {
+            logger.info("Registered IG to PostgresSQL: {}#{}", npmPackage.name(), npmPackage.version());
+            
+            if (!loadDependencies || npmPackage.dependencies().isEmpty()) {
+                return Future.succeededFuture(registeredPackage);
+            }
+
+            List<Future<?>> dependencyFutures = npmPackage.dependencies().stream()
+                .map(dependency -> cacheManager.loadPackage(dependency, false, true))
+                .collect(Collectors.toList());
+
+            return CompositeFuture.all(new ArrayList<>(dependencyFutures))
+                .transform(ar -> {
+                    if (ar.failed()) {
+                        logger.error("Failed to fetch dependencies: {}", ar.cause().getMessage());
+                    }
+                    return Future.succeededFuture(registeredPackage);
+                });
+        })
         .onFailure(e -> logger.error("Failed to register IG: {}#{} - {}", 
             npmPackage.name(), npmPackage.version(), e.getMessage()));
     }

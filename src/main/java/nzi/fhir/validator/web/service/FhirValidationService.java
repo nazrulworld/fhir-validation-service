@@ -75,8 +75,6 @@ public class FhirValidationService {
                 try {
                     FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
                     ValidationSupportChain validationSupportChain = new ValidationSupportChain();
-                    validationSupportChain.addValidationSupport(new CustomProfileValidationSupport(fhirContext, profileService));
-
                     // Create base validation supports
                     DefaultProfileValidationSupport defaultSupport = new DefaultProfileValidationSupport(fhirContext);
                     InMemoryTerminologyServerValidationSupport inMemoryTerminology = new InMemoryTerminologyServerValidationSupport(fhirContext);
@@ -85,6 +83,8 @@ public class FhirValidationService {
                     validationSupportChain.addValidationSupport(defaultSupport);
                     validationSupportChain.addValidationSupport(inMemoryTerminology);
                     validationSupportChain.addValidationSupport(commonTerminology);
+                    // Add custom profile validator
+                    validationSupportChain.addValidationSupport(new CustomProfileValidationSupport(fhirContext, profileService));
 
                     if (!igPackageIdentity.getName().equals(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME)) {
                         Validate.notNull(igPackageService, "IG service must not be null");

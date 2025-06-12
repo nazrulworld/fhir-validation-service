@@ -3,6 +3,7 @@ package nzi.fhir.validator.web.service;
 import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.sqlclient.Pool;
@@ -12,12 +13,18 @@ import nzi.fhir.validator.model.ValidationRequestOptions;
 import nzi.fhir.validator.web.enums.SupportedContentType;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
+import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.utilities.npm.NpmPackage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +36,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     private Vertx vertx;
     private FhirValidationService validationService;
     private ProfileService profileService;
+    private IgPackageService igPackageService;
     private static final String VALID_PATIENT_JSON = """
             {
               "resourceType": "Patient",
@@ -46,7 +54,22 @@ class FhirValidationServiceTest extends BaseTestContainer {
                 }
               ],
               "gender": "male",
-              "birthDate": "1974-12-25"
+              "birthDate": "1974-12-25",
+              "identifier": [
+                  {
+                    "use": "usual",
+                    "type": {
+                      "coding": [
+                        {
+                          "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                          "code": "MR"
+                        }
+                      ]
+                    },
+                    "system": "urn:oid:0.1.2.3.4.5.6.7",
+                    "value": "123456"
+                  }
+                ]
             }
             """;
 
@@ -64,7 +87,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
                 SupportedContentType.JSON,
                 nzi.fhir.validator.web.enums.SupportedFhirVersion.R4,
                 SupportedContentType.JSON,
-                new ValidationRequestOptions(null)
+                new ValidationRequestOptions(new ArrayList<>())
         );
         return context;
     }
@@ -74,15 +97,15 @@ class FhirValidationServiceTest extends BaseTestContainer {
         Pool pgPool = getPgPool(vertx);
         initDatabaseScheme(pgPool);
         createTables(pgPool);
-        profileService = ProfileService.create(vertx, FhirContext.forR4(), pgPool);
-        
+        profileService = ProfileService.create(vertx, FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4), pgPool);
+        igPackageService = IgPackageService.create(vertx, pgPool);
         IGPackageIdentity igPackageIdentity = new IGPackageIdentity(
             IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME, 
             "4.0.1", 
             SupportedFhirVersion.R4
         );
 
-        FhirValidationService.create(vertx, igPackageIdentity, null, profileService)
+        FhirValidationService.create(vertx, igPackageIdentity, igPackageService, profileService)
             .onComplete(ar -> {
                 if (ar.succeeded()) {
                     validationService = ar.result();
@@ -91,6 +114,8 @@ class FhirValidationServiceTest extends BaseTestContainer {
                     testContext.failNow(ar.cause());
                 }
             });
+
+
     }
 
     @Test
@@ -112,6 +137,154 @@ class FhirValidationServiceTest extends BaseTestContainer {
 
     }
 
+
+    //@Test
+    //@DisplayName("Should validate valid FHIR Patient resource against Danish profile")
+    void whenValidateValidPatientForDanishProfile_thenSucceeds(VertxTestContext testContext) throws IOException {
+        String DANISH_PROFILE_PATH = "fhir/profiles/dk/StructureDefinition-dk-core-patient.json";
+        String DANISH_PATIENT_PATH = "fhir/resources/dk/Patient.json";
+
+        // Load and register a profile
+        JsonObject profileJson = new JsonObject(loadJsonFromClasspath(DANISH_PROFILE_PATH));
+        String profileUrl = profileJson.getString("url");
+
+        profileService.registerProfile(profileJson)
+                .compose(v -> profileService.getProfile(profileUrl))
+                .compose(profileResource -> {
+                    assertNotNull(profileResource);
+
+                    // Prepare validation context and validate patient
+                    ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
+                    String patientContent = null;
+                    try {
+                        patientContent = loadJsonFromClasspath(DANISH_PATIENT_PATH);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    return validationService.validate(patientContent, context);
+                })
+                .onComplete(testContext.succeeding(result -> {
+                    testContext.verify(() -> {
+                        assertFalse(result.getBoolean("valid"));
+                        logValidationMessages(result);
+                        testContext.completeNow();
+                    });
+                }));
+    }
+
+    @Test
+    @EnabledIf("hasInternetConnection")
+    @DisplayName("Should validate valid FHIR Patient resource against Danish IG")
+    void whenValidateValidPatientForDanishIG_thenSucceeds(VertxTestContext testContext) throws IOException {
+        String DANISH_IG_PATH = "fhir/hl7.fhir.dk.core-3.4.0.tgz";
+        String DANISH_PATIENT_PATH = "fhir/resources/dk/Patient.json";
+        byte[] dkIgPackageBytes = loadBytesFromClasspath(DANISH_IG_PATH);
+        NpmPackage npmPackage = igPackageService.registerIg(dkIgPackageBytes, true).toCompletionStage().toCompletableFuture().join();
+        // Load and register a profile
+        assertNotNull(npmPackage);
+        assertEquals("hl7.fhir.dk.core", npmPackage.name());
+        assertEquals("3.4.0", npmPackage.version());
+        testContext.completeNow();
+        IGPackageIdentity igPackageIdentity2 = new IGPackageIdentity(
+                npmPackage.name(),
+                npmPackage.version(),
+                SupportedFhirVersion.R4
+        );
+
+        FhirValidationService dkValidator = FhirValidationService.create(vertx, igPackageIdentity2, igPackageService, profileService).toCompletionStage().toCompletableFuture().join();
+
+        // Prepare validation context and validate patient
+        ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
+        String patientContent = null;
+        try {
+            patientContent = loadJsonFromClasspath(DANISH_PATIENT_PATH);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        dkValidator.validate(patientContent, context).onComplete(testContext.succeeding(result -> {
+            testContext.verify(() -> {
+                assertTrue(result.getBoolean("valid"));
+                JsonArray messages = result.getJsonArray("messages");
+                assertTrue(messages.isEmpty());
+            });
+        }));
+        // Should be valid without dk profile on it, even though this is standard FHIR JSON
+        dkValidator.validate(VALID_PATIENT_JSON, context).onComplete(testContext.succeeding(result -> {
+            testContext.verify(() -> {
+                assertTrue(result.getBoolean("valid"));
+                JsonArray messages = result.getJsonArray("messages");
+                assertTrue(messages.isEmpty());
+            });
+        }));
+
+        // Should not be valid with dk profile on it, even though this is standard FHIR JSON
+        // should be invalid??
+        context.getValidationOptions().getProfilesToValidate().add("http://hl7.org/fhir/StructureDefinition/dk-core-patient");
+        dkValidator.validate(VALID_PATIENT_JSON, context).onComplete(testContext.succeeding(result -> {
+            testContext.verify(() -> {
+                assertTrue(result.getBoolean("valid"));
+                JsonArray messages = result.getJsonArray("messages");
+                assertTrue(messages.isEmpty());
+            });
+        }));
+        /*
+        profileService.registerProfile(profileJson)
+                .compose(v -> profileService.getProfile(profileUrl))
+                .compose(profileResource -> {
+                    assertNotNull(profileResource);
+
+                    // Prepare validation context and validate patient
+                    ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
+                    String patientContent = null;
+                    try {
+                        patientContent = loadJsonFromClasspath(DANISH_PATIENT_PATH);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    return validationService.validate(patientContent, context);
+                })
+                .onComplete(testContext.succeeding(result -> {
+                    testContext.verify(() -> {
+                        assertFalse(result.getBoolean("valid"));
+                        logValidationMessages(result);
+                        testContext.completeNow();
+                    });
+                }));
+
+         */
+    }
+
+    /**
+     * Loads JSON content from a classpath resource.
+     *
+     * @param resourcePath Path to the resource file
+     * @return String containing the file contents
+     * @throws IOException if the file cannot be read or doesn't exist
+     */
+    private String loadJsonFromClasspath(String resourcePath) throws IOException {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new IOException("File not found in classpath: " + resourcePath);
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private byte[] loadBytesFromClasspath(String resourcePath) throws IOException {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new IOException("File not found in classpath: " + resourcePath);
+            }
+            return is.readAllBytes();
+        }
+    }
+
+    private void logValidationMessages(JsonObject result) {
+        System.out.printf("Messages: %s%n", result.getJsonArray("messages").encodePrettily());
+    }
     @Test
     @DisplayName("Should fail validation for invalid FHIR Patient resource")
     void whenValidateInvalidPatient_thenFails(VertxTestContext testContext) {
@@ -132,7 +305,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @DisplayName("Should validate resource against specified profiles")
     void whenValidateWithProfiles_thenValidatesAgainstProfiles(VertxTestContext testContext) {
         ValidationRequestOptions options = new ValidationRequestOptions(
-                (ArrayList<String>) List.of("http://hl7.org/fhir/StructureDefinition/Patient")
+                new ArrayList<>(List.of("http://hl7.org/fhir/StructureDefinition/Patient"))
         );
         ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
         context.getValidationOptions().getProfilesToValidate().addAll(options.getProfilesToValidate());
@@ -153,13 +326,11 @@ class FhirValidationServiceTest extends BaseTestContainer {
         ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
 
         validationService.validate(malformedJson, context)
-            .onComplete(testContext.failing(throwable -> {
-                testContext.verify(() -> {
-                    assertNotNull(throwable);
-                    assertTrue(throwable instanceof RuntimeException);
-                    testContext.completeNow();
-                });
-            }));
+            .onComplete(result -> {
+                assertFalse(result.result().getBoolean("valid"));
+                assertTrue(result.result().toString().contains("HAPI-1861: Failed to parse JSON encoded FHIR content: Unexpected character ('i'"));
+                testContext.completeNow();
+            });
     }
 
     @AfterEach

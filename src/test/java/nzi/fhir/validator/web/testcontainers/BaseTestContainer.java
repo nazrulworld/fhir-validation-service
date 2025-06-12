@@ -13,6 +13,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.time.Duration;
 
 import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
@@ -193,5 +196,14 @@ public class BaseTestContainer {
 
     public static Integer getPostgresPort() {
         return postgresContainer.getMappedPort(POSTGRES_PORT);
+    }
+
+    public static boolean hasInternetConnection() {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("packages2.fhir.org", 443), 1000);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 }

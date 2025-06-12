@@ -130,7 +130,7 @@ class PostgresPackageCacheManagerTest extends BaseTestContainer {
     @Test
     @DisplayName("Should get latest version from packages.fhir.org when internet is available")
     void whenInternetAvailable_thenGetLatestVersionFromFhir(VertxTestContext testContext) {
-        // First check if we can reach packages.fhir.org
+        // First, check if we can reach packages.fhir.org
         // https://packages2.fhir.org/packages/catalog
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress("packages2.fhir.org", 443), 1000);
@@ -147,7 +147,7 @@ class PostgresPackageCacheManagerTest extends BaseTestContainer {
             .onComplete(testContext.succeeding(resolvedName -> {
                 assertNotNull(resolvedName);
                 assertEquals(packageId, resolvedName.getName());
-                // Version should match semantic versioning pattern
+                // Version should match a semantic versioning pattern
                 assertTrue(resolvedName.getVersion().matches("\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9]+)?"));
                 // Version should not be the test package version
                 assertNotEquals(PACKAGE_VERSION, resolvedName.getVersion());

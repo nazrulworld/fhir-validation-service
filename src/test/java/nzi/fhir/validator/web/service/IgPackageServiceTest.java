@@ -57,8 +57,7 @@ class IgPackageServiceTest extends BaseTestContainer {
     @DisplayName("Should successfully register and load US Core IG package")
     void whenRegisterAndLoadUsCorePackage_thenSucceeds(VertxTestContext testContext) throws IOException {
         byte[] packageContent = loadUsCorePackage();
-
-        igPackageService.registerIg(packageContent)
+        igPackageService.registerIg(packageContent, false)
                 .compose(npmPackage -> {
                     assertNotNull(npmPackage);
                     assertEquals(PACKAGE_NAME, npmPackage.name());

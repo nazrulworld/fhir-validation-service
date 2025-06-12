@@ -1,5 +1,6 @@
 package nzi.fhir.validator.web.service;
 
+import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.parser.DataFormatException;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -11,7 +12,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.exceptions.FHIRException;
 import org.hl7.fhir.exceptions.FHIRFormatError;
+import org.hl7.fhir.instance.model.api.IBaseMetaType;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.instance.model.api.IIdType;
+
+import java.util.List;
 
 import static nzi.fhir.validator.web.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 
@@ -24,6 +29,7 @@ public class ProfileService {
     private final IParser jsonParser;
     private final Pool pgPool;
     private static final CachingService cachingService;
+    private final EmptyResource emptyResource;
 
     static {
         cachingService = CachingService.create();
@@ -34,6 +40,7 @@ public class ProfileService {
         this.fhirContext = fhirContext;
         this.jsonParser = fhirContext.newJsonParser();
         this.pgPool = pgPool;
+        this.emptyResource = new EmptyResource();
     }
 
     public static ProfileService create(Vertx vertx, FhirContext fhirContext, Pool pgPool){
@@ -49,13 +56,22 @@ public class ProfileService {
         String cacheKey = getCacheKey(profileUrl) ;
         logger.debug("Fetching profile: {}", profileUrl);
         IBaseResource profile = (IBaseResource) cachingService.get(cacheKey);
+        if (profile == emptyResource){
+            logger.debug("There is no profile resource available for : {}", profileUrl);
+            return Future.succeededFuture(null);
+        }
         if (profile != null) {
             logger.debug("Cache hit for profile: {}", profileUrl);
             return Future.succeededFuture(profile);
         }
+
         return loadFromDatabase(profileUrl)
                 .compose(profileRaw -> {
-                    cachingService.put(cacheKey, profileRaw);
+                    if (profileRaw == null) {
+                        cachingService.put(cacheKey, emptyResource);
+                    } else {
+                        cachingService.put(cacheKey, profileRaw);
+                    }
                     return Future.succeededFuture(profileRaw);
                 });
     }
@@ -138,9 +154,9 @@ public class ProfileService {
             .execute(Tuple.of(profileUrl, fhirContext.getVersion().getVersion().getFhirVersionString()))
             .compose(rows -> {
                 if (rows.size() == 0) {
-                    logger.warn("Profile not found in database for URL: {} and FHIR version: {}",
+                    logger.info("Profile not found in database for URL: {} and FHIR version: {}",
                             profileUrl, fhirContext.getVersion().getVersion().getFhirVersionString());
-                    return Future.failedFuture("Profile not found: " + profileUrl);
+                    return Future.succeededFuture(null);
                 }
                 String profileJson = rows.iterator().next().getString(0);
                 try {
@@ -170,4 +186,68 @@ public class ProfileService {
             throw new FHIRFormatError("Profile JSON must be a valid FHIR StructureDefinition");
         }
     }
+
+    private class EmptyResource implements IBaseResource {
+
+        @Override
+        public IBaseMetaType getMeta() {
+            return null;
+        }
+
+        @Override
+        public IIdType getIdElement() {
+            return null;
+        }
+
+        @Override
+        public IBaseResource setId(String s) {
+            return null;
+        }
+
+        @Override
+        public IBaseResource setId(IIdType iIdType) {
+            return null;
+        }
+
+        @Override
+        public FhirVersionEnum getStructureFhirVersionEnum() {
+            return null;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return true;
+        }
+
+        @Override
+        public boolean hasFormatComment() {
+            return false;
+        }
+
+        @Override
+        public List<String> getFormatCommentsPre() {
+            return List.of();
+        }
+
+        @Override
+        public List<String> getFormatCommentsPost() {
+            return List.of();
+        }
+
+        @Override
+        public String fhirType() {
+            return IBaseResource.super.fhirType();
+        }
+
+        @Override
+        public Object getUserData(String s) {
+            return null;
+        }
+
+        @Override
+        public void setUserData(String s, Object o) {
+
+        }
+    }
 }
+
