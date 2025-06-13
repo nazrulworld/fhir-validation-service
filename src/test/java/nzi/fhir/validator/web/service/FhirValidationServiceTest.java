@@ -1,6 +1,5 @@
 package nzi.fhir.validator.web.service;
 
-import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -10,10 +9,10 @@ import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.model.IGPackageIdentity;
 import nzi.fhir.validator.model.ValidationRequestContext;
 import nzi.fhir.validator.model.ValidationRequestOptions;
+import nzi.fhir.validator.model.ValidatorIdentity;
 import nzi.fhir.validator.web.enums.SupportedContentType;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
-import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.utilities.npm.NpmPackage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,7 +84,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     private static ValidationRequestContext createValidationRequestContext(SupportedFhirVersion fhirVersion) {
         ValidationRequestContext context = new ValidationRequestContext(
                 SupportedContentType.JSON,
-                nzi.fhir.validator.web.enums.SupportedFhirVersion.R4,
+                SupportedFhirVersion.R4,
                 SupportedContentType.JSON,
                 new ValidationRequestOptions(new ArrayList<>())
         );
@@ -105,7 +104,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
             SupportedFhirVersion.R4
         );
 
-        FhirValidationService.create(vertx, igPackageIdentity, igPackageService, profileService)
+        FhirValidationService.create(vertx, SupportedFhirVersion.R4, igPackageService, profileService)
             .onComplete(ar -> {
                 if (ar.succeeded()) {
                     validationService = ar.result();
@@ -137,42 +136,6 @@ class FhirValidationServiceTest extends BaseTestContainer {
 
     }
 
-
-    //@Test
-    //@DisplayName("Should validate valid FHIR Patient resource against Danish profile")
-    void whenValidateValidPatientForDanishProfile_thenSucceeds(VertxTestContext testContext) throws IOException {
-        String DANISH_PROFILE_PATH = "fhir/profiles/dk/StructureDefinition-dk-core-patient.json";
-        String DANISH_PATIENT_PATH = "fhir/resources/dk/Patient.json";
-
-        // Load and register a profile
-        JsonObject profileJson = new JsonObject(loadJsonFromClasspath(DANISH_PROFILE_PATH));
-        String profileUrl = profileJson.getString("url");
-
-        profileService.registerProfile(profileJson)
-                .compose(v -> profileService.getProfile(profileUrl))
-                .compose(profileResource -> {
-                    assertNotNull(profileResource);
-
-                    // Prepare validation context and validate patient
-                    ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
-                    String patientContent = null;
-                    try {
-                        patientContent = loadJsonFromClasspath(DANISH_PATIENT_PATH);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                    return validationService.validate(patientContent, context);
-                })
-                .onComplete(testContext.succeeding(result -> {
-                    testContext.verify(() -> {
-                        assertFalse(result.getBoolean("valid"));
-                        logValidationMessages(result);
-                        testContext.completeNow();
-                    });
-                }));
-    }
-
     @Test
     @EnabledIf("hasInternetConnection")
     @DisplayName("Should validate valid FHIR Patient resource against Danish IG")
@@ -191,8 +154,8 @@ class FhirValidationServiceTest extends BaseTestContainer {
                 npmPackage.version(),
                 SupportedFhirVersion.R4
         );
-
-        FhirValidationService dkValidator = FhirValidationService.create(vertx, igPackageIdentity2, igPackageService, profileService).toCompletionStage().toCompletableFuture().join();
+        ValidatorIdentity validatorIdentity = new ValidatorIdentity(npmPackage.name() +"#"+npmPackage.version(), SupportedFhirVersion.R4);
+        FhirValidationService dkValidator = FhirValidationService.create(vertx, validatorIdentity, igPackageService, profileService, igPackageIdentity2).toCompletionStage().toCompletableFuture().join();
 
         // Prepare validation context and validate patient
         ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
@@ -229,32 +192,6 @@ class FhirValidationServiceTest extends BaseTestContainer {
                 assertTrue(messages.isEmpty());
             });
         }));
-        /*
-        profileService.registerProfile(profileJson)
-                .compose(v -> profileService.getProfile(profileUrl))
-                .compose(profileResource -> {
-                    assertNotNull(profileResource);
-
-                    // Prepare validation context and validate patient
-                    ValidationRequestContext context = createValidationRequestContext(SupportedFhirVersion.R4);
-                    String patientContent = null;
-                    try {
-                        patientContent = loadJsonFromClasspath(DANISH_PATIENT_PATH);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                    return validationService.validate(patientContent, context);
-                })
-                .onComplete(testContext.succeeding(result -> {
-                    testContext.verify(() -> {
-                        assertFalse(result.getBoolean("valid"));
-                        logValidationMessages(result);
-                        testContext.completeNow();
-                    });
-                }));
-
-         */
     }
 
     /**
@@ -335,8 +272,10 @@ class FhirValidationServiceTest extends BaseTestContainer {
 
     @AfterEach
     void tearDown() {
-        if (vertx != null) {
+        if(FhirValidationService.size() > 0){
             FhirValidationService.clear();
+        }
+        if (vertx != null) {
             if (hasPgPool()) {
                 Pool pool = getPgPool(vertx);
                 dropTables(pool);

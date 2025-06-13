@@ -4,7 +4,9 @@ import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import nzi.fhir.validator.model.IGPackageIdentity;
+import nzi.fhir.validator.model.ValidatorIdentity;
 import nzi.fhir.validator.web.enums.FhirCoreIgPackageType;
+import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.common.hapi.validation.support.NpmPackageValidationSupport;
@@ -25,14 +27,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class CustomNpmPackageValidationSupport extends NpmPackageValidationSupport {
     private static final Logger logger = LogManager.getLogger(CustomNpmPackageValidationSupport.class);
-    private static final HashMap<IGPackageIdentity, CustomNpmPackageValidationSupport> NPM_PACKAGE_VALIDATION_SUPPORT_CACHE = new HashMap<>();
+    private static final HashMap<ValidatorIdentity, CustomNpmPackageValidationSupport> NPM_PACKAGE_VALIDATION_SUPPORT_CACHE = new HashMap<>();
 
     private final IgPackageService igPackageService;
+    private final ArrayList<IGPackageIdentity> includedIgPackages;
 
 
     public CustomNpmPackageValidationSupport(FhirContext ctx, IgPackageService igPackageService) {
         super(ctx);
         this.igPackageService = igPackageService;
+        this.includedIgPackages = new ArrayList<>();
 
     }
     public Future<Void> loadIgPackageFromDatabase(String name, String version) {
@@ -83,6 +87,11 @@ public class CustomNpmPackageValidationSupport extends NpmPackageValidationSuppo
      * @param pkg The NpmPackage to process
      */
     protected void loadResourcesFromPackage(NpmPackage pkg) {
+        IGPackageIdentity igPackageIdentity = new IGPackageIdentity(pkg.name(), pkg.version(), SupportedFhirVersion.fromVersionNumber(pkg.fhirVersion()));
+        if (this.includedIgPackages.contains(igPackageIdentity)) {
+            logger.warn("IG {}@{} has already been loaded. No need to further process.", igPackageIdentity.getName(), igPackageIdentity.getVersion());
+            return;
+        }
         NpmPackage.NpmPackageFolder packageFolder = pkg.getFolders().get("package");
         if (packageFolder == null) {
             logger.warn("No 'package' folder found in IG");
@@ -95,6 +104,25 @@ public class CustomNpmPackageValidationSupport extends NpmPackageValidationSuppo
                 super.addResource(resource);
             }
         }
+        //
+        int existingIndex = findSimilarPackage(igPackageIdentity);
+        if (existingIndex == -1) {
+            includedIgPackages.add(igPackageIdentity);
+        } else {
+            IGPackageIdentity existingIgPackage = includedIgPackages.get(existingIndex);
+            logger.info("IG Package version has been updated. Name was: {}, previous version was: {} and current version is: {} ", igPackageIdentity.getName(), existingIgPackage.getVersion(), igPackageIdentity.getVersion());
+            includedIgPackages.set(existingIndex, igPackageIdentity);
+        }
+    }
+
+    private int findSimilarPackage(IGPackageIdentity igPackageIdentity) {
+        for (int i = 0; i < includedIgPackages.size(); i++) {
+            IGPackageIdentity igPId = includedIgPackages.get(i);
+            if (igPId.getName().equals(igPackageIdentity.getName()) && igPackageIdentity.getFhirVersion() == igPId.getFhirVersion()) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public static boolean isValidClassPath(String classPath) {
@@ -113,39 +141,17 @@ public class CustomNpmPackageValidationSupport extends NpmPackageValidationSuppo
         return retVal != null;
     }
 
-    public static CustomNpmPackageValidationSupport getValidationSupport(IGPackageIdentity igPackageIdentity) {
-        return NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.get(igPackageIdentity);
+    public static CustomNpmPackageValidationSupport getValidationSupport(ValidatorIdentity validatorIdentity) {
+        return NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.get(validatorIdentity);
     }
-    public static Future<CustomNpmPackageValidationSupport> getValidationSupport(
-        IGPackageIdentity igPackageIdentity, 
-        IgPackageService igPackageService) {
 
-        CustomNpmPackageValidationSupport npmValidationSupport = NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.get(igPackageIdentity);
-        if (npmValidationSupport != null) {
-            return Future.succeededFuture(npmValidationSupport);
+    public static CustomNpmPackageValidationSupport getValidationSupport(ValidatorIdentity validatorIdentity, IgPackageService igPackageService) {
+        if (!NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.containsKey(validatorIdentity)) {
+            final CustomNpmPackageValidationSupport finalNpmValidationSupport = new CustomNpmPackageValidationSupport(
+                    FhirContextLoader.getInstance().getContext(validatorIdentity.getFhirVersion()),
+                    igPackageService);
+            NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.put(validatorIdentity, finalNpmValidationSupport);
         }
-
-        final CustomNpmPackageValidationSupport finalNpmValidationSupport = new CustomNpmPackageValidationSupport(
-                FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion()),
-                igPackageService);
-
-        if (CustomNpmPackageValidationSupport.isValidClassPath(igPackageIdentity.asClassPath())) {
-            try {
-                finalNpmValidationSupport.loadPackageFromClasspath(igPackageIdentity.asClassPath());
-                NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.put(igPackageIdentity, finalNpmValidationSupport);
-                return Future.succeededFuture(finalNpmValidationSupport);
-            } catch (Exception e) {
-                logger.error("Failed to load IG package: {}", e.getMessage(), e);
-                return Future.failedFuture(new RuntimeException("Failed to load IG package", e));
-            }
-        } else {
-            return finalNpmValidationSupport.loadIgPackageFromDatabase(
-                    igPackageIdentity.getName(),
-                    igPackageIdentity.getVersion())
-                .map(v -> {
-                    NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.put(igPackageIdentity, finalNpmValidationSupport);
-                    return finalNpmValidationSupport;
-                });
-        }
+        return NPM_PACKAGE_VALIDATION_SUPPORT_CACHE.get(validatorIdentity);
     }
 }

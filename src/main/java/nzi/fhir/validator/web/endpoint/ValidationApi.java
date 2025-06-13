@@ -9,6 +9,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.sqlclient.Pool;
+import nzi.fhir.validator.model.ValidatorIdentity;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import nzi.fhir.validator.model.IGPackageIdentity;
 import nzi.fhir.validator.model.ValidationRequestContext;
@@ -30,6 +31,16 @@ public class ValidationApi {
     private  Vertx vertx;
     private  Pool pgPool;
 
+    // Private constructor
+    private ValidationApi(Vertx vertx, Pool pgPool) {
+        this.vertx = vertx;
+        this.pgPool = pgPool;
+    }
+
+    public static ValidationApi createInstance(Vertx vertx, Pool pgPool) {
+        return new ValidationApi(vertx, pgPool);
+    }
+
     public static Future<ValidationApi> create(Vertx vertx, Pool pgPool) {
         return Future.future(promise -> {
             FhirContextLoader fhirContextLoader = FhirContextLoader.getInstance();
@@ -47,21 +58,16 @@ public class ValidationApi {
             // Create IG services for different FHIR versions
             IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
 
-            // Create validation services for different FHIR versions
-            IGPackageIdentity igPackageIdentityR4 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4);
-            IGPackageIdentity igPackageIdentityR4B = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4B);
-            IGPackageIdentity igPackageIdentityR5 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR5);
-
             CompositeFuture.all(
-                FhirValidationService.create(vertx, igPackageIdentityR4, igPackageService, profileServiceR4)
-                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4, service)),
-                FhirValidationService.create(vertx, igPackageIdentityR4B, igPackageService, profileServiceR4B)
-                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4B, service)),
-                FhirValidationService.create(vertx, igPackageIdentityR5, igPackageService, profileServiceR5)
-                    .onSuccess(service -> FhirValidationService.put(igPackageIdentityR5, service))
+                FhirValidationService.create(vertx, SupportedFhirVersion.R4, igPackageService, profileServiceR4)
+                    .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R4.name())),
+                FhirValidationService.create(vertx, SupportedFhirVersion.R4B, igPackageService, profileServiceR4B)
+                    .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R4B.name())),
+                FhirValidationService.create(vertx, SupportedFhirVersion.R5, igPackageService, profileServiceR5)
+                    .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R5.name()))
             ).onComplete(ar -> {
                 if (ar.succeeded()) {
-                    promise.complete(new ValidationApi(vertx, pgPool));
+                    promise.complete(createInstance(vertx, pgPool));
                 } else {
                     logger.error("Failed to initialize validation services", ar.cause());
                     promise.fail(ar.cause());
@@ -69,75 +75,6 @@ public class ValidationApi {
             });
         });
     }
-
-    // Private constructor
-    private ValidationApi(Vertx vertx, Pool pgPool) {
-        this.vertx = vertx;
-        this.pgPool = pgPool;
-    }
-
-    /**
-     * Constructor for production use that initializes validation services internally.
-     * 
-     * @param vertx The Vert.x instance
-     * @param pgPool The PostgresSQL connection pool
-     */
-    /*
-    public ValidationApi(Vertx vertx, Pool pgPool) {
-
-        FhirContextLoader fhirContextLoader = FhirContextLoader.getInstance();
-
-        // Create FhirContext instances for different FHIR versions
-        FhirContext fhirContextR4 = fhirContextLoader.getContext(SupportedFhirVersion.R4);
-        FhirContext fhirContextR4B = fhirContextLoader.getContext(SupportedFhirVersion.R4B);
-        FhirContext fhirContextR5 = fhirContextLoader.getContext(SupportedFhirVersion.R5);
-
-        // Create profile services for different FHIR versions
-        ProfileService profileServiceR4 =  ProfileService.create(vertx, fhirContextR4, pgPool);
-        ProfileService profileServiceR4B = ProfileService.create(vertx, fhirContextR4B, pgPool);
-        ProfileService profileServiceR5 = ProfileService.create(vertx, fhirContextR5, pgPool);
-
-        // Create IG services for different FHIR versions
-        IgPackageService igPackageService =  IgPackageService.create(vertx, pgPool);
-        // Create validation services for different FHIR versions
-        IGPackageIdentity igPackageIdentityR4 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4);
-        IGPackageIdentity igPackageIdentityR4B = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR4B);
-        IGPackageIdentity igPackageIdentityR5 = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContextR5);
-
-        // Initialize the services asynchronously
-        CompositeFuture.all(
-                FhirValidationService.create(vertx, igPackageIdentityR4, igPackageService, profileServiceR4)
-                        .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4, service)),
-                FhirValidationService.create(vertx, igPackageIdentityR4B, igPackageService, profileServiceR4B)
-                        .onSuccess(service -> FhirValidationService.put(igPackageIdentityR4B, service)),
-                FhirValidationService.create(vertx, igPackageIdentityR5, igPackageService, profileServiceR5)
-                        .onSuccess(service -> FhirValidationService.put(igPackageIdentityR5, service))
-        ).onFailure(err -> {
-            logger.error("Failed to initialize validation services", err);
-            throw new RuntimeException("Failed to initialize validation services", err);
-        });
-
-    }
-     */
-
-    /**
-     * Constructor for testing purposes that allows injection of validation services.
-     * 
-     * @param vertx The Vert.x instance
-     * @param validationServices The pre-initialized validation services
-     */
-    public ValidationApi(Vertx vertx, HashMap<IGPackageIdentity, FhirValidationService> validationServices) {
-        for (IGPackageIdentity igPackageIdentity : validationServices.keySet()) {
-            FhirValidationService fhirValidationService = validationServices.get(igPackageIdentity);
-            if (fhirValidationService == null) {
-                logger.error("No validation service available for version: {}", igPackageIdentity.getFhirVersion());
-                throw new RuntimeException("No validation service available for version: " + igPackageIdentity.getFhirVersion());
-            }
-            FhirValidationService.put(igPackageIdentity, fhirValidationService);
-            logger.info("Validation service initialized for version: {}", igPackageIdentity.getFhirVersion());
-        }
-    }
-
     /**
      * Configures the routes for validation API endpoints.
      * 
@@ -171,11 +108,10 @@ public class ValidationApi {
         FhirContext fhirContext = FhirContextLoader.getInstance().getContext(validationRequestContext.getFhirVersion());
         logger.debug("Validator is initiating using FHIR Context {}, for FHIR version {}", fhirContext.toString(), fhirContext.getVersion().getVersion());
 
-        // create identity
-        IGPackageIdentity igPackageIdentity = IGPackageIdentity.createIGPackageIdentityForCorePackage(fhirContext);
-        logger.debug("IGPackageIdentity has been created for FHIR Context {}", igPackageIdentity.toString());
+        // create validator identity
+        ValidatorIdentity validatorIdentity = ValidatorIdentity.createFromFhirVersion(validationRequestContext.getFhirVersion());
         // Get the appropriate validation service based on the version
-        FhirValidationService service = FhirValidationService.get(igPackageIdentity);
+        FhirValidationService service = FhirValidationService.get(validatorIdentity);
         if (service == null) {
             logger.error("No validation service available for version: {}", validationRequestContext.getFhirVersion());
             ctx.response().setStatusCode(400).end(new JsonObject()

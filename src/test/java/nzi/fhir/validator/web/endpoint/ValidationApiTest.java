@@ -7,11 +7,12 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import io.vertx.sqlclient.Pool;
+import nzi.fhir.validator.model.ValidatorIdentity;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
-import nzi.fhir.validator.model.IGPackageIdentity;
-import nzi.fhir.validator.web.service.FhirContextLoader;
 import nzi.fhir.validator.web.service.FhirValidationService;
 import nzi.fhir.validator.web.testcontainers.BaseTestContainer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,7 +20,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.HashMap;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -31,7 +31,6 @@ import static org.mockito.ArgumentMatchers.any;
 class ValidationApiTest extends BaseTestContainer {
 
     private Vertx vertx;
-    private Router router;
     private int port;
 
     @Mock
@@ -40,7 +39,8 @@ class ValidationApiTest extends BaseTestContainer {
     @BeforeEach
     void setUp() {
         vertx = Vertx.vertx();
-        router = Router.router(vertx);
+        Router router = Router.router(vertx);
+        Pool pgPool = getPgPool(vertx);
         port = 8080;
 
         // Setup mock validation service to return a success response
@@ -48,15 +48,14 @@ class ValidationApiTest extends BaseTestContainer {
                 .thenReturn(io.vertx.core.Future.succeededFuture(new JsonObject().put("valid", true)));
 
         // Create a HashMap of mock validation services for each supported FHIR version
-        HashMap<IGPackageIdentity, FhirValidationService> validationServices = new HashMap<>();
-        validationServices.put(IGPackageIdentity.createIGPackageIdentityForCorePackage(FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4)), mockValidationService);
-        validationServices.put(IGPackageIdentity.createIGPackageIdentityForCorePackage(FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R4B)), mockValidationService);
-        validationServices.put(IGPackageIdentity.createIGPackageIdentityForCorePackage(FhirContextLoader.getInstance().getContext(SupportedFhirVersion.R5)), mockValidationService);
+        ValidatorIdentity idR4 = ValidatorIdentity.createFromFhirVersion(SupportedFhirVersion.R4);
+        FhirValidationService.put(idR4, mockValidationService);
+        FhirValidationService.put(ValidatorIdentity.createFromFhirVersion(SupportedFhirVersion.R4B), mockValidationService);
+        FhirValidationService.put(ValidatorIdentity.createFromFhirVersion(SupportedFhirVersion.R5), mockValidationService);
 
         // Initialize the ValidationApi with mock services
-        ValidationApi validationApi = new ValidationApi(vertx, validationServices);
+        ValidationApi validationApi = ValidationApi.createInstance(vertx, pgPool);
         validationApi.includeRoutes(router);
-
         // Start the server
         vertx.createHttpServer()
                 .requestHandler(router)
@@ -103,5 +102,21 @@ class ValidationApiTest extends BaseTestContainer {
                     assert response.statusCode() == 400;
                     testContext.completeNow();
                 })));
+    }
+
+    @AfterEach
+    void tearDown() {
+        if(FhirValidationService.size() > 0){
+            FhirValidationService.clear();
+        }
+        if (vertx != null) {
+            if(hasPgPool()){
+                Pool pool = getPgPool(vertx);
+                // dropTables(pool);
+                pool.close();
+                removePgPool();
+            }
+            vertx.close();
+        }
     }
 }

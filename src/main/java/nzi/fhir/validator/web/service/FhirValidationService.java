@@ -9,6 +9,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import nzi.fhir.validator.model.ValidatorIdentity;
 import nzi.fhir.validator.web.enums.SupportedFhirVersion;
 import nzi.fhir.validator.model.IGPackageIdentity;
 import org.apache.commons.lang3.Validate;
@@ -34,7 +35,8 @@ import java.util.Objects;
 public class FhirValidationService {
 
     private static final Logger logger = LogManager.getLogger(FhirValidationService.class);
-    private final static HashMap<IGPackageIdentity, FhirValidationService> validationServicesStorage;
+    private final static HashMap<ValidatorIdentity, FhirValidationService> validationServicesStorage;
+    private final ValidatorIdentity validatorIdentity;
     private final Vertx vertx; // Mandatory
     private final FhirContext fhirContext; // Mandatory
     private final FhirValidator validator; // Mandatory Cached validator
@@ -43,7 +45,11 @@ public class FhirValidationService {
     static {
         validationServicesStorage = new HashMap<>();
     }
-    private FhirValidationService(Vertx vertx, FhirContext fhirContext, FhirValidator validator) {
+    private FhirValidationService(Vertx vertx, FhirContext fhirContext, FhirValidator validator){
+        this(vertx, fhirContext, validator, ValidatorIdentity.createFromFhirVersion(SupportedFhirVersion.fromVersionNumber(fhirContext.getVersion().getVersion().getFhirVersionString())));
+    }
+    private FhirValidationService(Vertx vertx, FhirContext fhirContext, FhirValidator validator, ValidatorIdentity validatorIdentity) {
+        this.validatorIdentity = validatorIdentity;
         this.vertx = vertx;
         this.fhirContext = fhirContext;
         this.validator = validator;
@@ -51,29 +57,42 @@ public class FhirValidationService {
         this.fhirXMLParser = fhirContext.newXmlParser();
     }
 
-    public static Future<FhirValidationService> create(Vertx vertx, FhirContext fhirContext, ProfileService profileService){
+    public static Future<FhirValidationService> create(Vertx vertx, SupportedFhirVersion fhirVersion, ProfileService profileService){
         // do testng test
-        IGPackageIdentity coreIgPackageIdentity = new IGPackageIdentity(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME, fhirContext.getVersion().getVersion().getFhirVersionString(), SupportedFhirVersion.valueOf(fhirContext.getVersion().getVersion().name()));
-        return create(vertx, coreIgPackageIdentity, null, profileService);
+        return create(vertx, fhirVersion, null, profileService);
     }
-    public static Future<FhirValidationService> create(Vertx vertx, IGPackageIdentity igPackageIdentity,
-                                                       IgPackageService igPackageService, ProfileService profileService) {
+    public static Future<FhirValidationService> create(Vertx vertx, SupportedFhirVersion fhirVersion, IgPackageService igPackageService, ProfileService profileService) {
+        ValidatorIdentity validatorIdentity = ValidatorIdentity.createFromFhirVersion(fhirVersion);
+        return create(vertx, validatorIdentity, igPackageService, profileService);
+    }
+    public static Future<FhirValidationService> create(Vertx vertx, ValidatorIdentity validatorIdentity, IgPackageService igPackageService, ProfileService profileService) {
+
+        return create(vertx, validatorIdentity, igPackageService, profileService, null);
+    }
+    public static Future<FhirValidationService> create(
+            Vertx vertx, ValidatorIdentity validatorIdentity, IgPackageService igPackageService, ProfileService profileService, IGPackageIdentity igPackageIdentity) {
 
         Objects.requireNonNull(vertx, "Vertx instance cannot be null");
-        Objects.requireNonNull(igPackageIdentity, "IGPackageIdentity cannot be null");
+        Objects.requireNonNull(validatorIdentity, "ValidatorIdentity cannot be null");
         Objects.requireNonNull(profileService, "ProfileService cannot be null");
 
-        FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
+        FhirContext fhirContext = FhirContextLoader.getInstance().getContext(validatorIdentity.getFhirVersion());
 
-        return createValidator(vertx, igPackageIdentity, igPackageService, profileService)
-                .map(validator -> new FhirValidationService(vertx, fhirContext, validator));
+        return createValidator(vertx, validatorIdentity ,igPackageService, profileService, igPackageIdentity)
+                .map(validator -> {
+                    FhirValidationService validationService = new FhirValidationService(vertx, fhirContext, validator, validatorIdentity);
+                    put(validatorIdentity, validationService);
+                    return validationService;
+        });
     }
-
-    private static Future<FhirValidator> createValidator(Vertx vertx, IGPackageIdentity igPackageIdentity, IgPackageService igPackageService, ProfileService profileService) {
+    private static Future<FhirValidator> createValidator(Vertx vertx,  ValidatorIdentity validatorIdentity, IgPackageService igPackageService, ProfileService profileService) {
+        return createValidator(vertx, validatorIdentity, igPackageService, profileService, null);
+    }
+    private static Future<FhirValidator> createValidator(Vertx vertx, ValidatorIdentity validatorIdentity, IgPackageService igPackageService, ProfileService profileService, IGPackageIdentity igPackageIdentity) {
         return Future.future(promise -> {
             vertx.executeBlocking(blockingPromise -> {
                 try {
-                    FhirContext fhirContext = FhirContextLoader.getInstance().getContext(igPackageIdentity.getFhirVersion());
+                    FhirContext fhirContext = FhirContextLoader.getInstance().getContext(validatorIdentity.getFhirVersion());
                     ValidationSupportChain validationSupportChain = new ValidationSupportChain();
                     // Create base validation supports
                     DefaultProfileValidationSupport defaultSupport = new DefaultProfileValidationSupport(fhirContext);
@@ -83,30 +102,39 @@ public class FhirValidationService {
                     validationSupportChain.addValidationSupport(defaultSupport);
                     validationSupportChain.addValidationSupport(inMemoryTerminology);
                     validationSupportChain.addValidationSupport(commonTerminology);
-                    // Add custom profile validator
                     validationSupportChain.addValidationSupport(new CustomProfileValidationSupport(fhirContext, profileService));
+                    
+                    CustomNpmPackageValidationSupport npmPackageValidationSupport = CustomNpmPackageValidationSupport.getValidationSupport(validatorIdentity, igPackageService);
+                    validationSupportChain.addValidationSupport(npmPackageValidationSupport);
+                    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
+                    FhirValidator validator = fhirContext.newValidator();
+                    validator.registerValidatorModule(instanceValidator);
 
-                    if (!igPackageIdentity.getName().equals(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME)) {
+                    if (igPackageIdentity != null && !igPackageIdentity.getName().equals(IGPackageIdentity.IG_DEFAULT_PACKAGE_NAME)) {
                         Validate.notNull(igPackageService, "IG service must not be null");
-                        
-                        CustomNpmPackageValidationSupport.getValidationSupport(igPackageIdentity, igPackageService)
-                            .onComplete(ar -> {
-                                if (ar.succeeded()) {
-                                    if (ar.result() != null) {
-                                        validationSupportChain.addValidationSupport(ar.result());
-                                    }
-                                    FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
-                                    FhirValidator validator = fhirContext.newValidator();
-                                    validator.registerValidatorModule(instanceValidator);
-                                    blockingPromise.complete(validator);
-                                } else {
-                                    blockingPromise.fail(ar.cause());
-                                }
-                            });
+
+                        if (CustomNpmPackageValidationSupport.isValidClassPath(igPackageIdentity.asClassPath())) {
+                            try {
+                                npmPackageValidationSupport.loadPackageFromClasspath(igPackageIdentity.asClassPath());
+                                blockingPromise.complete(validator);
+                            } catch (Exception e) {
+                                logger.error("Failed to load IG package: {}", e.getMessage(), e);
+                                blockingPromise.fail(e);
+                            }
+                        } else {
+                            // Handle the async database loading properly
+                            npmPackageValidationSupport.loadIgPackageFromDatabase(
+                                    igPackageIdentity.getName(),
+                                    igPackageIdentity.getVersion())
+                                .onSuccess(v -> blockingPromise.complete(validator))
+                                .onFailure(e -> {
+                                    logger.error("Failed to load IG package from database: {}", e.getMessage(), e);
+                                    blockingPromise.fail(e);
+                                });
+                            // Important: Return here to prevent double completion
+                            return;
+                        }
                     } else {
-                        FhirInstanceValidator instanceValidator = new FhirInstanceValidator(validationSupportChain);
-                        FhirValidator validator = fhirContext.newValidator();
-                        validator.registerValidatorModule(instanceValidator);
                         blockingPromise.complete(validator);
                     }
                 } catch (Exception e) {
@@ -190,14 +218,17 @@ public class FhirValidationService {
         }
     }
 
-    public static FhirValidationService get(IGPackageIdentity igPackageIdentity) {
-        return validationServicesStorage.get(igPackageIdentity);
+    public static FhirValidationService get(ValidatorIdentity validatorIdentity) {
+        return validationServicesStorage.get(validatorIdentity);
     }
-    public static void put(IGPackageIdentity igPackageIdentity, FhirValidationService validationService) {
-        validationServicesStorage.put(igPackageIdentity, validationService);
+    public static void put(ValidatorIdentity validatorIdentity, FhirValidationService validationService) {
+        if (validationServicesStorage.containsKey(validatorIdentity)) {
+            remove(validatorIdentity);
+        }
+        validationServicesStorage.put(validatorIdentity, validationService);
     }
-    public static void remove(IGPackageIdentity igPackageIdentity) {
-        validationServicesStorage.remove(igPackageIdentity);
+    public static void remove(ValidatorIdentity validatorIdentity) {
+        validationServicesStorage.remove(validatorIdentity);
     }
     public static void clear() {
         validationServicesStorage.clear();
