@@ -68,9 +68,9 @@ HEALTHCHECK --interval=30s \
            --timeout=3s \
            --start-period=40s \
            --retries=3 \
-    CMD curl -f http://localhost:8880/health || exit 1
+    CMD curl -f http://localhost:${FHIR_VALIDATOR_PORT:-8880}/health || exit 1
 
-EXPOSE 8880
+EXPOSE ${FHIR_VALIDATOR_PORT:-8880}
 
 # Use improved Java options
 ENTRYPOINT ["/bin/sh", "-c", "\
