@@ -1,15 +1,14 @@
 package nzi.fhir.validator.web.endpoint;
 
-import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.sqlclient.Pool;
-import nzi.fhir.validator.web.enums.SupportedFhirVersion;
-import nzi.fhir.validator.web.service.FhirContextLoader;
-import nzi.fhir.validator.web.service.ProfileService;
+import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.service.FhirContextLoader;
+import nzi.fhir.validator.core.service.ProfileService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import java.util.HashMap;

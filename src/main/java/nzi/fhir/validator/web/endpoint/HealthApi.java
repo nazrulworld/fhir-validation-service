@@ -3,7 +3,7 @@ package nzi.fhir.validator.web.endpoint;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
-import nzi.fhir.validator.web.service.HealthService;
+import nzi.fhir.validator.core.service.HealthService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

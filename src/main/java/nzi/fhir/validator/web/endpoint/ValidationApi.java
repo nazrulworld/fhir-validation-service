@@ -4,24 +4,25 @@ import ca.uhn.fhir.context.FhirContext;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.sqlclient.Pool;
-import nzi.fhir.validator.model.ValidatorIdentity;
-import nzi.fhir.validator.web.enums.SupportedFhirVersion;
-import nzi.fhir.validator.model.IGPackageIdentity;
-import nzi.fhir.validator.model.ValidationRequestContext;
-import nzi.fhir.validator.web.service.FhirContextLoader;
-import nzi.fhir.validator.web.service.FhirValidationService;
-import nzi.fhir.validator.web.service.IgPackageService;
-import nzi.fhir.validator.web.service.ProfileService;
+import nzi.fhir.validator.core.model.IGPackageIdentity;
+import nzi.fhir.validator.core.model.ValidatorIdentity;
+import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.model.ValidationRequestContext;
+import nzi.fhir.validator.core.service.FhirContextLoader;
+import nzi.fhir.validator.core.service.FhirValidationService;
+import nzi.fhir.validator.core.service.IgPackageService;
+import nzi.fhir.validator.core.service.ProfileService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.List;
 
 /**
  * @author Md Nazrul Islam
@@ -77,57 +78,193 @@ public class ValidationApi {
     }
     /**
      * Configures the routes for validation API endpoints.
-     * 
+     *
      * @param router The Vert.x router to configure
      */
     public void includeRoutes(Router router) {
         router.post("/:version/validate")
                 .handler(BodyHandler.create())
-                .handler(this::handleDoValidate);
+                .handler(this::handleDoValidation);
+        router.post("/:version/include-ig")
+                .handler(BodyHandler.create())
+                .handler(this::handleIncludeImplementationGuide);
     }
 
 
-    private void handleDoValidate(RoutingContext ctx) {
+    private void handleDoValidation(RoutingContext ctx) {
         // Validate content
         if (ctx.body().isEmpty()) {
             logger.error("Missing resource in request");
-            ctx.response().setStatusCode(400).end(new JsonObject().put("error", "Missing resource").encode());
+            ctx.response().setStatusCode(400).end(generateFatalError("Resource is missing in the request.").encode());
             return;
         }
+        String version = ctx.pathParam("version");
         // Validate the version parameter
-        if (!SupportedFhirVersion.isValid(ctx.pathParam("version").toUpperCase())) {
-            logger.error("Invalid FHIR version: {}", ctx.pathParam("version"));
-            ctx.response().setStatusCode(400).end(new JsonObject()
-                    .put("error", "Invalid FHIR version: " + ctx.pathParam("version") + ". Supported versions are: " +
-                            Arrays.toString(SupportedFhirVersion.values())).encode());
+        if (!SupportedFhirVersion.isValid(version.toUpperCase())) {
+            logger.error("Invalid FHIR version: {}", version);
+            ctx.response().setStatusCode(400).end(
+                    generateFatalError("Invalid FHIR version: " + version + ". Supported versions are: " +
+                    Arrays.toString(SupportedFhirVersion.values())).encode());
             return;
         }
-        ValidationRequestContext validationRequestContext = ValidationRequestContext.fromRoutingContext(ctx);
-        logger.debug("ValidationRequest has been constructed from routing context. FHIR version was {}", validationRequestContext.getFhirVersion().name());
+        ValidationRequestContext.fromRoutingContext(ctx).onSuccess(validationRequestContext -> {
+            // Get the appropriate validation service based on the version
 
-        FhirContext fhirContext = FhirContextLoader.getInstance().getContext(validationRequestContext.getFhirVersion());
-        logger.debug("Validator is initiating using FHIR Context {}, for FHIR version {}", fhirContext.toString(), fhirContext.getVersion().getVersion());
+            FhirValidationService service = FhirValidationService.get(validationRequestContext.getValidatorIdentity());
+            if (service == null) {
+                logger.error("No validation service available for version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion());
+                ctx.response()
+                        .setStatusCode(400)
+                        .end(generateFatalError("Unsupported FHIR version: " + validationRequestContext.getValidatorIdentity().getFhirVersion().name()).encode());
+                return;
+            }
+            logger.debug("ValidationRequest has been constructed from routing context. FHIR version was {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
 
-        // create validator identity
-        ValidatorIdentity validatorIdentity = ValidatorIdentity.createFromFhirVersion(validationRequestContext.getFhirVersion());
-        // Get the appropriate validation service based on the version
-        FhirValidationService service = FhirValidationService.get(validatorIdentity);
-        if (service == null) {
-            logger.error("No validation service available for version: {}", validationRequestContext.getFhirVersion());
+            service.validate(ctx.body().asString(), validationRequestContext)
+                    .onSuccess(result -> {
+                        logger.info("Validation completed for resource using version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
+                        ctx.response()
+                                .putHeader("Content-Type", validationRequestContext.getAcceptedContentType().getMimeType())
+                                .setStatusCode(200)
+                                .end(result.encode());
+                    })
+                    .onFailure(err -> {
+                        logger.error("Validation failed: {}", err.getMessage(), err);
+                        ctx.response()
+                                .setStatusCode(400)
+                                .end(generateFatalError(err).encode());
+                    });
+        }).onFailure(throwable -> {
+            logger.error("Failed to construct ValidationRequest from routing context", throwable);
             ctx.response().setStatusCode(400).end(new JsonObject()
-                .put("error", "Unsupported FHIR version: " + validationRequestContext.getFhirVersion().name()).encode());
-            return;
+                    .put("error", "Failed to construct ValidationRequest from routing context").encode());
+        });
+    }
+
+    private void handleIncludeImplementationGuide(RoutingContext ctx) {
+        createIgPackageIdentityFromRequest(ctx)
+            .compose(igPackageIdentity -> includeIgPackage(ctx, igPackageIdentity))
+            .onComplete(result -> {
+                if (!ctx.response().ended()) {
+                    if (result.succeeded()) {
+                        ctx.response()
+                            .putHeader("Content-Type", "application/json")
+                            .setStatusCode(200)
+                            .end(new JsonObject().put("status", "success").encode());
+                    } else {
+                        logger.error("Failed to include implementation guide", result.cause());
+                        ctx.response()
+                            .putHeader("Content-Type", "application/json")
+                            .setStatusCode(400)
+                            .end(generateFatalError(result.cause()).encode());
+                    }
+                }
+            });
+    }
+
+    private Future<Void> includeIgPackage(RoutingContext routingContext, IGPackageIdentity igPackageIdentity) {
+        String requestId = routingContext.get("requestId", "unknown");
+        logger.debug("Processing IG package request [{}] for package: {}", requestId, igPackageIdentity);
+
+        if (igPackageIdentity == null) {
+            return Future.failedFuture(new IllegalArgumentException("IGPackageIdentity cannot be null"));
         }
 
-        service.validate(ctx.body().asString(), validationRequestContext)
-                .onSuccess(result -> {
-                    logger.info("Validation completed for resource using version: {}", validationRequestContext.getFhirVersion().name());
-                    ctx.json(result);
-                })
-                .onFailure(err -> {
-                    logger.error("Validation failed: {}", err.getMessage(), err);
-                    ctx.response().setStatusCode(400).end(new JsonObject()
-                        .put("error", err.getMessage()).encode());
-                });
+        return ValidationRequestContext.createValidatorIdentity(routingContext, pgPool)
+            .compose(validatorIdentity -> {
+                FhirValidationService validationService = FhirValidationService.get(validatorIdentity);
+                if (validationService == null) {
+                    String error = String.format("No validation service available for FHIR version: %s (Request ID: %s)",
+                        validatorIdentity.getFhirVersion().name(), requestId);
+                    logger.error(error);
+                    return Future.failedFuture(error);
+                }
+                for (IGPackageIdentity ipi:  validationService.getIncludedIgPackagesListForNpmPackageValidation()){
+                    if (ipi.getName().equals(igPackageIdentity.getName()) && ipi.getVersion().equals(igPackageIdentity.getVersion())){
+                        logger.info("IG package already included in validation service for package: {}", igPackageIdentity);
+                        return Future.succeededFuture();
+                    }
+                }
+                return validationService.addNpmIgPackage(igPackageIdentity);
+            })
+            .onSuccess(v -> {
+                synchronized(routingContext.response()) {
+                    if (!routingContext.response().ended()) {
+                        routingContext.response()
+                            .putHeader("Content-Type", "application/json")
+                            .setStatusCode(200)
+                            .end(new JsonObject().put("status", "success").encode());
+                    }
+                }
+            })
+            .onFailure(err -> {
+                synchronized(routingContext.response()) {
+                    if (!routingContext.response().ended()) {
+                        logger.error("Failed to process IG package request [{}]: {}", requestId, err.getMessage(), err);
+                        int statusCode = determineStatusCode(err);
+                        routingContext.response()
+                            .putHeader("Content-Type", "application/json")
+                            .setStatusCode(statusCode)
+                            .end(generateFatalError(err).encode());
+                    }
+                }
+            });
+    }
+
+    private int determineStatusCode(Throwable err) {
+        if (err instanceof IllegalArgumentException) {
+            return 400; // Bad Request
+        } else if (err instanceof SecurityException) {
+            return 403; // Forbidden
+        } else {
+            return 500; // Internal Server Error
+        }
+    }
+    private JsonObject generateFatalError(Throwable throwable){
+        return generateFatalError(throwable.getMessage());
+    }
+
+    private JsonObject generateFatalError(String message){
+        JsonObject error = new JsonObject();
+        error.put("severity", "FATAL");
+        error.put("location", "n/a");
+        error.put("message", message);
+
+        return new JsonObject().put("valid", false).put("messages", new JsonArray(List.of(error)));
+    }
+
+    private Future<IGPackageIdentity> createIgPackageIdentityFromRequest(RoutingContext routingContext) {
+        JsonObject requestBody = routingContext.body().asJsonObject();
+        if (requestBody == null) {
+            return Future.failedFuture("Request body is null");
+        }
+        String packageId = requestBody.getString("igPackageId");
+        if (packageId == null) {
+            return Future.failedFuture("`packageId` value is required. But doesn't found in request  " + requestBody.encode());
+        }
+        String igVersion = requestBody.getString("igPackageVersion", "latest");
+        SupportedFhirVersion fhirVersion;
+        try {
+             fhirVersion = SupportedFhirVersion.valueOf(routingContext.pathParam("version").toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Future.failedFuture("Invalid FHIR version: " + routingContext.pathParam("version"));
+        }
+
+        return IgPackageService.isIgPackageExist(pgPool, packageId, igVersion).compose(exists -> {
+            if (!exists) {
+                return Future.failedFuture("IG package not found: " + packageId + ":" + igVersion);
+            }
+            if("latest".equalsIgnoreCase(igVersion)) {
+                return IgPackageService.resolveLatestIgPackageVersion(pgPool, packageId).compose(
+                        resolvedVersion -> {
+                        if(resolvedVersion == null) {
+                            return Future.failedFuture("IG package not found: " + packageId + ":" + igVersion);
+                        }
+                        return Future.succeededFuture(new IGPackageIdentity(packageId, resolvedVersion, fhirVersion));
+                        }
+                );
+            }
+            return Future.succeededFuture(new IGPackageIdentity(packageId, igVersion, fhirVersion));
+        });
     }
 }

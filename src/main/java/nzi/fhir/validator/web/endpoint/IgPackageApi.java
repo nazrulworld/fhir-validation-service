@@ -5,10 +5,9 @@ import io.vertx.core.json.*;
 import io.vertx.ext.web.*;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.client.WebClient;
-import nzi.fhir.validator.web.service.IgPackageService;
+import nzi.fhir.validator.core.service.IgPackageService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.hl7.fhir.utilities.npm.PackageServer;
 
 import java.net.URL;
 

@@ -36,25 +36,5 @@ services:
       timeout: 5s
       retries: 5
 
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-    depends_on:
-      - fhir-validator
-      - postgres-exporter
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:password@postgres:5432/fhir_validator?sslmode=disable"
-    ports:
-      - "9187:9187"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
   postgres-data:
