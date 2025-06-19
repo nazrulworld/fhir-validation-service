@@ -31,15 +31,51 @@ RUN groupadd -r fhiruser && useradd -r -s /bin/false -g fhiruser fhiruser
 # Install necessary tools with version pinning
 RUN set -ex && \
     apt-get update && \
+    # Add PostgresSQL repository
+    sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt jammy-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        curl  \
+        curl \
         netcat-openbsd \
-        tzdata && \
+        tzdata \
+        postgresql-16 \
+        postgresql-contrib-16 \
+        gosu && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     # Verify installations
     curl --version && \
-    nc -h
+    nc -h && \
+    psql --version
+
+# Create PostgreSQL directories and set permissions
+# RUN mkdir -p /var/lib/postgresql/16/main && \
+#     chown -R postgres:postgres /var/lib/postgresql/16/main && \
+#     chmod 750 /var/lib/postgresql/16/main
+
+# Add PostgreSQL environment variables
+ENV PGDATA=/var/lib/postgresql/16/main
+ENV POSTGRES_DB=fhir_validator
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=password
+ENV POSTGRES_PORT=5432
+
+# Create PostgreSQL directories, set permissions and initialize
+USER postgres
+RUN set -ex && \
+    mkdir -p ${PGDATA} && \
+    chmod 750 ${PGDATA} && \
+    rm -rf ${PGDATA}/* && \
+    /usr/lib/postgresql/16/bin/initdb -D ${PGDATA} && \
+    echo "host all all 0.0.0.0/0 scram-sha-256" >> ${PGDATA}/pg_hba.conf && \
+    echo "listen_addresses='*'" >> ${PGDATA}/postgresql.conf && \
+    echo "password_encryption = scram-sha-256" >> ${PGDATA}/postgresql.conf
+
+COPY --chown=postgres:postgres docker/postgres-init/init-database.sh /docker-entrypoint-initdb.d/
+RUN chmod +x /docker-entrypoint-initdb.d/init-database.sh
+
+USER fhiruser
 
 # Copy application files with improved layering
 # COPY --from=builder /app/target/dependency/BOOT-INF/lib /app/lib
@@ -56,7 +92,7 @@ RUN chmod +x ./init-scripts/*.sh
 COPY --chown=fhiruser:appuser src/main/resources/application-docker.properties /app/application-docker.properties
 
 # Switch to non-root user
-USER fhiruser
+USER root
 
 # Add these health-related environment variables
 ENV WAIT_TIMEOUT=60
@@ -70,12 +106,15 @@ HEALTHCHECK --interval=30s \
            --retries=3 \
     CMD curl -f http://localhost:${FHIR_VALIDATOR_PORT:-8880}/health || exit 1
 
-EXPOSE ${FHIR_VALIDATOR_PORT:-8880}
+# Expose PostgreSQL port
+EXPOSE ${FHIR_VALIDATOR_PORT:-8880} 5432
 
-# Use improved Java options
+# Update ENTRYPOINT to handle services properly
 ENTRYPOINT ["/bin/sh", "-c", "\
+    gosu postgres /usr/lib/postgresql/16/bin/pg_ctl -D ${PGDATA} start && \
+    gosu postgres /docker-entrypoint-initdb.d/init-database.sh && \
     ./init-scripts/wait-for-services.sh && \
-    java -XX:+UseContainerSupport \
+    gosu fhiruser java -XX:+UseContainerSupport \
          -XX:MaxRAMPercentage=75.0 \
          -Djava.security.egd=file:/dev/./urandom \
          -Dvertx.environment=docker \
