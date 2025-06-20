@@ -94,6 +94,9 @@ COPY --chown=fhiruser:appuser src/main/resources/application-docker.properties /
 # Switch to non-root user
 USER root
 
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 # Add these health-related environment variables
 ENV WAIT_TIMEOUT=60
 ENV WAIT_SLEEP_INTERVAL=5
@@ -110,17 +113,4 @@ HEALTHCHECK --interval=30s \
 EXPOSE ${FV_SERVER_PORT:-8880} 5432
 
 # Update ENTRYPOINT to handle services properly
-ENTRYPOINT ["/bin/sh", "-c", "\
-    gosu postgres /usr/lib/postgresql/16/bin/pg_ctl -D ${PGDATA} start && \
-    gosu postgres /docker-entrypoint-initdb.d/init-database.sh && \
-    ./init-scripts/wait-for-services.sh && \
-    gosu fhiruser java -XX:+UseContainerSupport \
-         -XX:MaxRAMPercentage=75.0 \
-         -Djava.security.egd=file:/dev/./urandom \
-         -Dvertx.environment=docker \
-         -Dapplication.config.path=/app/application-docker.properties \
-         -Dvertx.config.path=${CONFIG_PATH} \
-         -Dvertx.preferNativeTransport=true \
-         -Dvertx.disableDnsResolver=false \
-         -Dvertx.addressResolverOptions.servers=[\"8.8.8.8\",\"8.8.4.4\"] \
-         -jar /app/app.jar"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
