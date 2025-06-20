@@ -18,10 +18,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 \
     ./mvnw clean package -DskipTests
-#    && \
-#    ls -l target/ && \
-#    mkdir -p target/dependency && \
-#    (cd target/dependency; jar -xf ../*.jar)
+
 # Stage 2: Runtime image
 FROM --platform=$TARGETPLATFORM eclipse-temurin:17-jre-jammy as runtime
 
@@ -56,10 +53,11 @@ RUN set -ex && \
 
 # Add PostgreSQL environment variables
 ENV PGDATA=/var/lib/postgresql/16/main
-ENV POSTGRES_DB=fhir_validator
-ENV POSTGRES_USER=postgres
-ENV POSTGRES_PASSWORD=password
-ENV POSTGRES_PORT=5432
+ENV PG_HOST=127.0.0.1
+ENV PG_DATABASE=fhir_validator
+ENV PG_USER=postgres
+ENV PG_PASSWORD=password
+ENV PG_PORT=5432
 
 # Create PostgreSQL directories, set permissions and initialize
 USER postgres
@@ -76,12 +74,14 @@ COPY --chown=postgres:postgres docker/postgres-init/init-database.sh /docker-ent
 RUN chmod +x /docker-entrypoint-initdb.d/init-database.sh
 
 USER fhiruser
-
+# FHIR Validator Settings
+ENV FV_SERVER_PORT=8880
+ENV FV_JAR_NAME=fhir-validation-service-1.0-SNAPSHOT.jar
 # Copy application files with improved layering
 # COPY --from=builder /app/target/dependency/BOOT-INF/lib /app/lib
 # COPY --from=builder /app/target/dependency/META-INF /app/META-INF
 # COPY --from=builder /app/target/dependency/BOOT-INF/classes /app/classes
-COPY --from=builder /app/target/fhir-validation-service-1.0-SNAPSHOT.jar /app/app.jar
+COPY --from=builder /app/target/${FV_JAR_NAME} /app/app.jar
 COPY --chown=fhiruser:appuser src/main/resources/config.json /app/config/config.json
 
 # Then update the environment to point to the correct config location
@@ -104,10 +104,10 @@ HEALTHCHECK --interval=30s \
            --timeout=3s \
            --start-period=40s \
            --retries=3 \
-    CMD curl -f http://localhost:${FHIR_VALIDATOR_PORT:-8880}/health || exit 1
+    CMD curl -f http://localhost:${FV_SERVER_PORT:-8880}/health || exit 1
 
 # Expose PostgreSQL port
-EXPOSE ${FHIR_VALIDATOR_PORT:-8880} 5432
+EXPOSE ${FV_SERVER_PORT:-8880} 5432
 
 # Update ENTRYPOINT to handle services properly
 ENTRYPOINT ["/bin/sh", "-c", "\

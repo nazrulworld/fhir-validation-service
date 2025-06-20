@@ -6,7 +6,7 @@ WAIT_COUNT=0
 
 # Wait for PostgresSQL
 echo "Waiting for PostgresSQL..."
-while ! nc -z 127.0.0.1 5432; do
+while ! nc -z $PG_HOST $PG_PORT; do
   sleep 1
   WAIT_COUNT=$((WAIT_COUNT+1))
   if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
