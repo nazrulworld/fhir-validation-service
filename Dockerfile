@@ -63,10 +63,11 @@ ENV PG_PORT=5432
 USER postgres
 RUN set -ex && \
     mkdir -p ${PGDATA} && \
-    chmod 750 ${PGDATA} && \
+    chmod 700 ${PGDATA} && \
     rm -rf ${PGDATA}/* && \
     /usr/lib/postgresql/16/bin/initdb -D ${PGDATA} && \
     echo "host all all 0.0.0.0/0 scram-sha-256" >> ${PGDATA}/pg_hba.conf && \
+    echo "local all all scram-sha-256" >> ${PGDATA}/pg_hba.conf && \
     echo "listen_addresses='*'" >> ${PGDATA}/postgresql.conf && \
     echo "password_encryption = scram-sha-256" >> ${PGDATA}/postgresql.conf
 

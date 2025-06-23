@@ -6,6 +6,8 @@ services:
     ports:
       - "${FV_SERVER_PORT:-8880}:8880"
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/16/main/data
     environment:
       - PG_HOST=127.0.0.1
 #    depends_on:
@@ -31,13 +33,24 @@ services:
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter
+    platform: ${POSTGRES_EXPORTER_PLATFORM:-linux/arm64}
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:password@fhir-validator:5432/fhir_validator?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${PG_USER}:${PG_PASSWORD}@fhir-validator:${PG_PORT}/${PG_DATABASE}?sslmode=disable"
     ports:
-      - "9187:9187"
+      - "${PG_EXPORTER_PORT:-9187}:9187"
+    deploy:
+      resources:
+        limits:
+          memory: ${EXPORTER_MEMORY_LIMIT:-128M}
     depends_on:
       fhir-validator:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   pgadmin:
     image: dpage/pgadmin4:9.4.0
     environment:
@@ -54,3 +67,4 @@ services:
 
 volumes:
   pgadmin-data:
+  pgdata:
