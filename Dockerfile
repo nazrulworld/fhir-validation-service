@@ -46,11 +46,6 @@ RUN set -ex && \
     nc -h && \
     psql --version
 
-# Create PostgreSQL directories and set permissions
-# RUN mkdir -p /var/lib/postgresql/16/main && \
-#     chown -R postgres:postgres /var/lib/postgresql/16/main && \
-#     chmod 750 /var/lib/postgresql/16/main
-
 # Add PostgreSQL environment variables
 ENV PGDATA=/var/lib/postgresql/16/main
 ENV PG_HOST=127.0.0.1
@@ -60,28 +55,13 @@ ENV PG_PASSWORD=password
 ENV PG_PORT=5432
 
 # Create PostgreSQL directories, set permissions and initialize
-USER postgres
-RUN set -ex && \
-    mkdir -p ${PGDATA} && \
-    chmod 700 ${PGDATA} && \
-    rm -rf ${PGDATA}/* && \
-    /usr/lib/postgresql/16/bin/initdb -D ${PGDATA} && \
-    echo "host all all 0.0.0.0/0 scram-sha-256" >> ${PGDATA}/pg_hba.conf && \
-    echo "local all all scram-sha-256" >> ${PGDATA}/pg_hba.conf && \
-    echo "listen_addresses='*'" >> ${PGDATA}/postgresql.conf && \
-    echo "password_encryption = scram-sha-256" >> ${PGDATA}/postgresql.conf
-
 COPY --chown=postgres:postgres docker/postgres-init/init-database.sh /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint-initdb.d/init-database.sh
 
-USER fhiruser
 # FHIR Validator Settings
 ENV FV_SERVER_PORT=8880
 ENV FV_JAR_NAME=fhir-validation-service-1.0-SNAPSHOT.jar
-# Copy application files with improved layering
-# COPY --from=builder /app/target/dependency/BOOT-INF/lib /app/lib
-# COPY --from=builder /app/target/dependency/META-INF /app/META-INF
-# COPY --from=builder /app/target/dependency/BOOT-INF/classes /app/classes
+
 COPY --from=builder /app/target/${FV_JAR_NAME} /app/app.jar
 COPY --chown=fhiruser:appuser src/main/resources/config.json /app/config/config.json
 
@@ -90,10 +70,7 @@ ENV CONFIG_PATH=/app/config/config.json
 # Copy configuration and scripts
 COPY --chown=fhiruser:fhiruser docker/init-scripts/ ./init-scripts/
 RUN chmod +x ./init-scripts/*.sh
-COPY --chown=fhiruser:appuser src/main/resources/application-docker.properties /app/application-docker.properties
-
-# Switch to non-root user
-USER root
+COPY --chown=fhiruser:fhiruser src/main/resources/application-docker.properties /app/application-docker.properties
 
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
