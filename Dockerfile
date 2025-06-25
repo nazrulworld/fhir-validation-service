@@ -55,6 +55,7 @@ ENV PG_PASSWORD=password
 ENV PG_PORT=5432
 
 # Create PostgreSQL directories, set permissions and initialize
+VOLUME ${PGDATA}
 COPY --chown=postgres:postgres docker/postgres-init/init-database.sh /docker-entrypoint-initdb.d/
 RUN chmod +x /docker-entrypoint-initdb.d/init-database.sh
 

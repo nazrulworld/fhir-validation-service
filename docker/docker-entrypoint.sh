@@ -5,7 +5,7 @@ export PGDATA=${PGDATA:-/var/lib/postgresql/16/main}
 
 # === 1. Initialize PostgreSQL if necessary ===
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
-    echo "Initializing PostgreSQL database at $PGDATA"
+    echo "Initializing PostgresSQL database at $PGDATA"
     mkdir -p "$PGDATA"
     chown -R postgres:postgres "$PGDATA"
     chmod 700 "$PGDATA"
