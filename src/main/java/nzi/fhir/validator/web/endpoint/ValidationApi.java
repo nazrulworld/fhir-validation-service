@@ -167,7 +167,6 @@ public class ValidationApi {
     }
 
     private void handleIncludeImplementationGuide(RoutingContext ctx) {
-        System.out.print("########################################");
         try {
             createIgPackageIdentityFromRequest(ctx)
                 .compose(igPackageIdentity -> includeIgPackage(ctx, igPackageIdentity))

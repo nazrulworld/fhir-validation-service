@@ -112,22 +112,129 @@ curl http://localhost:8080/ig
 
 ## API Documentation
 
-### Validation API
-- `POST /validate` - Validate a FHIR resource
-  - Request body: JSON with `resource` and optional `options`
-  - Query parameters: `version` (R4 or R5, default is R4)
+The service runs on `http://localhost:8880` by default and provides the following endpoints:
 
-### Profile API
-- `GET /profiles` - List available profiles
-- `GET /profiles/{id}` - Get a specific profile
-- `POST /profiles` - Add a new profile
+### Health Endpoints
 
-### Implementation Guide API
-- `GET /ig` - List available implementation guides
-- `GET /ig/{id}` - Get a specific implementation guide
-- `POST /ig` - Add a new implementation guide
-- `DELETE /ig/{id}` - Remove an implementation guide
+#### Get Health Status
+- **GET `/health`**
+  - Checks the health status of the service including PostgreSQL connection
+  - Responses:
+    - `200` OK: Service is healthy
+    - `503` Service Unavailable: Service is unhealthy
+  - Response format:
+    ```json
+    {
+      "status": "UP|DOWN",
+      "timestamp": 1624536789,
+      "postgres": {
+        "status": "UP|DOWN",
+        "responseTime": 123,
+        "error": "error message (if any)"
+      }
+    }
+    ```
 
+#### Kubernetes Liveness Probe
+- **GET `/health/liveness`**
+  - Simple liveness check for Kubernetes health monitoring
+  - Response: `200` OK with status "UP" if service is live
+
+### FHIR Validation Endpoints
+
+#### Validate FHIR Resource
+- **POST `/{version}/validate`**
+  - Validates a FHIR resource against specified profiles
+  - Parameters:
+    - `version` (path): FHIR version (STU3, R4, R4B, R5)
+    - Content-Type (header): Supported formats:
+      - `application/json` (default)
+      - `application/xml`
+      - `application/fhir+json`
+      - `application/fhir+xml`
+  - Request: FHIR resource in JSON/XML format
+  - Responses:
+    - `200` OK: Validation results
+    - `400` Bad Request: Invalid request or validation error
+  - Example response:
+    ```json
+    {
+      "valid": true,
+      "messages": [
+        {
+          "severity": "information",
+          "location": "Patient.name",
+          "message": "..."
+        }
+      ]
+    }
+    ```
+
+### Implementation Guide Management
+
+#### Include IG for Validation
+- **POST `/{version}/include-ig`**
+  - Includes an Implementation Guide for validation
+  - Parameters:
+    - `version` (path): FHIR version
+  - Request body:
+    ```json
+    {
+      "igPackageId": "package.id",
+      "igPackageVersion": "latest"
+    }
+    ```
+
+#### Upload IG Package
+- **POST `/igs/upload`**
+  - Upload and register an IG package file
+  - Request: `multipart/form-data` with file (max 20MB)
+
+#### Register IG Package
+- **POST `/igs/register`**
+  - Register an IG package from URL
+  - Request body:
+    ```json
+    {
+      "downloadUrl": "https://example.com/ig-package",
+      "name": "package-name",
+      "version": "latest",
+      "includeDependency": true
+    }
+    ```
+
+#### Get IG Dependencies
+- **GET `/igs/{name}/{version}/dependencies`**
+  - Retrieves dependency graph for specified IG package
+
+#### Generate Conformance Report
+- **GET `/igs/{name}/{version}/conformance`**
+  - Generates conformance report for specified IG package
+
+### Profile Management
+
+#### Register FHIR Profile
+- **POST `/{version}/register-profile`**
+  - Registers a FHIR profile for validation
+  - Parameters:
+    - `version` (path): FHIR version
+  - Request body:
+    ```json
+    {
+      "url": "http://example.com/fhir/StructureDefinition/profile"
+    }
+    ```
+  - Response:
+    ```json
+    {
+      "status": "success",
+      "profileUrl": "http://example.com/fhir/StructureDefinition/profile"
+    }
+    ```
+
+### Error Responses
+
+All error responses follow a standard format:
 ## Configuration
 
 The application can be configured through environment variables:
@@ -196,5 +303,3 @@ mvn test
 },
 "jurisdiction" : "urn:iso:std:iso:3166#DK"
 }
-
-
