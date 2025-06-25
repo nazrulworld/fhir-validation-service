@@ -5,6 +5,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.service.FhirContextLoader;
@@ -51,11 +52,13 @@ public class ProfileApi {
     /**
      * Configures the routes for profile API endpoints.
      * 
-     * @param router The Vert.x router to configure
+     * @param routerBuilder The Vert.x router to configure
      */
-    public void includeRoutes(Router router) {
-        router.post("/:version/register-profile")
-                .handler(BodyHandler.create())
+    public void includeRoutes(RouterBuilder routerBuilder) {
+
+        // Method: POST, Path: "/:version/register-profile"
+        routerBuilder.operation("profileApiRegisterProfile")
+        //        .handler(BodyHandler.create())
                 .handler(this::handleRegistration);
     }
 
@@ -70,7 +73,7 @@ public class ProfileApi {
             logger.error("Invalid FHIR version: {}", versionParam);
             ctx.response().setStatusCode(400).end(new JsonObject()
                 .put("error", "Invalid FHIR version: " + versionParam + ". Supported versions are: " + 
-                     java.util.Arrays.toString(SupportedFhirVersion.values())).encode());
+                     java.util.Arrays.toString(SupportedFhirVersion.values())).put("status", "error").encode());
             return;
         }
 
@@ -83,7 +86,7 @@ public class ProfileApi {
         if (service == null) {
             logger.error("No profile service available for version: {}", version);
             ctx.response().setStatusCode(400).end(new JsonObject()
-                .put("error", "Unsupported FHIR version: " + version).encode());
+                .put("error", "Unsupported FHIR version: " + version).put("status", "error").encode());
             return;
         }
 

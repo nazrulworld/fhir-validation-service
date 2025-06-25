@@ -24,7 +24,7 @@ class IgPackageServiceTest extends BaseTestContainer {
 
     private Vertx vertx;
     private IgPackageService igPackageService;
-    private static final String US_CORE_PACKAGE_PATH = "/hl7.fhir.us.core-7.0.0.tgz";
+    private static final String US_CORE_PACKAGE_PATH = "/ig/packages/hl7/fhir/us/core/hl7.fhir.us.core-7.0.0.tgz";
     private static final String PACKAGE_NAME = "hl7.fhir.us.core";
     private static final String PACKAGE_VERSION = "7.0.0";
 

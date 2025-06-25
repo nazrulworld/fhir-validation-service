@@ -5,6 +5,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.codec.BodyCodec;
+import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.sqlclient.Pool;
@@ -39,19 +40,23 @@ class HealthApiTest extends BaseTestContainer {
         vertx = Vertx.vertx();
         Pool pgPool = getPgPool(vertx);
         client = WebClient.create(vertx);
-        // Create and deploy the test server
-        Router router = Router.router(vertx);
-        HealthService healthService = new HealthService(vertx, pgPool);
-        new HealthApi(router, vertx, healthService);
 
-        // Use port 0 to get a random available port
-        vertx.createHttpServer()
-                .requestHandler(router)
-                .listen(0)
-                .onSuccess(server -> {
-                    testPort = server.actualPort();
-                    System.out.println("Test server started on port " + testPort);
-                    testContext.completeNow();
+        RouterBuilder.create(vertx, "openapi.yaml")
+                .onSuccess(routerBuilder -> {
+                    HealthService healthService = new HealthService(vertx, pgPool);
+                    new HealthApi(routerBuilder, vertx, healthService);
+                    // Create the router from the builder
+                    Router router = routerBuilder.createRouter();
+                    // Use port 0 to get a random available port
+                    vertx.createHttpServer()
+                            .requestHandler(router)
+                            .listen(0)
+                            .onSuccess(server -> {
+                                testPort = server.actualPort();
+                                System.out.println("Test server started on port " + testPort);
+                                testContext.completeNow();
+                            })
+                            .onFailure(testContext::failNow);
                 })
                 .onFailure(testContext::failNow);
     }

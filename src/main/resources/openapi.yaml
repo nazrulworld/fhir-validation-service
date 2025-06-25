@@ -1,1 +1,434 @@
-# This file has been intentionally emptied as part of the rollback to pre-swagger state
+openapi: 3.0.3
+info:
+  title: FHIR Validation Service API
+  description: A Vert.x-based FHIR validation service with PostgreSQL support
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8880
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      operationId: healthApiHealth
+      summary: Get service health status
+      description: Check the health status of the service including PostgreSQL connection
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/liveness:
+    get:
+      operationId: healthApiLiveness
+      summary: Kubernetes liveness probe
+      description: Simple liveness check for Kubernetes health monitoring
+      responses:
+        '200':
+          description: Service is live
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [UP]
+                  timestamp:
+                    type: integer
+                    format: int64
+
+  /{version}/validate:
+    post:
+      operationId: validationApiValidate
+      summary: Validate FHIR resource
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/FhirVersion'
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/xml
+              - application/fhir+json
+              - application/fhir+xml
+            default: application/json
+        - in: header
+          name: Accept
+          schema:
+            type: string
+            enum:
+              - application/json
+              - application/xml
+              - application/fhir+json
+              - application/fhir+xml
+            default: application/json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: FHIR resource in JSON format
+          application/fhir+json:
+            schema:
+              type: object
+          
+          application/xml:
+            schema:
+              type: string
+          
+          application/fhir+xml:
+            schema:
+              type: string
+      
+      responses:
+        '200':
+          description: Validation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+            application/fhir+xml:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '400':
+          description: Invalid request or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  /{version}/include-ig:
+    post:
+      operationId: validationApiIncludeIg
+      summary: Include Implementation Guide for validation
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/FhirVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - igPackageId
+              properties:
+                igPackageId:
+                  type: string
+                igPackageVersion:
+                  type: string
+                  default: latest
+      responses:
+        '200':
+          description: IG included successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+        '400':
+          description: Invalid request or IG not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+
+  /{version}/register-profile:
+    post:
+      operationId: profileApiRegisterProfile
+      summary: Register a FHIR profile
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/FhirVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Profile registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  profileUrl:
+                    type: string
+                    format: uri
+        '400':
+          description: Invalid request or profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+  /igs/upload:
+    post:
+      operationId: igPackageApiUploadIg
+      summary: Upload and register an Implementation Guide package
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The IG package file to upload
+                  maxLength: 20971520  # 20MB in bytes
+      responses:
+        '200':
+          description: IG package registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IgRegistrationResponse'
+        '400':
+          description: No file uploaded or invalid package
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+        '500':
+          description: Server error during processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+  /igs/register:
+    post:
+      operationId: igPackageApiRegisterIg
+      summary: Register an Implementation Guide package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                downloadUrl:
+                  type: string
+                  format: uri
+                name:
+                  type: string
+                version:
+                  type: string
+                  default: latest
+                includeDependency:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: IG package registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IgRegistrationResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+        '500':
+          description: Server error during registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+  /igs/{name}/{version}/dependencies:
+    get:
+      operationId: igPackageApiGetDependenciesGraph
+      summary: Get IG package dependencies
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dependencies retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Package not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+  /igs/{name}/{version}/conformance:
+    get:
+      operationId: igPackageApiGenerateConformanceReport
+      summary: Get IG package conformance report
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conformance report generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Error generating report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseStandard'
+
+components:
+  schemas:
+    FhirVersion:
+      type: string
+      enum: [STU3, R4, R4B, R5]
+      description: Supported FHIR versions
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        timestamp:
+          type: integer
+          format: int64
+        postgres:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [UP, DOWN]
+            responseTime:
+              type: integer
+              format: int64
+            error:
+              type: string
+        error:
+          type: string
+
+    ValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+              location:
+                type: string
+              message:
+                type: string
+
+    IgRegistrationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        name:
+          type: string
+        version:
+          type: string
+
+    ErrorResponseStandard:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationErrorItem'
+
+    ValidationErrorItem:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [FATAL, ERROR, INFORMATION]
+        location:
+          type: string
+        message:
+          type: string

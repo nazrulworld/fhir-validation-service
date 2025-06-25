@@ -172,11 +172,6 @@ public class FhirValidationService {
                         .put("valid", false)
                         .put("messages", new JsonArray().add(new JsonObject().put("severity", "error").put("message", e.getMessage()).put("location", "")));
                 promise.complete(error);
-            } catch (Exception e) {
-                logger.error("Validation failed: {}", e.getMessage(), e);
-                // we will enable this after more testing
-                //promise.fail(new RuntimeException("Validation failed", e));
-                throw new RuntimeException("Validation failed", e);
             }
         });
     }

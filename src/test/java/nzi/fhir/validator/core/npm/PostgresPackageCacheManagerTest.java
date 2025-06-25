@@ -23,7 +23,7 @@ class PostgresPackageCacheManagerTest extends BaseTestContainer {
 
     private Vertx vertx;
     private PostgresPackageCacheManager cacheManager;
-    private static final String TEST_PACKAGE_PATH = "/hl7.fhir.us.core-7.0.0.tgz";
+    private static final String TEST_PACKAGE_PATH = "/ig/packages/hl7/fhir/us/core/hl7.fhir.us.core-7.0.0.tgz";
     private static final String PACKAGE_ID = "hl7.fhir.us.core";
     private static final String PACKAGE_VERSION = "7.0.0";
 

@@ -9,6 +9,8 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.openapi.RouterBuilder;
+import io.vertx.ext.web.validation.BodyProcessorException;
 import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.core.model.IGPackageIdentity;
 import nzi.fhir.validator.core.model.ValidatorIdentity;
@@ -79,87 +81,120 @@ public class ValidationApi {
     /**
      * Configures the routes for validation API endpoints.
      *
-     * @param router The Vert.x router to configure
+     * @param routerBuilder The Vert.x router to configure
      */
-    public void includeRoutes(Router router) {
-        router.post("/:version/validate")
-                .handler(BodyHandler.create())
+    public void includeRoutes(RouterBuilder routerBuilder) {
+        // Method: POST, Path: "/:version/validate"
+        routerBuilder.operation("validationApiValidate")
                 .handler(this::handleDoValidation);
-        router.post("/:version/include-ig")
-                .handler(BodyHandler.create())
+        // Method: POST, Path: "/:version/include-ig"
+        routerBuilder.operation("validationApiIncludeIg")
                 .handler(this::handleIncludeImplementationGuide);
+
     }
 
 
     private void handleDoValidation(RoutingContext ctx) {
-        // Validate content
-        if (ctx.body().isEmpty()) {
-            logger.error("Missing resource in request");
-            ctx.response().setStatusCode(400).end(generateFatalError("Resource is missing in the request.").encode());
-            return;
-        }
-        String version = ctx.pathParam("version");
-        // Validate the version parameter
-        if (!SupportedFhirVersion.isValid(version.toUpperCase())) {
-            logger.error("Invalid FHIR version: {}", version);
-            ctx.response().setStatusCode(400).end(
-                    generateFatalError("Invalid FHIR version: " + version + ". Supported versions are: " +
-                    Arrays.toString(SupportedFhirVersion.values())).encode());
-            return;
-        }
-        ValidationRequestContext.fromRoutingContext(ctx).onSuccess(validationRequestContext -> {
-            // Get the appropriate validation service based on the version
+        /*
+         * @param ctx
+         */
+        try {
+            if (ctx.body() == null || ctx.body().isEmpty()) {
+                  logger.error("Missing resource in request");
+                  ctx.response()
+                    .setStatusCode(400)
+                    .putHeader("Content-Type", "application/json")
+                    .end(generateFatalError("Resource is missing in the request.").encode());
+                  return;
+            }
 
-            FhirValidationService service = FhirValidationService.get(validationRequestContext.getValidatorIdentity());
-            if (service == null) {
-                logger.error("No validation service available for version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion());
-                ctx.response()
-                        .setStatusCode(400)
-                        .end(generateFatalError("Unsupported FHIR version: " + validationRequestContext.getValidatorIdentity().getFhirVersion().name()).encode());
+            String version = ctx.pathParam("version");
+            // Validate the version parameter
+            if (!SupportedFhirVersion.isValid(version.toUpperCase())) {
+                logger.error("Invalid FHIR version: {}", version);
+                ctx.response().setStatusCode(400).end(
+                        generateFatalError("Invalid FHIR version: " + version + ". Supported versions are: " +
+                                Arrays.toString(SupportedFhirVersion.values())).encode());
                 return;
             }
-            logger.debug("ValidationRequest has been constructed from routing context. FHIR version was {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
+            ValidationRequestContext.fromRoutingContext(ctx).onSuccess(validationRequestContext -> {
+                // Get the appropriate validation service based on the version
 
-            service.validate(ctx.body().asString(), validationRequestContext)
-                    .onSuccess(result -> {
-                        logger.info("Validation completed for resource using version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
-                        ctx.response()
-                                .putHeader("Content-Type", validationRequestContext.getAcceptedContentType().getMimeType())
-                                .setStatusCode(200)
-                                .end(result.encode());
-                    })
-                    .onFailure(err -> {
-                        logger.error("Validation failed: {}", err.getMessage(), err);
-                        ctx.response()
-                                .setStatusCode(400)
-                                .end(generateFatalError(err).encode());
-                    });
-        }).onFailure(throwable -> {
-            logger.error("Failed to construct ValidationRequest from routing context", throwable);
-            ctx.response().setStatusCode(400).end(new JsonObject()
-                    .put("error", "Failed to construct ValidationRequest from routing context").encode());
-        });
+                FhirValidationService service = FhirValidationService.get(validationRequestContext.getValidatorIdentity());
+                if (service == null) {
+                    logger.error("No validation service available for version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion());
+                    ctx.response()
+                            .setStatusCode(400)
+                            .end(generateFatalError("Unsupported FHIR version: " + validationRequestContext.getValidatorIdentity().getFhirVersion().name()).encode());
+                    return;
+                }
+                logger.debug("ValidationRequest has been constructed from routing context. FHIR version was {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
+
+                service.validate(ctx.body().asString(), validationRequestContext)
+                        .onSuccess(result -> {
+                            logger.info("Validation completed for resource using version: {}", validationRequestContext.getValidatorIdentity().getFhirVersion().name());
+                            ctx.response()
+                                    .putHeader("Content-Type", validationRequestContext.getAcceptedContentType().getMimeType())
+                                    .setStatusCode(200)
+                                    .end(result.encode());
+                        })
+                        .onFailure(err -> {
+                            logger.error("Validation failed: {}", err.getMessage(), err);
+                            ctx.response()
+                                    .setStatusCode(400)
+                                    .end(generateFatalError(err).encode());
+                        });
+            }).onFailure(throwable -> {
+                logger.error("Failed to construct ValidationRequest from routing context", throwable);
+                ctx.response()
+                    .setStatusCode(400)
+                    .end(generateFatalError(throwable).encode());
+            });
+        } catch (BodyProcessorException e) {
+            logger.error("Unexpected error processing the body content", e);
+            ctx.response()
+                    .setStatusCode(400)
+                    .putHeader("Content-Type", "application/json")
+                    .end(generateFatalError(e).encode());
+        }
+        catch (Exception e) {
+            logger.error("Unexpected error processing request", e);
+            ctx.response()
+            .setStatusCode(500)
+            .putHeader("Content-Type", "application/json")
+            .end(generateFatalError("Internal server error while processing request").encode());
+        }
     }
 
     private void handleIncludeImplementationGuide(RoutingContext ctx) {
-        createIgPackageIdentityFromRequest(ctx)
-            .compose(igPackageIdentity -> includeIgPackage(ctx, igPackageIdentity))
-            .onComplete(result -> {
-                if (!ctx.response().ended()) {
-                    if (result.succeeded()) {
-                        ctx.response()
-                            .putHeader("Content-Type", "application/json")
-                            .setStatusCode(200)
-                            .end(new JsonObject().put("status", "success").encode());
-                    } else {
-                        logger.error("Failed to include implementation guide", result.cause());
-                        ctx.response()
-                            .putHeader("Content-Type", "application/json")
-                            .setStatusCode(400)
-                            .end(generateFatalError(result.cause()).encode());
+        System.out.print("########################################");
+        try {
+            createIgPackageIdentityFromRequest(ctx)
+                .compose(igPackageIdentity -> includeIgPackage(ctx, igPackageIdentity))
+                .onComplete(result -> {
+                    if (!ctx.response().ended()) {
+                        if (result.succeeded()) {
+                            ctx.response()
+                                    .putHeader("Content-Type", "application/json")
+                                    .setStatusCode(200)
+                                    .end(new JsonObject().put("status", "success").encode());
+                        } else {
+                            logger.error("Failed to include implementation guide", result.cause());
+                            ctx.response()
+                                    .putHeader("Content-Type", "application/json")
+                                    .setStatusCode(400)
+                                    .end(generateFatalError(result.cause()).encode());
+                        }
                     }
-                }
-            });
+                });
+        } catch (Exception e) {
+            logger.error("Unexpected error processing request", e);
+            ctx.response()
+                    .setStatusCode(500)
+                    .putHeader("Content-Type", "application/json")
+                    .end(generateFatalError("Internal server error while processing request").encode());
+        }
+
     }
 
     private Future<Void> includeIgPackage(RoutingContext routingContext, IGPackageIdentity igPackageIdentity) {

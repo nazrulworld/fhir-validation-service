@@ -5,6 +5,8 @@ import io.vertx.core.json.*;
 import io.vertx.ext.web.*;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.openapi.RouterBuilder;
+import io.vertx.ext.web.openapi.RouterBuilderOptions;
 import nzi.fhir.validator.core.service.IgPackageService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,9 +26,8 @@ public class IgPackageApi {
     private final IgPackageService igPackageService;
     private final Vertx vertx;
     private final WebClient webClient;
-    private static final long MAX_UPLOAD_SIZE = 20_000_000L; // 20MB
+    // 20MB
     // Add constant for the upload directory name
-    private static final String UPLOAD_DIR_NAME = "ig-uploads";
 
     public IgPackageApi(Vertx vertx, IgPackageService igPackageService) {
         this.igPackageService = igPackageService;
@@ -37,11 +38,12 @@ public class IgPackageApi {
     /**
      * Configures the routes for validation API endpoints.
      *
-     * @param router The Vert.x router to configure
+     * @param routerBuilder The Vert.x router to configure
      */
-    public void includeRoutes(Router router) {
+    public void includeRoutes(RouterBuilder routerBuilder) {
 
-        router.get("/igs/:name/:version/dependencies")
+        // Method: GET Path: "/igs/:name/:version/dependencies"
+        routerBuilder.operation("igPackageApiGetDependenciesGraph")
                 .handler(ctx -> igPackageService.getDependencyGraph(
                                 ctx.pathParam("name"),
                                 ctx.pathParam("version"))
@@ -50,8 +52,8 @@ public class IgPackageApi {
                             logger.error("Failed to get dependency graph: {}", err.toString(), err);
                             ctx.response().setStatusCode(404).end(new JsonObject().put("error", err.toString()).encode());
                         }));
-
-        router.get("/igs/:name/:version/conformance")
+        // Method: GET, Path: "/igs/:name/:version/conformance"
+        routerBuilder.operation("igPackageApiGenerateConformanceReport")
                 .handler(ctx -> igPackageService.generateConformanceReport(
                                 ctx.pathParam("name"),
                                 ctx.pathParam("version"))
@@ -61,26 +63,13 @@ public class IgPackageApi {
                             ctx.response().setStatusCode(500).end(new JsonObject().put("error", err.toString()).encode());
                         }));
         // Then use it in the router setup
-        router.post("/igs/upload")
-                .handler(BodyHandler.create()
-                        .setUploadsDirectory(getUploadDirectory())
-                        .setBodyLimit(MAX_UPLOAD_SIZE)
-                        .setDeleteUploadedFilesOnEnd(true)
-                )
+        // Method: POST, Path: "/igs/upload"
+        routerBuilder
+                .operation("igPackageApiUploadIg")
                 .handler(this::handleUploadAndRegisterIg);
-        router.post("/igs/register").handler(BodyHandler.create()).handler(this::handleRegisterIg);
-    }
-
-    // Initialize the upload directory more safely
-    private String getUploadDirectory() {
-        Path uploadDir = Paths.get(System.getProperty("java.io.tmpdir"), UPLOAD_DIR_NAME);
-        try {
-            Files.createDirectories(uploadDir);
-            return uploadDir.toString();
-        } catch (IOException e) {
-            logger.error("Failed to create upload directory", e);
-            throw new RuntimeException("Could not initialize upload directory", e);
-        }
+        // Method: POST, Path: "/igs/register"
+        routerBuilder.operation("igPackageApiRegisterIg")
+                .handler(this::handleRegisterIg);
     }
 
     private void handleRegisterIg(RoutingContext ctx) {
@@ -110,7 +99,9 @@ public class IgPackageApi {
             ctx.response().setStatusCode(400).end(new JsonObject().put("error", "Missing name").encode());
             return;
         }
-        igPackageService.registerIg(name, version)
+        final boolean includeDependency = body.getBoolean("includeDependency", true);
+
+        igPackageService.registerIg(name, version, includeDependency)
                 .onSuccess(npmPackage -> {
                     logger.info("Registered IG: {}@{}", npmPackage.name(), npmPackage.version());
                     ctx.json(new JsonObject()

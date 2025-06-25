@@ -3,6 +3,7 @@ package nzi.fhir.validator.web.endpoint;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.openapi.RouterBuilder;
 import nzi.fhir.validator.core.service.HealthService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,10 +15,10 @@ public class HealthApi {
     private static final Logger logger = LogManager.getLogger(HealthApi.class);
     private final HealthService healthService;
 
-    public HealthApi(Router router, Vertx vertx, HealthService healthService) {
+    public HealthApi(RouterBuilder routerBuilder, Vertx vertx, HealthService healthService) {
         this.healthService = healthService;
-
-        router.get("/health")
+        // Method: GET, Path: "/health"
+        routerBuilder.operation("healthApiHealth")
                 .handler(ctx -> {
                     logger.debug("Received health check request");
                     healthService.checkHealth()
@@ -42,7 +43,8 @@ public class HealthApi {
                 });
 
         // Kubernetes liveness probe endpoint
-        router.get("/health/liveness")
+        // Method: GET, Path: "/health/liveness"
+        routerBuilder.operation("healthApiLiveness")
                 .handler(ctx -> ctx.response()
                         .setStatusCode(200)
                         .putHeader("Content-Type", "application/json")
