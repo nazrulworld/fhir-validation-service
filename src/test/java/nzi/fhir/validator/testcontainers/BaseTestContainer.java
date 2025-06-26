@@ -30,7 +30,7 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
 public class BaseTestContainer {
     private static final Logger logger = LoggerFactory.getLogger(BaseTestContainer.class);
     private Pool pgPool;
-    // PostgreSQL configuration
+    // PostgresSQL configuration
     private static final String POSTGRES_IMAGE = "postgres:16.8-alpine3.21";
     protected static final String POSTGRES_DATABASE = "fhir_validator";
     protected static final String POSTGRES_USERNAME = "postgres";
@@ -70,9 +70,7 @@ public class BaseTestContainer {
         String createSchemaSQL = """
                 CREATE SCHEMA IF NOT EXISTS %s;
                 """.formatted(DB_POSTGRES_SCHEMA_NAME);
-        pgPool.query(createSchemaSQL).execute().compose(rowset -> {
-            return pgPool.query("SET search_path TO %s;".formatted(DB_POSTGRES_SCHEMA_NAME)).execute().mapEmpty();
-        }).toCompletionStage().toCompletableFuture().join();
+        pgPool.query(createSchemaSQL).execute().compose(rowset -> pgPool.query("SET search_path TO %s;".formatted(DB_POSTGRES_SCHEMA_NAME)).execute().mapEmpty()).toCompletionStage().toCompletableFuture().join();
 
     }
     protected static void createTables(Pool pgPool){
@@ -87,15 +85,9 @@ public class BaseTestContainer {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (ig_package_id, ig_package_version)
-            )
+            );
         """.formatted(DB_POSTGRES_SCHEMA_NAME);
-        pgPool.query(createTableSQL)
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
-
-        createTableSQL = """
+        createTableSQL += """
             CREATE TABLE IF NOT EXISTS %s.fhir_profiles (
                 url TEXT NOT NULL,
                 profile_json JSONB NOT NULL,
@@ -103,8 +95,23 @@ public class BaseTestContainer {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (url, fhir_version)
+            );
+        """.formatted(DB_POSTGRES_SCHEMA_NAME);
+
+        createTableSQL += """
+            CREATE TABLE IF NOT EXISTS %s.fhir_validator_logs (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                validator_id VARCHAR(36) NOT NULL,
+                fhir_version VARCHAR(16) NOT NULL,
+                included_ig_packages TEXT[] NOT NULL DEFAULT '{}',
+                included_profiles TEXT[] NOT NULL DEFAULT '{}',
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL,
+                UNIQUE (validator_id, fhir_version)
             )
         """.formatted(DB_POSTGRES_SCHEMA_NAME);
+
         pgPool.query(createTableSQL)
                 .execute()
                 .toCompletionStage()
@@ -113,13 +120,10 @@ public class BaseTestContainer {
     }
 
     protected static void dropTables(Pool pgPool){
-        pgPool.query("DROP TABLE IF EXISTS %s.fhir_implementation_guides".formatted(DB_POSTGRES_SCHEMA_NAME))
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
-
-        pgPool.query("DROP TABLE IF EXISTS %s.fhir_profiles".formatted(DB_POSTGRES_SCHEMA_NAME))
+        String dropTableSQL = "DROP TABLE IF EXISTS %s.fhir_implementation_guides;".formatted(DB_POSTGRES_SCHEMA_NAME);
+        dropTableSQL += "DROP TABLE IF EXISTS %s.fhir_profiles; ".formatted(DB_POSTGRES_SCHEMA_NAME);
+        dropTableSQL += "DROP TABLE IF EXISTS %s.fhir_validator_logs".formatted(DB_POSTGRES_SCHEMA_NAME);
+        pgPool.query(dropTableSQL)
                 .execute()
                 .toCompletionStage()
                 .toCompletableFuture()

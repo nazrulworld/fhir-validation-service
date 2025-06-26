@@ -5,10 +5,14 @@ import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.validation.FhirValidator;
 import ca.uhn.fhir.validation.ValidationResult;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.sqlclient.Pool;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.Tuple;
 import nzi.fhir.validator.core.model.ValidatorIdentity;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.model.IGPackageIdentity;
@@ -26,10 +30,9 @@ import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.model.ValidationRequestContext;
 import nzi.fhir.validator.core.model.ValidationRequestOptions;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+
+import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 
 /**
  * @author Md Nazrul Islam
@@ -91,6 +94,7 @@ public class FhirValidationService {
         return createValidator(vertx, validatorIdentity, igPackageService, profileService, null);
     }
     private static Future<FhirValidator> createValidator(Vertx vertx, ValidatorIdentity validatorIdentity, IgPackageService igPackageService, ProfileService profileService, IGPackageIdentity igPackageIdentity) {
+
         return Future.future(promise -> {
             vertx.executeBlocking(blockingPromise -> {
                 try {
@@ -133,8 +137,6 @@ public class FhirValidationService {
                                     logger.error("Failed to load IG package from database: {}", e.getMessage(), e);
                                     blockingPromise.fail(e);
                                 });
-                            // Important: Return here to prevent double completion
-                            return;
                         }
                     } else {
                         blockingPromise.complete(validator);
@@ -175,7 +177,56 @@ public class FhirValidationService {
             }
         });
     }
+    public Future<Void> saveSateToDatabase(Pool pgPool){
+        String saveSQL = """
+                INSERT INTO %s.fhir_validator_logs (validator_id, fhir_version, included_ig_packages, included_profiles, is_active)
+                    VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (validator_id, fhir_version)
+                DO UPDATE SET included_ig_packages = $3, included_profiles = $4, is_active = $5
+                """.formatted(DB_POSTGRES_SCHEMA_NAME);
+        logger.debug("Saving state to database: {}", saveSQL);
+        return pgPool.preparedQuery(saveSQL)
+                .execute(Tuple.of(
+                        id.getId(),
+                        id.getFhirVersion().name(),
+                        getIncludedIgPackagesListForNpmPackageValidation().stream().map(
+                        igPackageIdentity -> {
+                            return "%s#%s".formatted(igPackageIdentity.getName(), igPackageIdentity.getVersion());
+                        }).toArray(),
+                        new ArrayList<String>().toArray(),
+                        true
+                )).mapEmpty();
+    }
 
+    public Future<Void> syncPreviousStateFromDatabase(Pool pgPool){
+        List<IGPackageIdentity> includedIgPackages = getIncludedIgPackagesListForNpmPackageValidation();
+        String query = "SELECT validator_id, fhir_version, included_ig_packages, included_profiles, is_active FROM %s.fhir_validator_logs WHERE validator_id=$1 AND fhir_version=$2".formatted(DB_POSTGRES_SCHEMA_NAME);
+        return pgPool.preparedQuery(query)
+                .execute(Tuple.of(id.getId(), id.getFhirVersion().name()))
+                .compose(rows -> {
+                    if (rows.size() == 0) {
+                        logger.debug("No previous state found for validator: {}", id.toString());
+                        return Future.succeededFuture();
+                    }
+                    Row row = rows.iterator().next();
+                    SupportedFhirVersion fhirVersion = SupportedFhirVersion.valueOf(row.getString("fhir_version"));
+                    List<Future<Void>> addNpmIgPackageFutures = new ArrayList<>();
+                    for (String idVersion : row.getArrayOfStrings("included_ig_packages")) {
+                        String[] parts = idVersion.split("#");
+                        IGPackageIdentity igPackageIdentity = new IGPackageIdentity(parts[0], parts[1], fhirVersion);
+                        if (!includedIgPackages.contains(igPackageIdentity)) {
+                            addNpmIgPackageFutures.add(addNpmIgPackage(igPackageIdentity));
+                        } else {
+                            logger.debug("IG package: {}#{} is already included in this validator {}", igPackageIdentity.getName(), igPackageIdentity.getVersion(), id.toString());
+                        }
+                    }
+                    if (!addNpmIgPackageFutures.isEmpty()) {
+                        return CompositeFuture.all(new ArrayList<>(addNpmIgPackageFutures))
+                                .mapEmpty();
+                    }
+                    return Future.succeededFuture();
+                });
+    }
     public Future<Void> addNpmIgPackage(IGPackageIdentity igPackageIdentity) {
         // BBC
         CustomNpmPackageValidationSupport npmPackageValidationSupport = CustomNpmPackageValidationSupport.getValidationSupport(id);

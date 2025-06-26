@@ -14,7 +14,6 @@ import nzi.fhir.validator.core.model.ValidatorIdentity;
 import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
-import org.hl7.fhir.utilities.npm.NpmPackage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -102,7 +101,6 @@ class FhirValidationServiceTest extends BaseTestContainer {
             "4.0.1", 
             SupportedFhirVersion.R4
         );
-
         FhirValidationService.create(vertx, SupportedFhirVersion.R4, igPackageService, profileService)
             .onComplete(ar -> {
                 if (ar.succeeded()) {
@@ -112,8 +110,6 @@ class FhirValidationServiceTest extends BaseTestContainer {
                     testContext.failNow(ar.cause());
                 }
             });
-
-
     }
 
     @Test
@@ -131,8 +127,6 @@ class FhirValidationServiceTest extends BaseTestContainer {
                     testContext.completeNow();
                 });
             }));
-
-
     }
 
     @Test
@@ -145,7 +139,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
 
         try {
             byte[] dkIgPackageBytes = loadBytesFromClasspath(DANISH_IG_PATH);
-
+            Pool pgPool = getPgPool(vertx);
             igPackageService.registerIg(dkIgPackageBytes, true)
                 .compose(npmPackage -> {
                     IGPackageIdentity igPackageIdentity = new IGPackageIdentity(
@@ -158,7 +152,11 @@ class FhirValidationServiceTest extends BaseTestContainer {
                         SupportedFhirVersion.R4
                     );
                     return FhirValidationService.create(vertx, validatorIdentity, igPackageService,
-                        profileService, igPackageIdentity);
+                        profileService, igPackageIdentity).compose(fhirValidationService ->
+                            fhirValidationService.syncPreviousStateFromDatabase(pgPool).compose(v1 ->
+                                    fhirValidationService.saveSateToDatabase(pgPool).map(v2 -> fhirValidationService)
+                            )
+                    );
                 })
                 .compose(dkValidator -> {
                     assertEquals(7, dkValidator.getIncludedIgPackagesListForNpmPackageValidation().size());

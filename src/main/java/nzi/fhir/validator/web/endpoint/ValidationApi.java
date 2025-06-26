@@ -62,11 +62,29 @@ public class ValidationApi {
             IgPackageService igPackageService = IgPackageService.create(vertx, pgPool);
 
             CompositeFuture.all(
+                // R4
                 FhirValidationService.create(vertx, SupportedFhirVersion.R4, igPackageService, profileServiceR4)
+                    .compose(fhirValidationService ->
+                            fhirValidationService.syncPreviousStateFromDatabase(pgPool).compose(v1 ->
+                                fhirValidationService.saveSateToDatabase(pgPool).map(v2 -> fhirValidationService)
+                            )
+                        )
                     .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R4.name())),
+
+                // R4B
                 FhirValidationService.create(vertx, SupportedFhirVersion.R4B, igPackageService, profileServiceR4B)
+                    .compose(fhirValidationService ->
+                            fhirValidationService.syncPreviousStateFromDatabase(pgPool).compose(v1 ->
+                                    fhirValidationService.saveSateToDatabase(pgPool).map(v2 -> fhirValidationService)
+                            )
+                    )
                     .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R4B.name())),
                 FhirValidationService.create(vertx, SupportedFhirVersion.R5, igPackageService, profileServiceR5)
+                    .compose(fhirValidationService ->
+                            fhirValidationService.syncPreviousStateFromDatabase(pgPool).compose(v1 ->
+                                    fhirValidationService.saveSateToDatabase(pgPool).map(v2 -> fhirValidationService)
+                            )
+                    )
                     .onSuccess(service -> logger.info("Validation service initialized for version: {}", SupportedFhirVersion.R5.name()))
             ).onComplete(ar -> {
                 if (ar.succeeded()) {
