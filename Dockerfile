@@ -61,9 +61,9 @@ RUN chmod +x /docker-entrypoint-initdb.d/init-database.sh
 
 # FHIR Validator Settings
 ENV FV_SERVER_PORT=8880
-ENV FV_JAR_NAME=fhir-validation-service-1.0-SNAPSHOT.jar
+ENV FV_JAR_NAME=fhir-validation-service
 
-COPY --from=builder /app/target/${FV_JAR_NAME} /app/app.jar
+COPY --from=builder /app/target/${FV_JAR_NAME}-*.jar /app/app.jar
 COPY --chown=fhiruser:appuser src/main/resources/config.json /app/config/config.json
 
 # Then update the environment to point to the correct config location

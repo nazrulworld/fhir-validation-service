@@ -74,3 +74,4 @@ logs/
 
 ### Project specific ###
 var/
+.run/

@@ -23,10 +23,12 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    - name: Upload JAR to release
+    - name: Upload JAR and Docker Compose to release
       uses: softprops/action-gh-release@v1
       with:
-        files: target/*.jar  # Uploads all JAR files from the target directory
+        files: |
+          target/fhir-validation-service-*.jar
+          docker-compose.yml
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
