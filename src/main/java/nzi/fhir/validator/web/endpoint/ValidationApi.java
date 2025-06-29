@@ -223,45 +223,46 @@ public class ValidationApi {
         }
 
         return ValidationRequestContext.createValidatorIdentity(routingContext, pgPool)
-            .compose(validatorIdentity -> {
-                FhirValidationService validationService = FhirValidationService.get(validatorIdentity);
-                if (validationService == null) {
-                    String error = String.format("No validation service available for FHIR version: %s (Request ID: %s)",
-                        validatorIdentity.getFhirVersion().name(), requestId);
-                    logger.error(error);
-                    return Future.failedFuture(error);
+        .compose(validatorIdentity -> {
+            FhirValidationService validationService = FhirValidationService.get(validatorIdentity);
+            if (validationService == null) {
+                String error = String.format("No validation service available for FHIR version: %s (Request ID: %s)",
+                    validatorIdentity.getFhirVersion().name(), requestId);
+                logger.error(error);
+                return Future.failedFuture(error);
+            }
+            for (IGPackageIdentity ipi: validationService.getIncludedIgPackagesListForNpmPackageValidation()){
+                if (ipi.getName().equals(igPackageIdentity.getName()) && ipi.getVersion().equals(igPackageIdentity.getVersion())){
+                    logger.info("IG package already included in validation service for package: {}", igPackageIdentity);
+                    return Future.succeededFuture();
                 }
-                for (IGPackageIdentity ipi:  validationService.getIncludedIgPackagesListForNpmPackageValidation()){
-                    if (ipi.getName().equals(igPackageIdentity.getName()) && ipi.getVersion().equals(igPackageIdentity.getVersion())){
-                        logger.info("IG package already included in validation service for package: {}", igPackageIdentity);
-                        return Future.succeededFuture();
-                    }
+            }
+            return validationService.addNpmIgPackage(igPackageIdentity)
+                   .compose(v -> validationService.saveSateToDatabase(pgPool)); // Add this line to save state
+        })
+        .onSuccess(v -> {
+            synchronized(routingContext.response()) {
+                if (!routingContext.response().ended()) {
+                    routingContext.response()
+                        .putHeader("Content-Type", "application/json")
+                        .setStatusCode(200)
+                        .end(new JsonObject().put("status", "success").encode());
                 }
-                return validationService.addNpmIgPackage(igPackageIdentity);
-            })
-            .onSuccess(v -> {
-                synchronized(routingContext.response()) {
-                    if (!routingContext.response().ended()) {
-                        routingContext.response()
-                            .putHeader("Content-Type", "application/json")
-                            .setStatusCode(200)
-                            .end(new JsonObject().put("status", "success").encode());
-                    }
+            }
+        })
+        .onFailure(err -> {
+            synchronized(routingContext.response()) {
+                if (!routingContext.response().ended()) {
+                    logger.error("Failed to process IG package request [{}]: {}", requestId, err.getMessage(), err);
+                    int statusCode = determineStatusCode(err);
+                    routingContext.response()
+                        .putHeader("Content-Type", "application/json")
+                        .setStatusCode(statusCode)
+                        .end(generateFatalError(err).encode());
                 }
-            })
-            .onFailure(err -> {
-                synchronized(routingContext.response()) {
-                    if (!routingContext.response().ended()) {
-                        logger.error("Failed to process IG package request [{}]: {}", requestId, err.getMessage(), err);
-                        int statusCode = determineStatusCode(err);
-                        routingContext.response()
-                            .putHeader("Content-Type", "application/json")
-                            .setStatusCode(statusCode)
-                            .end(generateFatalError(err).encode());
-                    }
-                }
-            });
-    }
+            }
+        });
+}
 
     private int determineStatusCode(Throwable err) {
         if (err instanceof IllegalArgumentException) {

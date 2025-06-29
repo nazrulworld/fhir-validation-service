@@ -8,8 +8,6 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.ext.web.openapi.RouterBuilderOptions;
-import io.vertx.ext.web.validation.BodyProcessorException;
-import io.vertx.ext.web.validation.ParameterProcessorException;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import io.vertx.sqlclient.Pool;
@@ -27,7 +25,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +54,8 @@ class ValidationApiTest extends BaseTestContainer {
         Mockito.lenient().when(mockValidationService.validate(any(), any()))
                 .thenReturn(io.vertx.core.Future.succeededFuture(new JsonObject().put("valid", true)));
         Mockito.lenient().when(mockValidationService.addNpmIgPackage(any()))
+                .thenReturn(io.vertx.core.Future.succeededFuture());
+        Mockito.lenient().when(mockValidationService.saveSateToDatabase(any()))
                 .thenReturn(io.vertx.core.Future.succeededFuture());
 
 

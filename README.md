@@ -27,7 +27,7 @@ npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/fhir-validation-service.git
+   git clone https://github.com/nazrulworld/fhir-validation-service.git
    cd fhir-validation-service
    ```
 
@@ -38,14 +38,13 @@ npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
 
    This will start:
    - The FHIR validation service on port 8080
-   - PostgreSQL database
-   - Redis cache
+   - PostgresSQL database
    - Prometheus monitoring (optional)
-   - PostgreSQL and Redis exporters for monitoring
+   - PostgresSQL exporters for monitoring
 
 3. Verify the service is running:
    ```bash
-   curl http://localhost:8080/health
+   curl http://localhost:8880/health
    ```
 
 ### Manual Setup
@@ -55,12 +54,7 @@ npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
    make run-postgres
    ```
 
-2. Start Redis:
-   ```bash
-   make run-redis
-   ```
-
-3. Build and run the application:
+2. Build and run the application:
    ```bash
    mvn clean package
    java -jar target/fhir-validation-service-*.jar
@@ -73,10 +67,9 @@ npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
 Send a POST request to the `/validate` endpoint with a JSON body containing the FHIR resource:
 
 ```bash
-curl -X POST http://localhost:8080/validate \
+curl -X POST http://localhost:8880/R4/validate \
   -H "Content-Type: application/json" \
   -d '{
-    "resource": {
       "resourceType": "Patient",
       "id": "example",
       "name": [
@@ -87,9 +80,6 @@ curl -X POST http://localhost:8080/validate \
       ],
       "gender": "male",
       "birthDate": "1970-01-01"
-    },
-    "options": {
-      "profile": "http://hl7.org/fhir/StructureDefinition/Patient"
     }
   }'
 ```
@@ -239,13 +229,11 @@ All error responses follow a standard format:
 
 The application can be configured through environment variables:
 
-- `PG_HOST` - PostgreSQL host (default: localhost)
-- `PG_PORT` - PostgreSQL port (default: 5432)
-- `PG_DATABASE` - PostgreSQL database name (default: fhir_validator)
-- `PG_USER` - PostgreSQL username (default: postgres)
-- `PG_PASSWORD` - PostgreSQL password (default: password)
-- `REDIS_HOST` - Redis host (default: localhost)
-- `REDIS_PORT` - Redis port (default: 6379)
+- `PG_HOST` - PostgresSQL host (default: localhost)
+- `PG_PORT` - PostgresSQL port (default: 5432)
+- `PG_DATABASE` - PostgresSQL database name (default: fhir_validator)
+- `PG_USER` - PostgresSQL username (default: postgres)
+- `PG_PASSWORD` - PostgresSQL password (default: password)
 - `HTTP_PORT` - HTTP server port (default: 8080)
 - `FHIR_VERSION` - Default FHIR version (default: R4)
 
