@@ -75,3 +75,4 @@ logs/
 ### Project specific ###
 var/
 .run/
+wiki/

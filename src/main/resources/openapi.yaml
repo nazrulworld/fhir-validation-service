@@ -6,7 +6,7 @@ info:
 
 servers:
   - url: http://localhost:8880
-    description: Local development server
+    description: Local development server (replace with your server)
 
 paths:
   /health:
