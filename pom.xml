@@ -6,7 +6,7 @@
 
     <groupId>nzi.fhir.validation</groupId>
     <artifactId>fhir-validation-service</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <packaging>jar</packaging>
 
     <name>FHIR Validation Service</name>
@@ -353,13 +353,18 @@
     </build>
 
     <distributionManagement>
-        <snapshotRepository>
+        <!--<snapshotRepository>
             <id>ossrh</id>
             <url>https://oss.sonatype.org/content/repositories/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>ossrh</id>
             <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>-->
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/${project.groupId}</url>
         </repository>
     </distributionManagement>
 </project>
