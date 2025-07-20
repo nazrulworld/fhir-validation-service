@@ -6,7 +6,7 @@
 
     <groupId>nzi.fhir.validation</groupId>
     <artifactId>fhir-validation-service</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <packaging>jar</packaging>
 
     <name>FHIR Validation Service</name>
@@ -364,7 +364,7 @@
         <repository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/${project.groupId}</url>
+            <url>https://maven.pkg.github.com/nazrulworld/fhir-validation-service</url>
         </repository>
     </distributionManagement>
 </project>
