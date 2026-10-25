@@ -4,7 +4,6 @@ import io.vertx.core.Vertx;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
-import nzi.fhir.validator.core.model.IGPackageIdentity;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,8 +67,7 @@ class IgPackageServiceTest extends BaseTestContainer {
                 assertEquals(PACKAGE_NAME, loadedPackage.name());
                 assertEquals(PACKAGE_VERSION, loadedPackage.version());
                 
-                return IgPackageService.isIgPackageExist(pgPool, 
-                    PACKAGE_NAME, PACKAGE_VERSION);
+                return igPackageService.cacheManager().isPackageExists(PACKAGE_NAME, PACKAGE_VERSION);
             })
             .onComplete(testContext.succeeding(exists -> {
                 assertTrue(exists);
@@ -78,9 +76,16 @@ class IgPackageServiceTest extends BaseTestContainer {
 }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIf("hasInternetConnection")
     @DisplayName("Should successfully register US Core package via official source")
     void whenRegisterUsCoreThroughOfficialSource_thenSucceeds(VertxTestContext testContext) {
-        igPackageService.registerIg(PACKAGE_NAME, PACKAGE_VERSION)
+        nzi.fhir.validator.core.config.ApplicationConfig config = nzi.fhir.validator.core.config.ApplicationConfig.of(
+                new io.vertx.core.json.JsonObject().put("profile", "dev"));
+        io.vertx.core.WorkerExecutor workers = vertx.createSharedWorkerExecutor("registry-it", 2);
+        nzi.fhir.validator.core.npm.PostgresPackageCacheManager registryManager = new nzi.fhir.validator.core.npm.PostgresPackageCacheManager(
+                getPgPool(vertx), workers, nzi.fhir.validator.core.npm.PackageArchiveGuard.defaults(),
+                nzi.fhir.validator.core.npm.SafePackageFetcher.create(vertx, workers, config), config.packageRegistryUrls(), true);
+        IgPackageService.create(vertx, getPgPool(vertx), registryManager).registerIg(PACKAGE_NAME, PACKAGE_VERSION)
                 .onComplete(testContext.succeeding(npmPackage -> {
                     assertNotNull(npmPackage);
                     assertEquals(PACKAGE_NAME, npmPackage.name());
@@ -111,21 +116,19 @@ class IgPackageServiceTest extends BaseTestContainer {
     }
 
     @Test
-    @DisplayName("Should successfully generate conformance report for US Core")
-    void whenGenerateConformanceReport_thenSucceeds() throws IOException {
+    @DisplayName("Lists the files of a stored package (deprecated conformance operation, B21)")
+    void whenListPackageFiles_thenSucceeds() throws IOException {
         byte[] packageContent = loadUsCorePackage();
 
         igPackageService.registerIg(packageContent)
-                .compose(v -> igPackageService.generateConformanceReport(PACKAGE_NAME, PACKAGE_VERSION))
+                .compose(v -> igPackageService.listPackageFiles(PACKAGE_NAME, PACKAGE_VERSION))
                 .onComplete(ar -> {
-                    assertTrue(ar.succeeded());
+                    assertTrue(ar.succeeded(), String.valueOf(ar.cause()));
                     JsonObject report = ar.result();
-                    assertNotNull(report);
                     assertEquals(PACKAGE_NAME, report.getString("name"));
                     assertEquals(PACKAGE_VERSION, report.getString("version"));
-                    assertEquals("basic", report.getString("conformance"));
-                    assertNotNull(report.getJsonArray("resources"));
-                    assertTrue(report.getJsonArray("resources").size() > 0);
+                    assertFalse(report.containsKey("conformance"), "no fake conformance verdict");
+                    assertTrue(report.getJsonArray("files").size() > 0);
                 })
                 .toCompletionStage()
                 .toCompletableFuture()

@@ -1,24 +1,30 @@
 package nzi.fhir.validator.core.service;
 
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Tuple;
-import nzi.fhir.validator.core.model.IGPackageIdentity;
+import io.vertx.sqlclient.SqlClient;
+import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.npm.DependencyResolver;
+import nzi.fhir.validator.core.npm.PackageVersionComparator;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
-import org.apache.commons.lang3.Validate;
+import nzi.fhir.validator.web.ProblemException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.utilities.npm.NpmPackage;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
@@ -31,9 +37,94 @@ public class IgPackageService {
     private final Pool pgPool;
     private final PostgresPackageCacheManager cacheManager;
 
+    private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
+
     private IgPackageService(Vertx vertx, Pool pgPool, PostgresPackageCacheManager cacheManager) {
         this.pgPool = pgPool;
         this.cacheManager = cacheManager;
+    }
+
+    /**
+     * @param applyLocally brings this instance up to the latest committed configuration of a version
+     */
+    public void setApplyLocally(Function<SupportedFhirVersion, Future<Void>> applyLocally) {
+        this.applyLocally = applyLocally;
+    }
+
+    public PostgresPackageCacheManager cacheManager() {
+        return cacheManager;
+    }
+
+    /**
+     * Includes a stored IG package in the (global) validator configuration of {@code fhirVersion}, replacing any
+     * other version of the same package. Resolution and the revision bump run in one transaction with the
+     * configuration row locked, so concurrent includes serialise and every instance converges on one result.
+     * Completes after the change is applied on this instance; other instances follow via notification/poll.
+     *
+     * @param requestedVersion an exact version, or {@code latest}/empty for the highest stored release
+     * @return {@code {fhirVersion, revision, included, resolved, warnings}}
+     */
+    public Future<JsonObject> include(SupportedFhirVersion fhirVersion, String name, String requestedVersion) {
+        if (name == null || name.isBlank()) {
+            return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
+        }
+        if (requestedVersion != null && !requestedVersion.isBlank() && !"latest".equalsIgnoreCase(requestedVersion)
+                && !PostgresPackageCacheManager.isValidVersionLabel(requestedVersion)) {
+            return Future.failedFuture(new ProblemException(400, "invalid-request",
+                    "igPackageVersion must be 1-64 characters without whitespace"));
+        }
+        List<String> warnings = new ArrayList<>();
+        return pgPool.withTransaction(tx -> loadCatalog(tx).compose(catalog -> {
+                    Optional<String> concrete = requestedVersion == null || requestedVersion.isBlank()
+                            || "latest".equalsIgnoreCase(requestedVersion)
+                            ? PackageVersionComparator.max(catalog.versions(name))
+                            : catalog.versions(name).contains(requestedVersion) ? Optional.of(requestedVersion) : Optional.empty();
+                    if (concrete.isEmpty()) {
+                        String label = requestedVersion == null || requestedVersion.isBlank() ? name : name + "#" + requestedVersion;
+                        return Future.failedFuture(new ProblemException(404, "package-not-found",
+                                "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
+                    }
+                    String key = name + "#" + concrete.get();
+                    return ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
+                        Set<String> included = new TreeSet<>();
+                        row.included().stream().filter(p -> !p.startsWith(name + "#")).forEach(included::add);
+                        included.add(key);
+                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(included, catalog);
+                        warnings.addAll(resolution.warnings());
+                        List<String> includedList = List.copyOf(included);
+                        return ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, resolution.resolved(), key)
+                                .map(revision -> new JsonObject()
+                                        .put("status", "success")
+                                        .put("fhirVersion", fhirVersion.name())
+                                        .put("revision", revision)
+                                        .put("included", new JsonArray(includedList))
+                                        .put("resolved", new JsonArray(resolution.resolved())));
+                    });
+                }))
+                .compose(result -> applyLocally.apply(fhirVersion)
+                        .recover(err -> {
+                            warnings.add("Committed, but this instance could not apply it yet: " + err.getMessage());
+                            return Future.succeededFuture();
+                        })
+                        .map(v -> result.put("warnings", new JsonArray(warnings))))
+                .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
+    }
+
+    /**
+     * Name, version and declared dependencies of every stored package (metadata only, no archives).
+     */
+    public static Future<DependencyResolver.Catalog> loadCatalog(SqlClient client) {
+        return client.query("SELECT ig_package_id, ig_package_version, dependencies FROM %s.fhir_implementation_guides"
+                        .formatted(DB_POSTGRES_SCHEMA_NAME))
+                .execute()
+                .map(rows -> {
+                    Map<String, List<String>> packages = new HashMap<>();
+                    rows.forEach(row -> {
+                        String[] deps = row.getArrayOfStrings(2);
+                        packages.put(row.getString(0) + "#" + row.getString(1), deps == null ? List.of() : List.of(deps));
+                    });
+                    return DependencyResolver.Catalog.of(packages);
+                });
     }
 
     public static IgPackageService create(Vertx vertx, Pool pgPool) {
@@ -62,62 +153,42 @@ public class IgPackageService {
     }
 
     public Future<NpmPackage> registerIg(byte[] igPackageBytes, boolean loadDependencies) {
+        return registerIg(igPackageBytes, loadDependencies, "UPLOAD");
+    }
+
+    /**
+     * Stores a package archive (parsed off the event loop) and optionally fetches its dependencies from the
+     * configured registries.
+     *
+     * @param source {@code UPLOAD} or {@code URL}
+     */
+    public Future<NpmPackage> registerIg(byte[] igPackageBytes, boolean loadDependencies, String source) {
         if (igPackageBytes == null) {
-            return Future.failedFuture("IG package bytes cannot be null");
+            return Future.failedFuture(new ProblemException(400, "invalid-request", "No package content"));
         }
-
-        NpmPackage npmPackage;
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(igPackageBytes)) {
-            npmPackage = NpmPackage.fromPackage(bis);
-        } catch (Exception e) {
-            logger.error("Invalid IG package: {}", e.getMessage(), e);
-            return Future.failedFuture("Invalid IG package: " + e.getMessage());
-        }
-
-        JsonObject packageMeta = PostgresPackageCacheManager.createNpmPackageMeta(npmPackage);
-        String[] dependenciesArray = Optional.ofNullable(npmPackage.dependencies())
-            .map(deps -> deps.toArray(String[]::new))
-            .orElse(new String[0]);
-
-        return pgPool.withTransaction(client -> 
-            client.preparedQuery(
-                // Consider using bind parameter for schema name
-                "INSERT INTO %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME) +
-                "(ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies) " +
-                "VALUES ($1, $2, $3, $4, $5) " +
-                "ON CONFLICT (ig_package_id, ig_package_version) DO UPDATE SET " +
-                "ig_package_meta = $3, content_raw = $4, dependencies = $5"
-            )
-            .execute(Tuple.of(
-                npmPackage.name(),
-                npmPackage.version(),
-                packageMeta.encode(),
-                igPackageBytes,
-                dependenciesArray
-            ))
-            .map(rowSet -> npmPackage)
-        )
-        .compose(registeredPackage -> {
-            logger.info("Registered IG to PostgresSQL: {}#{}", npmPackage.name(), npmPackage.version());
-            
-            if (!loadDependencies || npmPackage.dependencies().isEmpty()) {
-                return Future.succeededFuture(registeredPackage);
+        return cacheManager.store(igPackageBytes, source).compose(npmPackage -> {
+            if (!loadDependencies || npmPackage.dependencies() == null || npmPackage.dependencies().isEmpty()) {
+                return Future.succeededFuture(npmPackage);
             }
-
             List<Future<?>> dependencyFutures = npmPackage.dependencies().stream()
-                .map(dependency -> cacheManager.loadPackage(dependency, false, true))
-                .collect(Collectors.toList());
+                    .filter(dependency -> !DependencyResolver.isCore(dependency.contains("#") ? dependency.substring(0, dependency.indexOf('#')) : dependency))
+                    .<Future<?>>map(dependency -> cacheManager.loadPackage(dependency, false, true))
+                    .collect(Collectors.toList());
+            return Future.join(dependencyFutures)
+                    .transform(ar -> {
+                        if (ar.failed()) {
+                            logger.warn("Some dependencies of {}#{} could not be fetched: {}", npmPackage.name(), npmPackage.version(), ar.cause().getMessage());
+                        }
+                        return Future.succeededFuture(npmPackage);
+                    });
+        });
+    }
 
-            return CompositeFuture.all(new ArrayList<>(dependencyFutures))
-                .transform(ar -> {
-                    if (ar.failed()) {
-                        logger.error("Failed to fetch dependencies: {}", ar.cause().getMessage());
-                    }
-                    return Future.succeededFuture(registeredPackage);
-                });
-        })
-        .onFailure(e -> logger.error("Failed to register IG: {}#{} - {}", 
-            npmPackage.name(), npmPackage.version(), e.getMessage()));
+    /**
+     * Stores an uploaded archive file; it is checked on disk before being read into memory (FR-014).
+     */
+    public Future<NpmPackage> registerUploadedFile(String path) {
+        return cacheManager.storeFile(path, "UPLOAD");
     }
 
     public Future<NpmPackage> loadIgPackage(String name, String version) {
@@ -129,92 +200,45 @@ public class IgPackageService {
                     name, version, e.getMessage()));
     }
 
+    /**
+     * Declared dependencies of a stored package; 404 problem if it is not stored.
+     */
     public Future<JsonObject> getDependencyGraph(String name, String version) {
-        if (name == null || version == null) {
-            return Future.failedFuture("IG name and version cannot be null");
-        }
-
-        return pgPool.preparedQuery(
-            "SELECT dependencies FROM %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME) +
-            "WHERE ig_package_id = $1 AND ig_package_version = $2"
-        )
-        .execute(Tuple.of(name, version))
-        .map(rows -> {
-            JsonArray deps = new JsonArray();
-            if (rows.size() > 0) {
-                Object[] dependencies = (Object[]) rows.iterator().next().getValue("dependencies");
-                if (dependencies != null) {
-                    for (Object dep : dependencies) {
-                        if (dep instanceof String) {
-                            deps.add((String) dep);
-                        }
+        return pgPool.preparedQuery("SELECT dependencies FROM %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME)
+                        + "WHERE ig_package_id = $1 AND ig_package_version = $2")
+                .execute(Tuple.of(name, version))
+                .compose(rows -> {
+                    if (rows.size() == 0) {
+                        return Future.failedFuture(notStored(name, version));
                     }
-                }
-            }
-            return new JsonObject()
-                    .put("name", name)
-                    .put("version", version)
-                    .put("dependencies", deps);
-        })
-        .onFailure(e -> logger.error("Failed to get dependency graph for {}#{}: {}", 
-            name, version, e.getMessage()));
-    }
-
-    public Future<JsonObject> generateConformanceReport(String name, String version) {
-        if (name == null || version == null) {
-            return Future.failedFuture("IG name and version cannot be null");
-        }
-
-        return loadIgPackage(name, version)
-            .compose(ig -> {
-                try {
-                    JsonArray resources = new JsonArray(ig.listResources().stream()
-                        .map(res -> new JsonObject().put("resource", res))
-                        .collect(Collectors.toList()));
-                
-                return Future.succeededFuture(new JsonObject()
-                    .put("name", name)
-                    .put("version", version)
-                    .put("resources", resources)
-                    .put("conformance", "basic"));
-            } catch (IOException e) {
-                logger.error("Failed to list resources for {}#{}: {}", 
-                    name, version, e.getMessage());
-                return Future.failedFuture(e);
-            }
-        })
-        .onFailure(e -> logger.error("Failed to generate conformance report for {}#{}: {}", 
-            name, version, e.getMessage()));
+                    String[] deps = rows.iterator().next().getArrayOfStrings(0);
+                    return Future.succeededFuture(new JsonObject()
+                            .put("name", name)
+                            .put("version", version)
+                            .put("dependencies", new JsonArray(deps == null ? List.of() : List.of(deps))));
+                });
     }
 
     /**
-     * Checks if an IG package exists in the database.
-     * 
-     * @param pgPool PostgresSQL connection pool
-     * @param igPackageName Identity of the IG package to check
-     * @return Future containing true if the package exists, false otherwise
+     * File listing of a stored package (the deprecated "conformance" operation); 404 problem if it is not stored.
      */
-    public static Future<Boolean> isIgPackageExist(Pool pgPool, String igPackageName, String igPackageVersion) {
-        Validate.notNull(igPackageName, "IG package name cannot be null");
-        Validate.notNull(igPackageVersion, "IG package version cannot be null");
-        String query = "SELECT EXISTS (SELECT 1 FROM %s.fhir_implementation_guides WHERE ig_package_id = $1".formatted(DB_POSTGRES_SCHEMA_NAME);
-        Tuple params;
-        
-        if (!"latest".equals(igPackageVersion)) {
-            query += " AND ig_package_version = $2";
-            params = Tuple.of(igPackageName, igPackageVersion);
-        } else {
-            params = Tuple.of(igPackageName);
-        }
-        
-        query += ")";
-        
-        return pgPool.preparedQuery(query)
-                .execute(params)
-                .map(rows -> rows.iterator().next().getBoolean(0));
+    public Future<JsonObject> listPackageFiles(String name, String version) {
+        return cacheManager.loadRawPackage(name, version)
+                .compose(raw -> raw == null ? Future.failedFuture(notStored(name, version)) : cacheManager.parse(raw.getBytes()))
+                .compose(pkg -> {
+                    try {
+                        return Future.succeededFuture(new JsonObject()
+                                .put("name", name)
+                                .put("version", version)
+                                .put("files", new JsonArray(pkg.listResources())));
+                    } catch (IOException e) {
+                        return Future.failedFuture(e);
+                    }
+                });
     }
 
-    public static Future<String> resolveLatestIgPackageVersion(Pool pgPool, String igPackageName) {
-        return PostgresPackageCacheManager.getLatestVersionFromCache(pgPool, igPackageName);
+    private static ProblemException notStored(String name, String version) {
+        return new ProblemException(404, "package-not-found", "IG package " + name + "#" + version + " is not stored");
     }
+
 }

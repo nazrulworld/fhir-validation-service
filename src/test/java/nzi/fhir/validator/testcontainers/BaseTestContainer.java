@@ -13,7 +13,13 @@ import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import nzi.fhir.validator.core.service.DatabaseService;
+
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -73,62 +79,41 @@ public class BaseTestContainer {
         pgPool.query(createSchemaSQL).execute().compose(rowset -> pgPool.query("SET search_path TO %s;".formatted(DB_POSTGRES_SCHEMA_NAME)).execute().mapEmpty()).toCompletionStage().toCompletableFuture().join();
 
     }
+    /**
+     * Creates the production schema by running the Flyway migrations.
+     */
     protected static void createTables(Pool pgPool){
-        // Create the necessary table
-        String createTableSQL = """
-            CREATE TABLE IF NOT EXISTS %s.fhir_implementation_guides (
-                ig_package_id TEXT NOT NULL,
-                ig_package_version TEXT NOT NULL,
-                ig_package_meta JSONB NOT NULL,
-                content_raw BYTEA NOT NULL,
-                dependencies TEXT[],
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (ig_package_id, ig_package_version)
-            );
-        """.formatted(DB_POSTGRES_SCHEMA_NAME);
-        createTableSQL += """
-            CREATE TABLE IF NOT EXISTS %s.fhir_profiles (
-                url TEXT NOT NULL,
-                profile_json JSONB NOT NULL,
-                fhir_version TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (url, fhir_version)
-            );
-        """.formatted(DB_POSTGRES_SCHEMA_NAME);
-
-        createTableSQL += """
-            CREATE TABLE IF NOT EXISTS %s.fhir_validator_logs (
-                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                validator_id VARCHAR(36) NOT NULL,
-                fhir_version VARCHAR(16) NOT NULL,
-                included_ig_packages TEXT[] NOT NULL DEFAULT '{}',
-                included_profiles TEXT[] NOT NULL DEFAULT '{}',
-                is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NULL,
-                UNIQUE (validator_id, fhir_version)
-            )
-        """.formatted(DB_POSTGRES_SCHEMA_NAME);
-
-        pgPool.query(createTableSQL)
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
+        DatabaseService.flyway(connectOptions()).migrate();
     }
 
     protected static void dropTables(Pool pgPool){
-        String dropTableSQL = "DROP TABLE IF EXISTS %s.fhir_implementation_guides;".formatted(DB_POSTGRES_SCHEMA_NAME);
-        dropTableSQL += "DROP TABLE IF EXISTS %s.fhir_profiles; ".formatted(DB_POSTGRES_SCHEMA_NAME);
-        dropTableSQL += "DROP TABLE IF EXISTS %s.fhir_validator_logs".formatted(DB_POSTGRES_SCHEMA_NAME);
-        pgPool.query(dropTableSQL)
-                .execute()
-                .toCompletionStage()
-                .toCompletableFuture()
-                .join();
+        resetSchema();
     }
+
+    /**
+     * Drops the service schema (including Flyway history) so the next migration starts from an empty database.
+     */
+    protected static void resetSchema() {
+        try (Connection c = DriverManager.getConnection(getPostgresJdbcUrl(), POSTGRES_USERNAME, POSTGRES_PASSWORD);
+             Statement st = c.createStatement()) {
+            // Tests may leave async work (e.g. dependency downloads) running; end those sessions first.
+            st.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    + "WHERE datname = current_database() AND pid <> pg_backend_pid()");
+            st.execute("DROP SCHEMA IF EXISTS %s CASCADE".formatted(DB_POSTGRES_SCHEMA_NAME));
+        } catch (SQLException e) {
+            throw new IllegalStateException("Unable to reset test schema", e);
+        }
+    }
+
+    protected static PgConnectOptions connectOptions() {
+        return new PgConnectOptions()
+                .setHost(getPostgresHost())
+                .setPort(getPostgresPort())
+                .setDatabase(POSTGRES_DATABASE)
+                .setUser(POSTGRES_USERNAME)
+                .setPassword(POSTGRES_PASSWORD);
+    }
+
     protected static Pool createPgPool(Vertx vertx) {
         PgConnectOptions connectOptions = new PgConnectOptions()
                 .setHost(getPostgresHost())
@@ -154,7 +139,9 @@ public class BaseTestContainer {
                     .withCommand("-c max_wal_size=2GB")
                     .withStartupTimeout(Duration.ofSeconds(60))
                     .withStartupAttempts(3)
-                    .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
+                    // The image restarts once during init: wait for the second "ready" message, not just the port.
+                    .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\s", 2)
+                            .withStartupTimeout(Duration.ofSeconds(60)));
 
             postgresContainer.start();
 

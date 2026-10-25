@@ -3,50 +3,60 @@ package nzi.fhir.validator.core.config;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgBuilder;
 import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.pgclient.SslMode;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.PoolOptions;
 
 /**
+ * PostgreSQL connection settings derived from {@link ApplicationConfig}. Never logs credentials.
+ *
  * @author Md Nazrul Islam
  */
-public class PgConfig {
+public final class PgConfig {
     private static final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger(PgConfig.class);
 
-    public static PgConnectOptions createPgOptions() {
-
-        return new PgConnectOptions()
-                .setHost(ApplicationConfig.get( "pg.host", "localhost"))
-                .setPort(Integer.parseInt(ApplicationConfig.get("pg.port", "54329")))
-                .setDatabase(ApplicationConfig.get("pg.database", "fhir_validator"))
-                .setUser(ApplicationConfig.get("pg.user", "postgres"))
-                .setPassword(ApplicationConfig.get("pg.password", "Test1234"))
-                .setCachePreparedStatements(true);
+    private PgConfig() {
     }
-    public static PoolOptions createPoolOptions() {
 
+    public static PgConnectOptions createPgOptions(ApplicationConfig config) {
+        PgConnectOptions options = new PgConnectOptions()
+                .setHost(config.pgHost())
+                .setPort(config.pgPort())
+                .setDatabase(config.pgDatabase())
+                .setUser(config.pgUser())
+                .setCachePreparedStatements(true)
+                .setSslMode(sslMode(config.pgSslMode()));
+        if (config.pgPassword() != null) {
+            options.setPassword(config.pgPassword());
+        }
+        if (options.getSslMode() == SslMode.PREFER || options.getSslMode() == SslMode.REQUIRE) {
+            // Encrypt the connection without hostname verification; verify-full turns verification on.
+            options.setTrustAll(true);
+        }
+        return options;
+    }
+
+    private static SslMode sslMode(String mode) {
+        return switch (mode == null ? "prefer" : mode) {
+            case "disable" -> SslMode.DISABLE;
+            case "require" -> SslMode.REQUIRE;
+            case "verify-full" -> SslMode.VERIFY_FULL;
+            default -> SslMode.PREFER;
+        };
+    }
+
+    public static PoolOptions createPoolOptions(ApplicationConfig config) {
         return new PoolOptions()
-                .setMaxSize(ApplicationConfig.get("pg.pool.size", "15") != null ? Integer.parseInt(ApplicationConfig.get("pg.pool.size", "15")) : 15)
+                .setMaxSize(config.pgPoolSize())
                 .setIdleTimeout(300000)
                 .setConnectionTimeout(5000);
     }
 
-    public static Pool createPgPool(Vertx vertx) {
-        return createPgPool(vertx, createPoolOptions(), createPgOptions());
-    }
-
-    public static Pool createPgPool(Vertx vertx, PoolOptions poolOptions) {
-        return createPgPool(vertx, poolOptions, createPgOptions());
-    }
-    public static Pool createPgPool(Vertx vertx, PoolOptions poolOptions, PgConnectOptions connectOptions) {
-
-        logger.info("Connecting to PostgresSQL at {}:{}***@{}:{}/{}",
-                connectOptions.getUser(),
-                connectOptions.getPassword().substring(0, connectOptions.getPassword().length() -3),
-                connectOptions.getHost(),
-                connectOptions.getPort(),
-                connectOptions.getDatabase());
+    public static Pool createPgPool(Vertx vertx, ApplicationConfig config) {
+        PgConnectOptions connectOptions = createPgOptions(config);
+        logger.info("Connecting to PostgreSQL at {}:{}/{}", connectOptions.getHost(), connectOptions.getPort(), connectOptions.getDatabase());
         return PgBuilder.pool()
-                .with(poolOptions)
+                .with(createPoolOptions(config))
                 .connectingTo(connectOptions)
                 .using(vertx)
                 .build();

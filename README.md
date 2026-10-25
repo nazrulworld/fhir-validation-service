@@ -1,293 +1,129 @@
 # FHIR Validation Service
 
-A high-performance FHIR resource validation service built with Vert.x, PostgreSQL, and Redis.
+A horizontally scalable FHIR resource validation service built with Vert.x, HAPI FHIR and PostgreSQL.
 
-## Overview
+It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, stored Implementation Guide (IG)
+packages and custom profiles. Any number of identical instances can run against one PostgreSQL database; changes to
+IGs and profiles reach every instance within seconds, without restarts.
 
-This FHIR Validation Service provides a RESTful API for validating FHIR resources against standard profiles and implementation guides. It supports both FHIR R4 and R5 versions and allows for custom profile validation.
+- REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
+- Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
+- Errors as RFC 9457 `application/problem+json`, with an `X-Request-Id` correlation id on every response
+- Liveness, readiness and Prometheus metrics for orchestrators
+- Container images for x86_64 and arm64
 
-Key features:
-- Validate FHIR resources against standard and custom profiles
-- Manage and use Implementation Guides (IGs)
-- High-performance validation with Redis caching
-- Persistent storage with PostgreSQL
-- Monitoring with Prometheus
-- Cross-platform compatibility (x86 and ARM architectures)
-## // Will automatically fetch and cache `hl7.fhir.r4.core` and any others you load
-npmSupport.loadPackageFromPackage("hl7.fhir.dk.core", "3.4.0");
-## Prerequisites
+> Upgrading from 0.1.x? Read [docs/upgrade-1.0.md](docs/upgrade-1.0.md) first: the database is no longer bundled in
+> the container, and data must be moved once.
 
-- Java 11 or higher
-- Docker and Docker Compose
-- Maven (for local development)
+## Requirements
 
-## Installation
+- Docker with Compose v2 (to run), or Java 17 and Maven (to build and develop)
+- PostgreSQL 16 (provided by `compose.yaml`)
+- About 2 GB of memory per instance (warmed validators for four FHIR versions). Including an IG rebuilds that
+  version's validator while the old one keeps serving, so allow headroom of at least twice the largest validator:
+  watch `fv_snapshot_package_size_bytes` (archive size; parsed packages take several times more heap)
 
-### Using Docker Compose (Recommended)
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/nazrulworld/fhir-validation-service.git
-   cd fhir-validation-service
-   ```
-
-2. Start the services using Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
-
-   This will start:
-   - The FHIR validation service on port 8080
-   - PostgresSQL database
-   - Prometheus monitoring (optional)
-   - PostgresSQL exporters for monitoring
-
-3. Verify the service is running:
-   ```bash
-   curl http://localhost:8880/health
-   ```
-
-### Manual Setup
-
-1. Start PostgreSQL:
-   ```bash
-   make run-postgres
-   ```
-
-2. Build and run the application:
-   ```bash
-   mvn clean package
-   java -jar target/fhir-validation-service-*.jar
-   ```
-
-## How to Use
-
-### Validating a FHIR Resource
-
-Send a POST request to the `/validate` endpoint with a JSON body containing the FHIR resource:
+## Quick start
 
 ```bash
-curl -X POST http://localhost:8880/R4/validate \
-  -H "Content-Type: application/json" \
-  -d '{
-      "resourceType": "Patient",
-      "id": "example",
-      "name": [
-        {
-          "family": "Smith",
-          "given": ["John"]
-        }
-      ],
-      "gender": "male",
-      "birthDate": "1970-01-01"
-    }
-  }'
+cp .env.example .env      # set PG_PASSWORD and FV_ADMIN_API_KEY (32-128 chars of [A-Za-z0-9_-])
+make up                   # = docker compose up -d --wait : PostgreSQL + one validator on 127.0.0.1:8880
+curl -fsS http://127.0.0.1:8880/health/readiness
 ```
 
-### Managing Implementation Guides
+| Command | Starts | Endpoint |
+|---------|--------|----------|
+| `make up` | PostgreSQL, one validator | http://127.0.0.1:8880 |
+| `make up-cluster` | + a second validator behind nginx (shared database) | http://127.0.0.1:8881 |
+| `make up-obs` | + Prometheus and a PostgreSQL exporter | http://127.0.0.1:9090 |
+| `docker compose --profile admin up -d` | + pgAdmin (credentials from `.env`) | http://127.0.0.1:5050 |
+| `make down` / `make clean` | stop (keep / delete volumes) | |
+| `make smoke` | build, start, validate, graceful stop | |
 
-Upload an Implementation Guide:
+All ports bind to `127.0.0.1`. PostgreSQL is not published; to reach it from the host, add a git-ignored
+`compose.override.yaml` with `services: {postgres: {ports: ["127.0.0.1:54329:5432"]}}`.
+
+## Using the API
+
+### Validate a resource
+
 ```bash
-curl -X POST http://localhost:8080/ig \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com/path/to/implementation-guide.tgz"
-  }'
+curl -X POST http://127.0.0.1:8880/R4/validate \
+  -H 'Content-Type: application/fhir+json' \
+  --data '{"resourceType":"Patient","active":true}'
 ```
 
-List available Implementation Guides:
+```json
+{"valid": true, "messages": [], "fhirVersion": "R4", "appliedProfiles": []}
+```
+
+- `Accept: application/fhir+json` or `application/fhir+xml` returns a FHIR `OperationOutcome`.
+- `?profile=<canonical>[,<canonical>]` validates against additional profiles.
+- A completed validation answers **200**, valid or not. A body that is not FHIR at all answers **400**
+  (`invalid-resource`); overload or a validator that is not ready answers **503** with `Retry-After`.
+
+### Manage IGs and profiles (administrator key required)
+
+Administrative calls need `Authorization: Bearer <FV_ADMIN_API_KEY>`. The change applies globally, to every consumer
+of that FHIR version, on every instance.
+
 ```bash
-curl http://localhost:8080/ig
+AUTH="Authorization: Bearer $FV_ADMIN_API_KEY"
+
+# Store an IG package: upload, from a registry, or from an approved https URL
+curl -H "$AUTH" -F "file=@hl7.fhir.dk.core-3.4.0.tgz;type=application/gzip" http://127.0.0.1:8880/igs/upload
+curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core","version":"7.0.0"}' http://127.0.0.1:8880/igs/register
+
+# Include it in the R4 validator (resolves dependencies; replaces another version of the same package)
+curl -H "$AUTH" -H 'Content-Type: application/json' \
+  --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/include-ig
+
+# Register a custom profile (StructureDefinition)
+curl -H "$AUTH" -H 'Content-Type: application/json' --data @my-profile.json http://127.0.0.1:8880/R4/register-profile
 ```
 
-## API Documentation
+Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
+checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
-The service runs on `http://localhost:8880` by default and provides the following endpoints:
+### Health and metrics
 
-### Health Endpoints
+| Endpoint | Meaning |
+|----------|---------|
+| `GET /health/liveness` | the process is alive (use for liveness probes) |
+| `GET /health/readiness` | 200 when the database is reachable, every FHIR version has a usable validator, and the instance is not draining |
+| `GET /health` | detailed report |
+| `GET /metrics` | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, ...) |
 
-#### Get Health Status
-- **GET `/health`**
-  - Checks the health status of the service including PostgreSQL connection
-  - Responses:
-    - `200` OK: Service is healthy
-    - `503` Service Unavailable: Service is unhealthy
-  - Response format:
-    ```json
-    {
-      "status": "UP|DOWN",
-      "timestamp": 1624536789,
-      "postgres": {
-        "status": "UP|DOWN",
-        "responseTime": 123,
-        "error": "error message (if any)"
-      }
-    }
-    ```
+On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
+`FV_SHUTDOWN_GRACE_MS`), then exits.
 
-#### Kubernetes Liveness Probe
-- **GET `/health/liveness`**
-  - Simple liveness check for Kubernetes health monitoring
-  - Response: `200` OK with status "UP" if service is live
-
-### FHIR Validation Endpoints
-
-#### Validate FHIR Resource
-- **POST `/{version}/validate`**
-  - Validates a FHIR resource against specified profiles
-  - Parameters:
-    - `version` (path): FHIR version (STU3, R4, R4B, R5)
-    - Content-Type (header): Supported formats:
-      - `application/json` (default)
-      - `application/xml`
-      - `application/fhir+json`
-      - `application/fhir+xml`
-  - Request: FHIR resource in JSON/XML format
-  - Responses:
-    - `200` OK: Validation results
-    - `400` Bad Request: Invalid request or validation error
-  - Example response:
-    ```json
-    {
-      "valid": true,
-      "messages": [
-        {
-          "severity": "information",
-          "location": "Patient.name",
-          "message": "..."
-        }
-      ]
-    }
-    ```
-
-### Implementation Guide Management
-
-#### Include IG for Validation
-- **POST `/{version}/include-ig`**
-  - Includes an Implementation Guide for validation
-  - Parameters:
-    - `version` (path): FHIR version
-  - Request body:
-    ```json
-    {
-      "igPackageId": "package.id",
-      "igPackageVersion": "latest"
-    }
-    ```
-
-#### Upload IG Package
-- **POST `/igs/upload`**
-  - Upload and register an IG package file
-  - Request: `multipart/form-data` with file (max 20MB)
-
-#### Register IG Package
-- **POST `/igs/register`**
-  - Register an IG package from URL
-  - Request body:
-    ```json
-    {
-      "downloadUrl": "https://example.com/ig-package",
-      "name": "package-name",
-      "version": "latest",
-      "includeDependency": true
-    }
-    ```
-
-#### Get IG Dependencies
-- **GET `/igs/{name}/{version}/dependencies`**
-  - Retrieves dependency graph for specified IG package
-
-#### Generate Conformance Report
-- **GET `/igs/{name}/{version}/conformance`**
-  - Generates conformance report for specified IG package
-
-### Profile Management
-
-#### Register FHIR Profile
-- **POST `/{version}/register-profile`**
-  - Registers a FHIR profile for validation
-  - Parameters:
-    - `version` (path): FHIR version
-  - Request body:
-    ```json
-    {
-      "url": "http://example.com/fhir/StructureDefinition/profile"
-    }
-    ```
-  - Response:
-    ```json
-    {
-      "status": "success",
-      "profileUrl": "http://example.com/fhir/StructureDefinition/profile"
-    }
-    ```
-
-### Error Responses
-
-All error responses follow a standard format:
 ## Configuration
 
-The application can be configured through environment variables:
+All settings come from environment variables (optionally a JSON file named by `FV_CONFIG_FILE`); invalid values stop
+startup with a message naming the variable. The full list, with defaults and bounds, is in
+[`specs/001-service-hardening/contracts/configuration.md`](specs/001-service-hardening/contracts/configuration.md)
+and [`.env.example`](.env.example). The most important ones:
 
-- `PG_HOST` - PostgresSQL host (default: localhost)
-- `PG_PORT` - PostgresSQL port (default: 5432)
-- `PG_DATABASE` - PostgresSQL database name (default: fhir_validator)
-- `PG_USER` - PostgresSQL username (default: postgres)
-- `PG_PASSWORD` - PostgresSQL password (default: password)
-- `HTTP_PORT` - HTTP server port (default: 8080)
-- `FHIR_VERSION` - Default FHIR version (default: R4)
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `FV_PG_HOST`, `FV_PG_PORT`, `FV_PG_DATABASE`, `FV_PG_USER`, `FV_PG_PASSWORD` | `localhost`, `5432`, `fhir_validator`, `postgres`, *(required)* | database |
+| `FV_ADMIN_API_KEY` | *(unset: admin operations refused)* | bootstrap administrator key |
+| `FV_AUTH_ANONYMOUS_VALIDATE` | `true` | `false` requires a key for validation and reads too |
+| `FV_HTTP_PORT` | `8880` | HTTP port |
+| `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING` | cores / 4 × workers | parallel validations / admission limit |
+| `FV_PACKAGE_SOURCES` | `packages.fhir.org,packages2.fhir.org` | registries and approved download hosts |
+| `FV_CORS_ALLOWED_ORIGINS` | *(none)* | browser origins allowed to call the API |
 
 ## Development
 
-### Building the Project
-
 ```bash
-mvn clean package
+./mvnw verify        # unit, Testcontainers integration and contract tests (needs Docker)
+make run-postgres    # PostgreSQL on 127.0.0.1:54329 for IDE runs (export FV_PG_PASSWORD first)
+FV_PROFILE=dev FV_PG_PORT=54329 FV_PG_PASSWORD=... java -jar target/fhir-validation-service-*.jar
 ```
 
-### Running Tests
-
-```bash
-mvn test
-```
-
-## References
-
-- [FHIR Official Website](https://www.hl7.org/fhir/)
-- [HAPI FHIR Library](https://hapifhir.io/)
-- [Vert.x Framework](https://vertx.io/)
-- [Official FHIR Validator](https://validator.fhir.org/)
-
-{
-"name" : "hl7.fhir.dk.core",
-"version" : "3.4.0",
-"tools-version" : 3,
-"type" : "IG",
-"date" : "20250201191800",
-"license" : "CC0-1.0",
-"canonical" : "http://hl7.dk/fhir/core",
-"url" : "http://hl7.dk/fhir/core/3.4.0",
-"title" : "HL7 FHIR Implementation Guide: DK Core",
-"description" : "A FHIR Implementation Guide for the Danish common needs across healthcare sectors (built Sat, Feb 1, 2025 19:18+0100+01:00)",
-"fhirVersions" : ["4.0.1"],
-"dependencies" : {
-"hl7.fhir.r4.core" : "4.0.1",
-"hl7.terminology.r4" : "6.2.0",
-"hl7.fhir.uv.extensions.r4" : "5.1.0",
-"hl7.fhir.uv.phd" : "1.1.0",
-"hl7.fhir.uv.ipa" : "1.0.0"
-},
-"author" : "HL7 Denmark",
-"maintainers" : [
-{
-"name" : "HL7 Denmark",
-"email" : "jenskristianvilladsen@gmail.com",
-"url" : "http://www.hl7.dk"
-}
-],
-"directories" : {
-"lib" : "package",
-"example" : "example"
-},
-"jurisdiction" : "urn:iso:std:iso:3166#DK"
-}
+- Load tests: [`perf/README.md`](perf/README.md)
+- Upgrade rehearsal: `sh scripts/upgrade-rehearsal.sh`
+- Design and decisions: [`specs/001-service-hardening/`](specs/001-service-hardening/)
+- Project principles: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
+- Changes: [`CHANGELOG.md`](CHANGELOG.md)

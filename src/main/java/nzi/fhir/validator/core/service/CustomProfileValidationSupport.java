@@ -3,37 +3,35 @@ package nzi.fhir.validator.core.service;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.ConceptValidationOptions;
 import ca.uhn.fhir.context.support.ValidationSupportContext;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.hl7.fhir.instance.model.api.IBaseResource;
+import nzi.fhir.validator.core.validator.ProfileStore;
 import org.hl7.fhir.common.hapi.validation.support.BaseValidationSupport;
+import org.hl7.fhir.instance.model.api.IBaseResource;
+
+import java.util.List;
 
 /**
+ * Serves custom profiles from the in-memory {@link ProfileStore}. Purely synchronous: no database access and no
+ * futures during validation (fixes B1, where a pending future's {@code result()} returned {@code null}).
+ *
  * @author Md Nazrul Islam
  */
 public class CustomProfileValidationSupport extends BaseValidationSupport {
-    private static final Logger logger = LogManager.getLogger(CustomProfileValidationSupport.class);
-    private final ProfileService profileService;
+    private final ProfileStore profileStore;
 
-    public CustomProfileValidationSupport(FhirContext ctx, ProfileService profileService) {
+    public CustomProfileValidationSupport(FhirContext ctx, ProfileStore profileStore) {
         super(ctx);
-        this.profileService = profileService;
+        this.profileStore = profileStore;
     }
 
     @Override
     public IBaseResource fetchStructureDefinition(String url) {
-        try {
-            IBaseResource profile = profileService.getProfile(url).result();
-            if (profile != null) {
-                logger.debug("Fetched profile from ProfileService: {}", url);
-                return profile;
-            }
-            logger.debug("Profile not found, will try next support in chain: {}", url);
-            return null;
-        } catch (Exception e) {
-            logger.error("Failed to fetch profile {}: {}", url, e.getMessage(), e);
-            return null;
-        }
+        return profileStore.get(url);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends IBaseResource> List<T> fetchAllStructureDefinitions() {
+        return (List<T>) profileStore.all();
     }
 
     @Override
@@ -54,5 +52,10 @@ public class CustomProfileValidationSupport extends BaseValidationSupport {
     @Override
     public LookupCodeResult lookupCode(ValidationSupportContext theValidationSupportContext, String theSystem, String theCode) {
         return null; // Let the terminology service handle code lookups
+    }
+
+    @Override
+    public String getName() {
+        return "CustomProfileValidationSupport";
     }
 }
