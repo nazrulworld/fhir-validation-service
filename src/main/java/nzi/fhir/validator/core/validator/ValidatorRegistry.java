@@ -1,5 +1,6 @@
 package nzi.fhir.validator.core.validator;
 
+import ca.uhn.fhir.context.support.IValidationSupport;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
@@ -296,6 +297,17 @@ public class ValidatorRegistry {
             }
         });
         return details;
+    }
+
+    /**
+     * The core and IG package supports of the active snapshot (empty when there is none): where custom profiles look
+     * up base definitions when their snapshots are generated.
+     */
+    public List<IValidationSupport> activeSupports(SupportedFhirVersion version) {
+        Slot slot = slot(version);
+        synchronized (slot) {
+            return slot.snapshot == null ? List.of() : slot.snapshot.reusableSupports();
+        }
     }
 
     /** Package count and archive bytes of the active snapshot (0 when there is none). */

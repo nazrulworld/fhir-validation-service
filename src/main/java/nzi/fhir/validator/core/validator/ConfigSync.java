@@ -26,9 +26,13 @@ import java.util.function.Function;
 public class ConfigSync {
     private static final Logger logger = LogManager.getLogger(ConfigSync.class);
 
+    /**
+     * All syncs of one version run one after another: {@code tail} completes when the last queued sync has finished.
+     * {@code backgroundQueued} coalesces notification/poll syncs while one is still waiting to start.
+     */
     private static final class VersionState {
-        boolean running;
-        boolean dirty;
+        Future<Void> tail = Future.succeededFuture();
+        boolean backgroundQueued;
     }
 
     private final Vertx vertx;
@@ -112,40 +116,47 @@ public class ConfigSync {
     }
 
     /**
-     * Brings one version up to the latest configuration: refresh changed profiles, then apply the revision (which
-     * rebuilds only if the resolved package set changed).
+     * Background sync (notification or poll): brings one version up to the latest configuration. Coalesced: if a
+     * background sync is already queued and has not started, this one is dropped (the queued one sees the change).
      */
     public void sync(SupportedFhirVersion version) {
         VersionState state = states.get(version);
         synchronized (state) {
-            if (state.running) {
-                state.dirty = true;
+            if (state.backgroundQueued) {
                 return;
             }
-            state.running = true;
-            state.dirty = false;
+            state.backgroundQueued = true;
         }
-        syncNow(version)
-                .onComplete(ar -> {
-                    if (ar.failed()) {
-                        logger.warn("Configuration sync for {} failed: {}", version, ar.cause().getMessage());
-                    }
-                    boolean again;
-                    synchronized (state) {
-                        state.running = false;
-                        again = state.dirty;
-                    }
-                    if (again) {
-                        sync(version);
-                    }
-                });
+        enqueue(version, () -> {
+            synchronized (state) {
+                state.backgroundQueued = false;
+            }
+        }).onFailure(err -> logger.warn("Configuration sync for {} failed: {}", version, err.getMessage()));
     }
 
     /**
-     * One sync run for {@code version}, completing when the latest committed configuration is applied locally.
-     * Safe to run concurrently with background syncs (profile refreshes are idempotent; builds are serialised).
+     * One sync run for {@code version}, completing when the latest committed configuration is applied locally. It
+     * runs after any sync of the version already in flight: a refresh only reports rows it has not loaded yet, so
+     * without the queue a caller could return while another sync was still applying the very change it waits for.
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
+        return enqueue(version, () -> { });
+    }
+
+    private Future<Void> enqueue(SupportedFhirVersion version, Runnable onStart) {
+        VersionState state = states.get(version);
+        synchronized (state) {
+            Future<Void> run = state.tail.transform(previous -> {
+                onStart.run();
+                return runSync(version);
+            });
+            state.tail = run.otherwiseEmpty();
+            return run;
+        }
+    }
+
+    /** Refresh changed profiles, then apply the revision (which rebuilds only if the resolved package set changed). */
+    private Future<Void> runSync(SupportedFhirVersion version) {
         ProfileStore store = profileStores.get(version);
         Function<SupportedFhirVersion, Future<Integer>> override = profileRefreshOverride;
         Future<Integer> refreshed = override != null ? override.apply(version) : store.refreshChanged(pool, executors);
