@@ -23,8 +23,8 @@ every request it owns.
 - Any number of instances MUST be able to run behind a load balancer without sticky sessions.
   PostgreSQL is the single source of truth for shared state: registered IG packages, profiles and
   the active validator configuration/state.
-- In-memory structures (Caffeine caches in `CachingService`, the validator registry in
-  `FhirValidationService`, NPM support caches) MUST be derived, rebuildable caches. Losing them
+- In-memory structures (the validator registry `ValidatorRegistry`, the profile stores, the IG package
+  cache) MUST be derived, rebuildable caches. Losing them
   MUST NOT lose data; an instance MUST be able to rebuild them from PostgreSQL.
 - Every feature spec/plan that adds or mutates shared state MUST describe how caches stay
   consistent across instances (e.g. PostgreSQL `LISTEN/NOTIFY`, versioned state rows, TTL-based
@@ -166,22 +166,9 @@ place.
 
 ### Known Baseline Deviations
 
-Existing code that predates this constitution and does not yet comply. These are recorded, not
-rewritten; touching the affected code SHOULD bring it into compliance, and new code MUST NOT copy
-these patterns.
+None open. The seven deviations recorded at ratification (static `HashMap` registries, callback-style
+`executeBlocking`, wildcard CORS, no metrics or correlation ids, README claiming Redis and Java 11, a hard-coded
+upload limit, no changelog) were resolved by feature `001-service-hardening` (see `CHANGELOG.md`, 1.0.0). New code
+MUST NOT reintroduce them.
 
-1. `FhirValidationService.validationServicesStorage` and
-   `CustomNpmPackageValidationSupport.NPM_PACKAGE_VALIDATION_SUPPORT_CACHE` are static `HashMap`s:
-   not thread-safe and invisible to other instances (Principle II).
-2. `FhirValidationService` and `DatabaseService` use the deprecated callback form of
-   `executeBlocking` (Principle I).
-3. CORS in `MainVerticle.setCros` allows all origins via `addRelativeOrigin(".*")` and is not
-   configurable (Security & Compliance).
-4. No Prometheus metrics endpoint and no request/correlation id in logs (Principle VII).
-5. README states Redis is used, but only Caffeine (`CachingService`) exists; README states
-   "Java 11 or higher", but `pom.xml` targets Java 17 (Governance: docs must match).
-6. Upload limit (`MAX_UPLOAD_SIZE`, 20 MB) is a hard-coded constant, not configuration
-   (Principle VI).
-7. No changelog file exists yet (Development Workflow & Quality Gates).
-
-**Version**: 1.0.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-10-25
+**Version**: 1.0.1 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-10-25

@@ -1,17 +1,46 @@
 {
+  "profile": "prod",
   "http": {
     "port": 8880,
-    "timeout": 30000,
-    "retries": 3,
-    "backoff": {
-      "initial": 1000,
-      "max": 10000
+    "maxBodyMb": 20,
+    "cors": {
+      "allowedOrigins": ""
     }
   },
-  "package": {
-    "servers": {
-      "maxConcurrent": 3,
-      "timeout": 30000
-    }
+  "validation": {
+    "timeoutMs": 30000
+  },
+  "packages": {
+    "workers": 2,
+    "cacheMaxMb": 256,
+    "sources": "packages.fhir.org,packages2.fhir.org",
+    "registryEnabled": true,
+    "fetchTimeoutMs": 30000,
+    "maxCompressedMb": 50,
+    "maxExpandedMb": 500,
+    "maxEntries": 20000,
+    "maxRatio": 100
+  },
+  "sync": {
+    "pollIntervalMs": 5000
+  },
+  "auth": {
+    "anonymousValidate": true,
+    "cacheTtlMs": 30000
+  },
+  "health": {
+    "dbStalenessMs": 10000
+  },
+  "shutdown": {
+    "preDrainMs": 5000,
+    "graceMs": 20000
+  },
+  "pg": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "fhir_validator",
+    "user": "postgres",
+    "poolSize": 15,
+    "sslMode": "prefer"
   }
 }

@@ -76,3 +76,7 @@ logs/
 var/
 .run/
 wiki/
+
+### Local environment (secrets) ###
+.env
+compose.override.yaml

@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN">
+<Configuration status="WARN" packages="io.reactiverse.contextual.logging">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <!-- %vcl{requestId} = correlation id of the request being served (empty outside requests) -->
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level [%vcl{requestId:-}] %logger{36} - %msg%n"/>
         </Console>
     </Appenders>
     <Loggers>
         <Root level="info">
             <AppenderRef ref="Console"/>
         </Root>
-        <Logger name="nzi.fhir.validator" level="debug"/>
-        <Logger name="org.flywaydb.core" level="debug" />
+        <!-- Resource bodies may contain PHI: never log them above DEBUG. -->
+        <Logger name="nzi.fhir.validator" level="info"/>
+        <Logger name="org.flywaydb.core" level="info" />
     </Loggers>
 </Configuration>

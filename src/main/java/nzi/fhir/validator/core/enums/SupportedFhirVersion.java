@@ -2,17 +2,56 @@ package nzi.fhir.validator.core.enums;
 
 import org.apache.commons.lang3.Validate;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
 /**
- * Enum representing the supported FHIR versions.
- * 
+ * Enum representing the FHIR versions known to the service. Only {@link #isEnabled() enabled} versions are served;
+ * R6 is known (it exists in the database enum type) but disabled until separately specified.
+ *
  * @author Md Nazrul Islam
  */
 public enum SupportedFhirVersion {
-    STU3,
-    R4,
-    R4B,
-    R5,
-    R6;
+    STU3(true),
+    R4(true),
+    R4B(true),
+    R5(true),
+    R6(false);
+
+    private final boolean enabled;
+
+    SupportedFhirVersion(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * @return the enabled versions in declaration order (STU3, R4, R4B, R5)
+     */
+    public static List<SupportedFhirVersion> enabled() {
+        return Arrays.stream(values()).filter(SupportedFhirVersion::isEnabled).toList();
+    }
+
+    /**
+     * Parses a path/version parameter case-insensitively, accepting enabled versions only.
+     */
+    public static Optional<SupportedFhirVersion> parseEnabled(String version) {
+        if (version == null || version.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            SupportedFhirVersion v = valueOf(version.trim().toUpperCase(Locale.ROOT));
+            return v.isEnabled() ? Optional.of(v) : Optional.empty();
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
     /**
      * Checks if a given string is a valid FHIR version.
      *
@@ -23,7 +62,7 @@ public enum SupportedFhirVersion {
         if (version == null) {
             return false;
         }
-        
+
         try {
             valueOf(version.toUpperCase());
             return true;

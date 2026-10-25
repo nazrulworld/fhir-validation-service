@@ -37,3 +37,12 @@ out/
 
 # Environment files (optional, include if sensitive)
 .env
+# Spec-kit / tooling / non-runtime content
+specs/
+.specify/
+.claude/
+.mcp.json
+perf/
+scripts/
+docs/
+.env*

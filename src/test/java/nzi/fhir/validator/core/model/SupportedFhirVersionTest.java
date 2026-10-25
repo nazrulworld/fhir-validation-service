@@ -33,6 +33,28 @@ public class SupportedFhirVersionTest {
     }
     
     @Test
+    public void parseEnabledIsCaseInsensitiveAndOnlyAcceptsEnabledVersions() {
+        assertEquals(java.util.Optional.of(SupportedFhirVersion.R4), SupportedFhirVersion.parseEnabled("r4"));
+        assertEquals(java.util.Optional.of(SupportedFhirVersion.STU3), SupportedFhirVersion.parseEnabled("STU3"));
+        assertEquals(java.util.Optional.of(SupportedFhirVersion.R4B), SupportedFhirVersion.parseEnabled("r4B"));
+        assertTrue(SupportedFhirVersion.parseEnabled("R6").isEmpty(), "R6 exists but is not enabled");
+        assertTrue(SupportedFhirVersion.parseEnabled("2b6c6a3e-1f1e-4a51-9d55-0a1b2c3d4e5f").isEmpty());
+        assertTrue(SupportedFhirVersion.parseEnabled("").isEmpty());
+        assertTrue(SupportedFhirVersion.parseEnabled(null).isEmpty());
+    }
+
+    @Test
+    public void enabledVersionsAreStu3ToR5() {
+        assertTrue(SupportedFhirVersion.STU3.isEnabled());
+        assertTrue(SupportedFhirVersion.R4.isEnabled());
+        assertTrue(SupportedFhirVersion.R4B.isEnabled());
+        assertTrue(SupportedFhirVersion.R5.isEnabled());
+        assertFalse(SupportedFhirVersion.R6.isEnabled());
+        assertEquals(java.util.List.of(SupportedFhirVersion.STU3, SupportedFhirVersion.R4, SupportedFhirVersion.R4B, SupportedFhirVersion.R5),
+                SupportedFhirVersion.enabled());
+    }
+
+    @Test
     public void testGetDefault() {
         // Test default version
         assertEquals(SupportedFhirVersion.R4, SupportedFhirVersion.getDefault(), 

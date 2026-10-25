@@ -1,0 +1,5 @@
+failure-threshold: warning
+ignored:
+  # Pinning apt package versions on a moving base image (eclipse-temurin:17-jre-jammy) breaks rebuilds;
+  # the base image tag is the version boundary.
+  - DL3008

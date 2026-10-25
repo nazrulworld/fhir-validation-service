@@ -4,73 +4,75 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.pgclient.PgConnectOptions;
-import nzi.fhir.validator.core.config.PgConfig;
+import nzi.fhir.validator.core.concurrency.Executors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 
 import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 
 /**
+ * Applies Flyway migrations on the package worker pool. If the database is not reachable yet, retries with
+ * exponential backoff (1 s to 30 s) until it is; the instance stays not-ready meanwhile.
+ *
  * @author Md Nazrul Islam
  */
-public class DatabaseService {
+public final class DatabaseService {
     private static final Logger logger = LogManager.getLogger(DatabaseService.class);
-    private final Vertx vertx;
+    private static final long INITIAL_BACKOFF_MS = 1_000;
+    private static final long MAX_BACKOFF_MS = 30_000;
 
-    private DatabaseService(Vertx vertx) {
-        this.vertx = vertx;
+    private DatabaseService() {
     }
 
-    public static Future<DatabaseService> start(Vertx vertx) {
-        DatabaseService service = new DatabaseService(vertx);
-        return service.migrateDatabase()
-                .map(service);
+    public static String jdbcUrl(PgConnectOptions options) {
+        String ssl = options.getSslMode() == null ? "prefer" : options.getSslMode().name().toLowerCase().replace('_', '-');
+        return "jdbc:postgresql://%s:%d/%s?sslmode=%s".formatted(options.getHost(), options.getPort(), options.getDatabase(), ssl);
     }
 
-    private Future<Void> migrateDatabase() {
+    public static FluentConfiguration flywayBuilder(PgConnectOptions options) {
+        return Flyway.configure()
+                .dataSource(jdbcUrl(options), options.getUser(), options.getPassword())
+                .schemas(DB_POSTGRES_SCHEMA_NAME)
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0");
+    }
+
+    public static Flyway flyway(PgConnectOptions options) {
+        return flywayBuilder(options).load();
+    }
+
+    /**
+     * Migrates the database, retrying until it succeeds.
+     */
+    public static Future<Void> migrate(Vertx vertx, Executors executors, PgConnectOptions options) {
         Promise<Void> promise = Promise.promise();
-        PgConnectOptions dbOptions = PgConfig.createPgOptions();
-        
-        vertx.executeBlocking(blocking -> {
-            try {
-                String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?DatabaseType=postgresql",
-                        dbOptions.getHost(),
-                        dbOptions.getPort(),
-                        dbOptions.getDatabase());
+        attempt(vertx, executors, options, INITIAL_BACKOFF_MS, promise);
+        return promise.future();
+    }
 
-                Flyway flyway = Flyway.configure()
-                        .dataSource(
-                                jdbcUrl,
-                                dbOptions.getUser(),
-                                dbOptions.getPassword()
-                        )
-                        .schemas(DB_POSTGRES_SCHEMA_NAME)
-                        .locations("classpath:db/migration")
-                        .baselineOnMigrate(true)
-                        .baselineVersion("0")
-                        .load();
-
-                try {
-                    flyway.migrate();
-                    logger.info("Database migration completed successfully with Flyway");
-                    blocking.complete();
-                } catch (Exception e) {
-                    logger.error("Flyway migration failed: {}", e.getMessage(), e);
-                    blocking.fail(new RuntimeException("Flyway migration failed", e));
-                }
-            } catch (Exception e) {
-                logger.error("Failed to configure Flyway: {}", e.getMessage(), e);
-                blocking.fail(new RuntimeException("Failed to configure Flyway", e));
-            }
-        }).onComplete(result -> {
-            if (result.succeeded()) {
+    private static void attempt(Vertx vertx, Executors executors, PgConnectOptions options, long backoffMs, Promise<Void> promise) {
+        executors.packages().<Void>executeBlocking(() -> {
+            flyway(options).migrate();
+            return null;
+        }, false).onComplete(ar -> {
+            if (ar.succeeded()) {
+                logger.info("Database migration completed");
                 promise.complete();
             } else {
-                promise.fail(result.cause());
+                logger.warn("Database migration failed ({}); retrying in {} ms", rootMessage(ar.cause()), backoffMs);
+                vertx.setTimer(backoffMs, id -> attempt(vertx, executors, options, Math.min(backoffMs * 2, MAX_BACKOFF_MS), promise));
             }
         });
+    }
 
-        return promise.future();
+    private static String rootMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getClass().getSimpleName() + ": " + cur.getMessage();
     }
 }

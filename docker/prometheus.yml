@@ -3,15 +3,16 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'fhir-validator'
-    metrics_path: '/metrics'
+  - job_name: fhir-validator
+    metrics_path: /metrics
     static_configs:
-      - targets: ['fhir-validator:8880']
+      # validator-2 exists only with the `cluster` profile; Prometheus reports it as down otherwise.
+      - targets: ['validator:8880', 'validator-2:8880']
 
-  - job_name: 'postgres'
+  - job_name: postgres
     static_configs:
       - targets: ['postgres-exporter:9187']
 
-  - job_name: 'prometheus'
+  - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
