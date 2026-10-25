@@ -67,7 +67,10 @@ Body unchanged (`igPackageId`, `igPackageVersion` default `latest`). Responses:
 | 401/403, 400, 500 | `Problem` |
 
 Success means the change is **committed**. Other instances apply it within the propagation window
-(SC-002). The response doesn't wait for them.
+(SC-002). The response doesn't wait for them. It waits for the answering instance's own rebuild for at
+most min(10 s, `FV_HTTP_REQUEST_TIMEOUT_MS`/2); after that it answers 200 with a "still rebuilding"
+entry in `warnings` while the rebuild continues (FR-020). Warnings are curated text and never carry
+exception messages.
 
 ### `POST /{version}/register-profile`
 

@@ -7,10 +7,11 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | Env var | Config key | Default | Bounds / notes |
 |---------|-----------|---------|----------------|
 | `FV_PROFILE` | `profile` | `prod` | `dev` allows a missing DB password, an ephemeral port and insecure package sources (tests) |
-| `FV_LOG_FORMAT` | `log.format` | `text` | `text` or `json` (one JSON object per line; `contextMap.requestId` carries the correlation id). Read by Log4j at startup |
+| `FV_CONFIG_FILE` | *(none)* | *(unset)* | Optional JSON file of settings, below environment variables in precedence. It may not set `log.format` (startup fails): use `FV_LOG_FORMAT` |
+| `FV_LOG_FORMAT` | `log.format` | `text` | `text` or `json` (one JSON object per line; `contextMap.requestId` carries the correlation id). Read by Log4j at startup, so environment variable or system property only |
 | `FV_HTTP_PORT` | `http.port` | `8880` | 1–65535 (fixes D6); `0` = ephemeral port, only with `FV_PROFILE=dev` (tests) |
 | `FV_HTTP_INSTANCES` | `http.instances` | min(cores, 8) | 1–64 |
-| `FV_HTTP_MAX_BODY_MB` | `http.maxBodyMb` | `20` | 1–200 |
+| `FV_HTTP_MAX_BODY_MB` | `http.maxBodyMb` | `20` | 1–200. IG uploads (`/igs/upload`) are limited instead by max(this, `FV_PACKAGE_MAX_COMPRESSED_MB` + 1), so an oversized archive gets `package-too-large` |
 | `FV_HTTP_REQUEST_TIMEOUT_MS` | `http.requestTimeoutMs` | `60000` | 1000–600000. A request not completed in time is answered 503 `not-ready` with `Retry-After` (FR-020) |
 | `FV_CORS_ALLOWED_ORIGINS` | `http.cors.allowedOrigins` | *(empty → CORS off)* | Comma-separated exact origins. `*` is refused when `FV_PROFILE=prod` |
 | `FV_VALIDATION_WORKERS` | `validation.workers` | cores | 1–256 |

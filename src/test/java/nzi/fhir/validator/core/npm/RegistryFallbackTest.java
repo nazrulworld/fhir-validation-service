@@ -52,6 +52,13 @@ class RegistryFallbackTest extends BaseTestContainer {
             hits.incrementAndGet();
             if (req.path().equals("/example.remote/1.2.0")) {
                 req.response().end(Buffer.buffer(PACKAGE));
+            } else if (req.path().equals("/example.tagged")) {
+                // The registry's "latest" tag follows publication order; the version list is authoritative.
+                req.response().end(new JsonObject()
+                        .put("dist-tags", new JsonObject().put("latest", "1.5.0"))
+                        .put("versions", new JsonObject().put("1.5.0", new JsonObject()).put("2.0.0", new JsonObject())
+                                .put("2.1.0-ballot", new JsonObject()))
+                        .encode());
             } else if (req.path().equals("/example.remote")) {
                 req.response().end(new JsonObject().put("dist-tags", new JsonObject().put("latest", "1.2.0")).encode());
             } else {
@@ -123,6 +130,18 @@ class RegistryFallbackTest extends BaseTestContainer {
         manager(vertx, 1_000, hangs, fast404, slowHas).resolveVersion("example.remote", "latest", false)
                 .onComplete(ctx.succeeding(version -> ctx.verify(() -> {
                     assertEquals("1.2.0", version);
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * FR-025 / US5-AC2: "latest" is the highest released version in the registry listing, not its latest tag.
+     */
+    @Test
+    void latestLookupUsesVersionOrderingOverTheRegistryTag(Vertx vertx, VertxTestContext ctx) {
+        manager(vertx, 2_000, slowHas).resolveVersion("example.tagged", "latest", false)
+                .onComplete(ctx.succeeding(version -> ctx.verify(() -> {
+                    assertEquals("2.0.0", version);
                     ctx.completeNow();
                 })));
     }

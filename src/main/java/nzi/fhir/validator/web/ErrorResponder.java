@@ -25,6 +25,8 @@ public final class ErrorResponder {
     private static final Logger logger = LogManager.getLogger(ErrorResponder.class);
 
     public static final String PROBLEM_JSON = "application/problem+json";
+    /** Routing-context key: the problem type to use for a 413 on this route instead of {@code payload-too-large}. */
+    public static final String TOO_LARGE_TYPE = "fv.tooLargeType";
     public static final String TYPE_BASE = "https://nazrulworld.github.io/fhir-validation-service/problems/";
 
     private static final Map<String, String> TITLES = Map.ofEntries(
@@ -129,6 +131,9 @@ public final class ErrorResponder {
             status = 500;
         }
         String type = DEFAULT_TYPES.getOrDefault(status, status >= 500 ? "internal-error" : "invalid-request");
+        if (status == 413 && ctx.get(TOO_LARGE_TYPE) != null) {
+            type = ctx.get(TOO_LARGE_TYPE);
+        }
         if (status >= 500) {
             logger.error("Request failed: {} {}", ctx.request().method(), ctx.request().path(), failure);
         }

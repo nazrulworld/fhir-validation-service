@@ -11,12 +11,15 @@ import io.vertx.junit5.VertxTestContext;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import nzi.fhir.validator.testsupport.AppHarness;
 import nzi.fhir.validator.testsupport.Fixtures;
+import nzi.fhir.validator.testsupport.TestPackages;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
@@ -159,6 +162,60 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     JsonObject body = r.bodyAsJsonObject();
                     assertFalse(body.containsKey("conformance"), "B21: no fake conformance verdict");
                     assertFalse(body.getJsonArray("files").isEmpty());
+                    ctx.completeNow();
+                })));
+    }
+
+    private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> include(String name) {
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R5/include-ig")).timeout(10_000)
+                .sendJsonObject(new JsonObject().put("igPackageId", name).put("igPackageVersion", "1.0.0"));
+    }
+
+    private void restoreLocalApply() {
+        var services = app.bootstrap().services();
+        services.igPackageService().setApplyLocally(services.configSync()::syncNow);
+        services.igPackageService().setLocalApplyWaitMs(10_000);
+    }
+
+    /**
+     * Constitution IV regression: a committed include whose local apply fails reports curated text, never the cause.
+     */
+    @Test
+    void includeWarningsContainNoInternalMessages(VertxTestContext ctx) {
+        var igs = app.bootstrap().services().igPackageService();
+        igs.registerIg(TestPackages.npmPackage("example.warn", "1.0.0", Map.of(), List.of()))
+                .compose(p -> {
+                    igs.setApplyLocally(v -> Future.failedFuture(new IllegalStateException("secret-internal")));
+                    return include("example.warn");
+                })
+                .onComplete(ar -> restoreLocalApply())
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    String warnings = r.bodyAsJsonObject().getJsonArray("warnings").encode();
+                    assertFalse(warnings.contains("secret-internal") || warnings.contains("Exception"), warnings);
+                    assertTrue(warnings.contains("/health"), warnings);
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * FR-020: a slow local rebuild does not hold the include answer past the bounded wait.
+     */
+    @Test
+    void includeAnswersWhileTheLocalRebuildIsStillRunning(VertxTestContext ctx) {
+        var igs = app.bootstrap().services().igPackageService();
+        igs.registerIg(TestPackages.npmPackage("example.slow", "1.0.0", Map.of(), List.of()))
+                .compose(p -> {
+                    igs.setApplyLocally(v -> io.vertx.core.Promise.<Void>promise().future()); // never completes
+                    igs.setLocalApplyWaitMs(300);
+                    return include("example.slow");
+                })
+                .onComplete(ar -> restoreLocalApply())
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    JsonObject body = r.bodyAsJsonObject();
+                    assertNotNull(body.getLong("revision"));
+                    assertTrue(body.getJsonArray("warnings").encode().contains("still rebuilding"), body.encode());
                     ctx.completeNow();
                 })));
     }

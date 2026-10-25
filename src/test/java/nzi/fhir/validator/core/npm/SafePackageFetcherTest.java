@@ -156,4 +156,21 @@ class SafePackageFetcherTest {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * FR-020: a source sending a malformed Content-Length is a bad source response (400), not an internal error.
+     */
+    @Test
+    void malformedContentLengthIsABadSourceResponse(Vertx vertx, VertxTestContext ctx) {
+        vertx.createNetServer()
+                .connectHandler(socket -> socket.handler(request -> socket.write(
+                        "HTTP/1.1 200 OK\r\nContent-Length: 12abc\r\nConnection: close\r\n\r\npackage-data").onComplete(v -> socket.close())))
+                .listen(0)
+                .compose(raw -> localInsecure(vertx).fetch("http://localhost:" + raw.actualPort() + "/pkg.tgz")
+                        .eventually(() -> raw.close()))
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertProblem(err, 400, "invalid-request");
+                    ctx.completeNow();
+                })));
+    }
 }

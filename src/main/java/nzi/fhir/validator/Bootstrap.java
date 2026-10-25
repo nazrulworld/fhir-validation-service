@@ -147,8 +147,8 @@ public final class Bootstrap {
 
     /**
      * Graceful stop (FR-029): readiness turns 503, wait {@code FV_SHUTDOWN_PRE_DRAIN_MS} so load balancers notice,
-     * wait for in-flight requests up to {@code FV_SHUTDOWN_GRACE_MS}, then close the HTTP servers and release
-     * connections and pools.
+     * then refuse new requests (503) while in-flight ones finish, up to {@code FV_SHUTDOWN_GRACE_MS}, then close the
+     * HTTP servers and release connections and pools.
      */
     public Future<Void> stop() {
         ApplicationConfig config = services.config();
@@ -156,7 +156,11 @@ public final class Bootstrap {
         logger.info("drain started ({} request(s) in flight)", services.inFlight().get());
         Future<Void> preDrain = config.shutdownPreDrainMs() > 0 ? vertx.timer(config.shutdownPreDrainMs()).mapEmpty() : Future.succeededFuture();
         return preDrain
-                .compose(v -> awaitIdle(System.currentTimeMillis() + config.shutdownGraceMs()))
+                .compose(v -> {
+                    // Load balancers have had the pre-drain window to notice; from now on no new work is accepted.
+                    services.refusingNewRequests().set(true);
+                    return awaitIdle(System.currentTimeMillis() + config.shutdownGraceMs());
+                })
                 .onComplete(ar -> logger.info("drain complete ({} request(s) still in flight)", services.inFlight().get()))
                 .eventually(() -> services.stop())
                 .eventually(() -> vertx.undeploy(deploymentId))

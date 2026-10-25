@@ -336,13 +336,17 @@ public class PostgresPackageCacheManager {
         });
     }
 
+    /**
+     * The highest released version in a registry listing (FR-025). The registry's {@code dist-tags.latest} follows
+     * publication order, so it is only a fallback for listings without a version list.
+     */
     private static Optional<String> latestFromListing(JsonObject listing) {
-        JsonObject tags = listing.getJsonObject("dist-tags");
-        if (tags != null && tags.getString("latest") != null) {
-            return Optional.of(tags.getString("latest"));
-        }
         JsonObject versions = listing.getJsonObject("versions");
-        return versions == null ? Optional.empty() : PackageVersionComparator.max(versions.fieldNames());
+        if (versions != null && !versions.isEmpty()) {
+            return PackageVersionComparator.max(versions.fieldNames());
+        }
+        JsonObject tags = listing.getJsonObject("dist-tags");
+        return tags == null ? Optional.empty() : Optional.ofNullable(tags.getString("latest"));
     }
 
     public static JsonObject createNpmPackageMeta(NpmPackage npmPackage) {
