@@ -67,6 +67,7 @@ public class SnapshotBuilder {
                 archiveBytes += f.result().archiveBytes();
             }
             ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages, profileStore);
+            completeProfiles(snapshot);
             snapshot.setPackageArchiveBytes(archiveBytes);
             // Warm caches so the first real request does not pay HAPI's lazy initialisation.
             snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
@@ -99,6 +100,17 @@ public class SnapshotBuilder {
                             .onSuccess(pkg -> cache.put(idAndVersion, pkg, bytes.length))
                             .map(pkg -> new Loaded(pkg, bytes.length));
                 });
+    }
+
+    /**
+     * Profiles stored before their base IG package was available still lack a snapshot: generate it against this
+     * snapshot's packages before the snapshot is published (see {@link SnapshotPregenerator}).
+     */
+    private static void completeProfiles(ValidatorSnapshot snapshot) {
+        int completed = snapshot.profileStore().ensureSnapshots(snapshot.reusableSupports());
+        if (completed > 0) {
+            logger.info("Generated snapshots for {} stored profile(s) of {}", completed, snapshot.version());
+        }
     }
 
     public PackageCache cache() {
@@ -140,6 +152,7 @@ public class SnapshotBuilder {
         return executors.packages().executeBlocking(() -> {
             ValidatorSnapshot snapshot = assembleWith(current.version(), current.revision(), current.resolvedPackages(),
                     current.reusableSupports(), current.profileStore());
+            completeProfiles(snapshot);
             snapshot.setPackageArchiveBytes(current.packageArchiveBytes());
             snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
             return snapshot;

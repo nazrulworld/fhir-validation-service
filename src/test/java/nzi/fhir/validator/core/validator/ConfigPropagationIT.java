@@ -182,4 +182,29 @@ class ConfigPropagationIT extends BaseTestContainer {
                 .compose(v -> Await.until(vertx, PROPAGATION_MS, "earlier-started profile reaches B", () -> bEnforces(early, "birthDate")))
                 .onComplete(ctx.succeedingThenComplete());
     }
+
+    /**
+     * A local apply (as after a profile registration) must not complete while a background sync of the same version
+     * is still applying: otherwise the caller returns before its own change took effect on this instance.
+     */
+    @Test
+    void localSyncWaitsForABackgroundSyncInFlight(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.atomic.AtomicBoolean backgroundDone = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        ConfigSync sync = b.services().configSync();
+        sync.setProfileRefreshOverride(v -> calls.incrementAndGet() == 1
+                ? vertx.timer(500).map(t -> {
+                    backgroundDone.set(true);
+                    return 0;
+                })
+                : Future.succeededFuture(0));
+        sync.sync(SupportedFhirVersion.R4);
+        sync.syncNow(SupportedFhirVersion.R4)
+                .onComplete(ar -> sync.setProfileRefreshOverride(null))
+                .onComplete(ctx.succeeding(v -> ctx.verify(() -> {
+                    assertTrue(backgroundDone.get(), "syncNow completed while the background sync was still running");
+                    assertEquals(2, calls.get(), "both syncs ran, one after the other");
+                    ctx.completeNow();
+                })));
+    }
 }
