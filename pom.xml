@@ -14,12 +14,13 @@
 
     <properties>
         <testcontainers.version>1.21.4</testcontainers.version>
-        <jackson.version>2.17.1</jackson.version>
+        <!-- Jackson BOM version (all Jackson modules, incl. transitive ones); matches vertx-dependencies. -->
+        <jackson.version>2.21.7</jackson.version>
         <vertx.version>4.5.35</vertx.version>
         <!-- Must match the Netty version Vert.x is built with (vertx-dependencies). -->
         <netty.version>4.1.139.Final</netty.version>
         <!-- Must match the SCRAM client vertx-pg-client is built against. -->
-        <scram.version>3.2</scram.version>
+        <scram.version>3.3</scram.version>
         <micrometer.version>1.12.13</micrometer.version>
         <contextual-logging.version>1.2.1</contextual-logging.version>
 
@@ -30,6 +31,19 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- One Jackson version for every module; jackson-annotations uses the BOM's own "2.21" label. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
     <!-- For macOS -->
@@ -56,17 +70,14 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <!-- Vert.x Core -->
         <dependency>
