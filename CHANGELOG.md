@@ -74,6 +74,14 @@ Upgrading from 0.1.x moves data out of the container: follow [docs/upgrade-1.0.m
   handling, unconfigurable port, hard-coded DNS, health checks, unpinned images, untested publishing).
 - Earlier releases stored profiles and package metadata as JSON strings; migration V3 repairs them.
 
+### Security
+
+- Dependency upgrades closing 12 CRITICAL vulnerabilities reported by Trivy in the image: HAPI FHIR 8.2.0 → 8.12.1
+  (HL7 FHIR core 6.5.18 → 6.9.12: CVE-2026-33180, CVE-2026-34361, CVE-2026-55471) and Vert.x 4.5.14 → 4.5.35
+  (Netty 4.1.118 → 4.1.139: CVE-2026-75595). The Netty native transports now follow Vert.x's Netty version, the
+  SCRAM client moves to `com.ongres.scram:scram-client` 3.2 (required by the newer PostgreSQL client), and the
+  obsolete `org.codehaus.woodstox:woodstox-core-asl` pin, which shadowed the StAX API HAPI needs, is removed.
+
 ### Removed
 
 - The bundled PostgreSQL server, `docker/docker-entrypoint.sh`, `docker/init-scripts/`, `docker/postgres-init/init-database.sh`.

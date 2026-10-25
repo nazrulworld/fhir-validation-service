@@ -15,12 +15,17 @@
     <properties>
         <testcontainers.version>1.21.4</testcontainers.version>
         <jackson.version>2.17.1</jackson.version>
-        <vertx.version>4.5.14</vertx.version>
+        <vertx.version>4.5.35</vertx.version>
+        <!-- Must match the Netty version Vert.x is built with (vertx-dependencies). -->
+        <netty.version>4.1.139.Final</netty.version>
+        <!-- Must match the SCRAM client vertx-pg-client is built against. -->
+        <scram.version>3.2</scram.version>
         <micrometer.version>1.12.13</micrometer.version>
         <contextual-logging.version>1.2.1</contextual-logging.version>
 
-        <hapi-fhir.version>8.2.0</hapi-fhir.version>
-        <fhir.utilities.version>6.5.18</fhir.utilities.version>
+        <hapi-fhir.version>8.12.1</hapi-fhir.version>
+        <!-- HL7 FHIR core shipped with hapi-fhir (its fhir_core_version). -->
+        <fhir.utilities.version>6.9.12</fhir.utilities.version>
         <ph_schematron_version>7.1.2</ph_schematron_version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
@@ -31,7 +36,7 @@
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-transport-native-kqueue</artifactId>
-        <version>4.1.94.Final</version>
+        <version>${netty.version}</version>
         <classifier>osx-aarch_64</classifier>
     </dependency>
 
@@ -39,13 +44,13 @@
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-transport-native-epoll</artifactId>
-        <version>4.1.94.Final</version>
+        <version>${netty.version}</version>
         <classifier>linux-x86_64</classifier>
     </dependency>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-transport-native-epoll</artifactId>
-        <version>4.1.94.Final</version>
+        <version>${netty.version}</version>
         <classifier>linux-aarch_64</classifier>
     </dependency>
         <dependency>
@@ -271,20 +276,11 @@
             <artifactId>commons-compress</artifactId>
             <version>1.26.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.codehaus.woodstox</groupId>
-            <artifactId>woodstox-core-asl</artifactId>
-            <version>4.4.1</version>
-        </dependency>
+        <!-- SCRAM password auth for vertx-pg-client (an optional dependency there; PostgreSQL 16 defaults to SCRAM). -->
         <dependency>
             <groupId>com.ongres.scram</groupId>
-            <artifactId>common</artifactId>
-            <version>2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>com.ongres.scram</groupId>
-            <artifactId>client</artifactId>
-            <version>2.1</version>
+            <artifactId>scram-client</artifactId>
+            <version>${scram.version}</version>
         </dependency>
 
     <!-- Testcontainers core -->
