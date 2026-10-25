@@ -73,6 +73,14 @@ Upgrading from 0.1.x moves data out of the container: follow [docs/upgrade-1.0.m
 - F4, D1–D12: container, compose and CI defects (unbuildable image group, bundled database, committed `.env`, signal
   handling, unconfigurable port, hard-coded DNS, health checks, unpinned images, untested publishing).
 - Earlier releases stored profiles and package metadata as JSON strings; migration V3 repairs them.
+- Validations could fail intermittently (500, or a validator rebuild failing and the version answering 503) while
+  another thread used a new custom or IG profile for the first time. HL7 core's snapshot generator modifies the base
+  definition it works on, and HAPI shares the core definitions JVM-wide, so lazily generated snapshots raced with
+  concurrent validations (HAPI 8.4 and later). Missing snapshots are now generated up front, against private copies,
+  before profiles and IG packages become visible to validation.
+- Registering a profile or including an IG could complete before the change was applied on the answering instance,
+  when a notification-driven sync was applying it at the same time. Syncs of one FHIR version now run one after
+  another, so the call returns only once its change is in effect locally.
 
 ### Security
 

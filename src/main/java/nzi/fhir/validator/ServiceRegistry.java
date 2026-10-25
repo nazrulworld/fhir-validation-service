@@ -94,6 +94,7 @@ public final class ServiceRegistry {
         }
         SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()));
         ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, stores);
+        stores.forEach((v, store) -> store.setSnapshotSources(() -> registry.activeSupports(v)));
         ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), executors, registry, stores,
                 config.syncPollIntervalMs());
         igPackageService.setApplyLocally(sync::syncNow);
