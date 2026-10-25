@@ -52,7 +52,7 @@ jobs:
           sed -i "s|^FV_TAG=.*|FV_TAG=ci|" .env
           sh scripts/smoke.sh
       - name: Scan image (fail on CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
           severity: CRITICAL
