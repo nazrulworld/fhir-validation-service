@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Keeps this instance's validators in line with the shared configuration (research R4): a {@code LISTEN} on
@@ -41,6 +42,7 @@ public class ConfigSync {
     private PgSubscriber subscriber;
     private long pollTimer = -1;
     private volatile boolean notificationsEnabled = true;
+    private volatile Function<SupportedFhirVersion, Future<Integer>> profileRefreshOverride;
 
     public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, Executors executors,
                       ValidatorRegistry registry, Map<SupportedFhirVersion, ProfileStore> profileStores,
@@ -145,13 +147,26 @@ public class ConfigSync {
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
         ProfileStore store = profileStores.get(version);
-        return store.refreshChanged(pool, executors)
+        Function<SupportedFhirVersion, Future<Integer>> override = profileRefreshOverride;
+        Future<Integer> refreshed = override != null ? override.apply(version) : store.refreshChanged(pool, executors);
+        return refreshed
                 .compose(changed -> changed > 0 ? registry.refreshProfiles(version) : Future.<Void>succeededFuture())
+                .recover(err -> {
+                    // A newer committed configuration exists but its profiles cannot be applied: stop serving this
+                    // version rather than answer from the outdated one (FR-002). The poll retries.
+                    registry.markStale(version, "profile changes could not be applied");
+                    return Future.failedFuture(err);
+                })
                 .compose(v -> ConfigRevisionRepository.current(pool))
                 .compose(rows -> {
                     ConfigRevisionRepository.ConfigRow row = rows.get(version);
                     return row == null ? Future.succeededFuture() : registry.apply(version, row.revision(), row.resolved());
                 });
+    }
+
+    /** Test hook: replaces the profile refresh (e.g. with a failing one); {@code null} restores it. */
+    public void setProfileRefreshOverride(Function<SupportedFhirVersion, Future<Integer>> override) {
+        this.profileRefreshOverride = override;
     }
 
     /** Test hook: ignore notifications so only the poll fallback propagates changes. */

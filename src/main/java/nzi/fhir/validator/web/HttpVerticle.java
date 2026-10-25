@@ -1,9 +1,11 @@
 package nzi.fhir.validator.web;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.ext.web.openapi.RouterBuilderOptions;
@@ -28,6 +30,7 @@ import java.nio.file.Paths;
 public class HttpVerticle extends AbstractVerticle {
     private static final Logger logger = LogManager.getLogger(HttpVerticle.class);
     private static final String UPLOAD_DIR_NAME = "ig-uploads";
+    private static final String UPLOAD_PATH = "/igs/upload";
 
     private final ServiceRegistry services;
     private HttpServer server;
@@ -44,13 +47,10 @@ public class HttpVerticle extends AbstractVerticle {
                             .setMountResponseContentTypeHandler(true)
                             .setRequireSecurityHandlers(false));
                     routerBuilder.rootHandler(new RequestIdHandler());
-                    routerBuilder.rootHandler(new InFlightHandler(services.inFlight()));
+                    routerBuilder.rootHandler(new InFlightHandler(services.inFlight(), services.refusingNewRequests()));
                     routerBuilder.rootHandler(new RequestTimeoutHandler(services.config().httpRequestTimeoutMs()));
                     CorsConfig.create(services.config()).ifPresent(routerBuilder::rootHandler);
-                    routerBuilder.rootHandler(BodyHandler.create()
-                            .setUploadsDirectory(uploadDirectory())
-                            .setBodyLimit(services.config().httpMaxBodyMb() * 1024L * 1024L)
-                            .setDeleteUploadedFilesOnEnd(true));
+                    routerBuilder.rootHandler(bodyHandler());
                     routerBuilder.rootHandler(services.auth().rootHandler());
 
                     services.validationApi().includeRoutes(routerBuilder);
@@ -76,6 +76,38 @@ public class HttpVerticle extends AbstractVerticle {
 
     public int actualPort() {
         return server == null ? -1 : server.actualPort();
+    }
+
+    /**
+     * Request bodies are capped at {@code FV_HTTP_MAX_BODY_MB}, except IG uploads, which may be as large as
+     * {@code FV_PACKAGE_MAX_COMPRESSED_MB} plus multipart overhead so oversized archives get {@code package-too-large}
+     * from the archive check rather than a generic 413 (FR-014).
+     */
+    private Handler<RoutingContext> bodyHandler() {
+        String uploads = uploadDirectory();
+        long mib = 1024L * 1024L;
+        BodyHandler body = BodyHandler.create().setUploadsDirectory(uploads)
+                .setBodyLimit(services.config().httpMaxBodyMb() * mib).setDeleteUploadedFilesOnEnd(true);
+        long packageLimit = services.config().packageMaxCompressedMb() * mib;
+        long uploadLimit = Math.max(services.config().httpMaxBodyMb() * mib, packageLimit + mib);
+        BodyHandler upload = BodyHandler.create().setUploadsDirectory(uploads)
+                .setBodyLimit(uploadLimit).setDeleteUploadedFilesOnEnd(true);
+        return ctx -> {
+            if (!UPLOAD_PATH.equals(ctx.normalizedPath())) {
+                body.handle(ctx);
+                return;
+            }
+            // Refuse a declared oversized upload before reading it, with the package-specific problem type.
+            String length = ctx.request().getHeader("Content-Length");
+            if (length != null && length.matches("\\d{1,18}") && Long.parseLong(length) > uploadLimit) {
+                ctx.response().putHeader("Connection", "close");
+                ErrorResponder.fail(ctx, new ProblemException(413, "package-too-large",
+                        "The archive exceeds " + packageLimit / mib + " MB"));
+                return;
+            }
+            ctx.put(ErrorResponder.TOO_LARGE_TYPE, "package-too-large");
+            upload.handle(ctx);
+        };
     }
 
     private static String uploadDirectory() {

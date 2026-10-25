@@ -8,17 +8,20 @@ import nzi.fhir.validator.core.security.ApiKeyRepository.Role;
 import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Bearer API-key authorisation (FR-012): administrative operations always need an ADMIN key; validation and read
  * operations are anonymous unless {@code FV_AUTH_ANONYMOUS_VALIDATE=false}, then they need a VALIDATE or ADMIN key.
- * Key lookups are cached for {@code FV_AUTH_CACHE_TTL_MS}, so revocations take effect within that time.
+ * Key lookups are cached for {@code FV_AUTH_CACHE_TTL_MS}, so revocations take effect within that time. The cache
+ * holds at most {@value #DEFAULT_MAX_CACHED_KEYS} entries (least recently used evicted first), so callers sending many
+ * distinct tokens cannot grow it without bound (constitution Principle VI).
  */
 public class ApiKeyAuthHandler {
     public static final String CONTEXT_KEY = "apiKeyRole";
+    static final int DEFAULT_MAX_CACHED_KEYS = 10_000;
 
     private record Cached(Optional<KeyInfo> key, long expiresAt) {
     }
@@ -26,12 +29,31 @@ public class ApiKeyAuthHandler {
     private final ApiKeyRepository repository;
     private final long cacheTtlMs;
     private final boolean anonymousValidate;
-    private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+    private final int maxCachedKeys;
+    private final LinkedHashMap<String, Cached> cache;
 
     public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, boolean anonymousValidate) {
+        this(repository, cacheTtlMs, anonymousValidate, DEFAULT_MAX_CACHED_KEYS);
+    }
+
+    ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, boolean anonymousValidate, int maxCachedKeys) {
         this.repository = repository;
         this.cacheTtlMs = cacheTtlMs;
         this.anonymousValidate = anonymousValidate;
+        this.maxCachedKeys = maxCachedKeys;
+        this.cache = new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Cached> eldest) {
+                return size() > ApiKeyAuthHandler.this.maxCachedKeys;
+            }
+        };
+    }
+
+    /** Number of cached key lookups (tests, sizing). */
+    int cachedKeys() {
+        synchronized (cache) {
+            return cache.size();
+        }
     }
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
@@ -92,14 +114,21 @@ public class ApiKeyAuthHandler {
 
     private Future<Optional<KeyInfo>> lookup(String key) {
         String cacheKey = java.util.HexFormat.of().formatHex(ApiKeyRepository.hash(key));
-        Cached cached = cache.get(cacheKey);
         long now = System.currentTimeMillis();
-        if (cached != null && cached.expiresAt() > now) {
-            return Future.succeededFuture(cached.key());
+        synchronized (cache) {
+            Cached cached = cache.get(cacheKey);
+            if (cached != null) {
+                if (cached.expiresAt() > now) {
+                    return Future.succeededFuture(cached.key());
+                }
+                cache.remove(cacheKey);
+            }
         }
         return repository.findActive(key).onSuccess(info -> {
             if (cacheTtlMs > 0) {
-                cache.put(cacheKey, new Cached(info, now + cacheTtlMs));
+                synchronized (cache) {
+                    cache.put(cacheKey, new Cached(info, now + cacheTtlMs));
+                }
             }
         });
     }

@@ -111,6 +111,10 @@ class ConfigPropagationIT extends BaseTestContainer {
                                 () -> b.services().validatorRegistry().current(SupportedFhirVersion.R4));
                         assertEquals(503, e.status());
                         assertFalse(b.services().validatorRegistry().isReady());
+                        // The reason names the missing package, never exception classes or messages (Principle IV).
+                        String readiness = b.services().healthService().readiness().encode();
+                        assertTrue(readiness.contains("example.ghost#1.0.0"), readiness);
+                        assertFalse(readiness.contains("Exception") || readiness.contains("java."), readiness);
                         assertNotNull(b.services().validatorRegistry().current(SupportedFhirVersion.R5), "other versions keep serving");
                     });
                     return a.services().igPackageService().registerIg(TestPackages.npmPackage("example.ghost", "1.0.0", Map.of(), List.of()));
@@ -121,5 +125,61 @@ class ConfigPropagationIT extends BaseTestContainer {
                     assertTrue(b.services().validatorRegistry().isReady());
                     ctx.completeNow();
                 })));
+    }
+
+    /**
+     * FR-002: when B knows of a newer profile change but cannot apply it, B stops serving that version instead of
+     * answering from the outdated configuration, and recovers automatically once the refresh succeeds.
+     */
+    @Test
+    void failedProfileRefreshMakesVersionUnavailableUntilItRecovers(Vertx vertx, VertxTestContext ctx) {
+        String url = "http://example.org/fhir/StructureDefinition/unrefreshable";
+        b.services().configSync().setProfileRefreshOverride(v -> Future.failedFuture(new IllegalStateException("refresh failed")));
+        a.services().profileServices().get(SupportedFhirVersion.R4)
+                .registerProfile(TestPackages.requiredPatientElements(url, "birthDate"))
+                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "B marks R4 stale",
+                        () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.STALE)))
+                .compose(ms -> {
+                    ctx.verify(() -> {
+                        ProblemException e = assertThrows(ProblemException.class,
+                                () -> b.services().validatorRegistry().current(SupportedFhirVersion.R4));
+                        assertEquals(503, e.status());
+                        assertFalse(b.services().validatorRegistry().isReady());
+                        assertNotNull(b.services().validatorRegistry().current(SupportedFhirVersion.R5), "other versions keep serving");
+                    });
+                    b.services().configSync().setProfileRefreshOverride(null);
+                    return Await.until(vertx, PROPAGATION_MS, "B recovers once the refresh succeeds",
+                            () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.ACTIVE));
+                })
+                .compose(ms -> bEnforces(url, "birthDate"))
+                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
+                    assertTrue(enforced, "after recovery B validates with the new profile");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * FR-001/FR-003: profile change timestamps are transaction start times, so a registration that started earlier
+     * can commit after a later one. Both must still take effect on the other instance.
+     */
+    @Test
+    void overlappingProfileRegistrationsBothReachTheOtherInstance(Vertx vertx, VertxTestContext ctx) {
+        String early = "http://example.org/fhir/StructureDefinition/started-first";
+        String late = "http://example.org/fhir/StructureDefinition/committed-first";
+        var pool = a.services().pool();
+        pool.getConnection().compose(conn -> conn.begin().compose(tx -> conn
+                        // modified_at = now() is this transaction's start time, earlier than the registration below.
+                        .preparedQuery("INSERT INTO fhir_validator_schema.fhir_profiles (url, profile_json, fhir_version, modified_at) "
+                                + "VALUES ($1, $2, '4.0.1', now())")
+                        .execute(io.vertx.sqlclient.Tuple.of(early, TestPackages.requiredPatientElements(early, "birthDate")))
+                        .compose(r -> vertx.timer(200))
+                        .compose(t -> a.services().profileServices().get(SupportedFhirVersion.R4)
+                                .registerProfile(TestPackages.requiredPatientElements(late, "gender")))
+                        .compose(rev -> Await.until(vertx, PROPAGATION_MS, "later-started profile reaches B", () -> bEnforces(late, "gender")))
+                        .compose(ms -> ConfigRevisionRepository.bump(conn, SupportedFhirVersion.R4, ConfigRevisionRepository.KIND_PROFILE, early))
+                        .compose(rev -> tx.commit())
+                        .eventually(() -> conn.close())))
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "earlier-started profile reaches B", () -> bEnforces(early, "birthDate")))
+                .onComplete(ctx.succeedingThenComplete());
     }
 }

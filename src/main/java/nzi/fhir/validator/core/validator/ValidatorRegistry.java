@@ -172,7 +172,7 @@ public class ValidatorRegistry {
                 } else {
                     slot.status = Status.STALE;
                     slot.reason = describe(ar.cause());
-                    logger.error("Validator build for {} at revision {} failed: {}", version, revision, slot.reason);
+                    logger.error("Validator build for {} at revision {} failed", version, revision, ar.cause());
                     buildFailureListener.accept(version);
                 }
                 again = slot.dirty || (ar.succeeded() && !resolved.equals(slot.wantedResolved));
@@ -217,6 +217,23 @@ public class ValidatorRegistry {
             });
         }
         logger.info("Retrying validator build for {} in {} ms", version, delay);
+    }
+
+    /**
+     * Stops serving {@code version} (503, readiness false) because a newer committed configuration could not be
+     * applied (FR-002). A later successful {@link #apply} or build makes it ACTIVE again.
+     *
+     * @param reason curated text for {@code /health}; never an exception message
+     */
+    public void markStale(SupportedFhirVersion version, String reason) {
+        Slot slot = slot(version);
+        synchronized (slot) {
+            if (slot.snapshot != null && slot.status != Status.STALE) {
+                slot.status = Status.STALE;
+                slot.reason = reason;
+                logger.warn("Validator for {} is out of date: {}", version, reason);
+            }
+        }
     }
 
     /**
@@ -303,11 +320,15 @@ public class ValidatorRegistry {
         }
     }
 
+    /**
+     * Curated reason shown in {@code /health} and readiness: names a missing package, otherwise generic. Exception
+     * classes and messages go to the log only (constitution Principle IV).
+     */
     private static String describe(Throwable t) {
         if (t instanceof SnapshotBuilder.MissingPackageException) {
             return t.getMessage();
         }
-        return t.getClass().getSimpleName() + (t.getMessage() == null ? "" : ": " + t.getMessage());
+        return "validator build failed (see the instance log)";
     }
 
     public void close() {

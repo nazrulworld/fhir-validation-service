@@ -8,6 +8,8 @@ import io.vertx.ext.web.codec.BodyCodec;
 import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import io.vertx.pgclient.PgBuilder;
+import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.core.service.HealthService;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -124,5 +127,33 @@ class HealthApiTest extends BaseTestContainer {
                     testContext.completeNow();
                 })
                 .onFailure(testContext::failNow);
+    }
+
+    /**
+     * Constitution IV regression: an unreachable database is reported without the driver's error text.
+     */
+    @Test
+    void readinessDoesNotLeakDatabaseErrors(VertxTestContext testContext) {
+        Pool unreachable = PgBuilder.pool()
+                .connectingTo(new PgConnectOptions().setHost("127.0.0.1").setPort(1).setDatabase("x").setUser("x").setPassword("x"))
+                .using(vertx)
+                .build();
+        HealthService healthService = new HealthService(vertx, unreachable, 1_000).start();
+        vertx.setTimer(1_500, id -> RouterBuilder.create(vertx, "openapi.yaml")
+                .compose(routerBuilder -> {
+                    new HealthApi(routerBuilder, vertx, healthService);
+                    return vertx.createHttpServer().requestHandler(routerBuilder.createRouter()).listen(0);
+                })
+                .compose(server -> client.get(server.actualPort(), "localhost", "/health/readiness").send())
+                .onComplete(testContext.succeeding(response -> testContext.verify(() -> {
+                    healthService.stop();
+                    assertEquals(503, response.statusCode());
+                    String body = response.bodyAsString();
+                    assertFalse(body.contains("127.0.0.1") || body.contains("refused") || body.contains("Exception")
+                            || body.contains("java."), body);
+                    assertEquals("database not reachable",
+                            response.bodyAsJsonObject().getJsonArray("reasons").getString(0));
+                    testContext.completeNow();
+                }))));
     }
 }

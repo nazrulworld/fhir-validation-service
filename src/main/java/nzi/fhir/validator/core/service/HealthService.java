@@ -104,7 +104,8 @@ public class HealthService {
         }
         long age = System.currentTimeMillis() - lastDbSuccessAt;
         if (age > dbStalenessMs) {
-            reasons.add("database not reachable" + (lastDbError != null ? ": " + lastDbError : ""));
+            // The driver's error text names hosts and internals: it is logged by ping(), never returned (Principle IV).
+            reasons.add("database not reachable");
         }
         reasons.addAll(validatorReadiness.get());
         JsonObject result = new JsonObject()

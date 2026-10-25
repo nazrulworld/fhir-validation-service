@@ -1,6 +1,7 @@
 package nzi.fhir.validator.core.service;
 
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -34,14 +35,27 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
  */
 public class IgPackageService {
     private static final Logger logger = LogManager.getLogger(IgPackageService.class);
+    static final long DEFAULT_LOCAL_APPLY_WAIT_MS = 10_000;
+
+    private final Vertx vertx;
     private final Pool pgPool;
     private final PostgresPackageCacheManager cacheManager;
 
     private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
+    private volatile long localApplyWaitMs = DEFAULT_LOCAL_APPLY_WAIT_MS;
 
     private IgPackageService(Vertx vertx, Pool pgPool, PostgresPackageCacheManager cacheManager) {
+        this.vertx = vertx;
         this.pgPool = pgPool;
         this.cacheManager = cacheManager;
+    }
+
+    /**
+     * How long {@link #include} waits for this instance to apply a committed change before answering anyway, so a
+     * long validator rebuild never turns a committed include into a request timeout (FR-020).
+     */
+    public void setLocalApplyWaitMs(long waitMs) {
+        this.localApplyWaitMs = waitMs;
     }
 
     /**
@@ -59,11 +73,15 @@ public class IgPackageService {
      * Includes a stored IG package in the (global) validator configuration of {@code fhirVersion}, replacing any
      * other version of the same package. Resolution and the revision bump run in one transaction with the
      * configuration row locked, so concurrent includes serialise and every instance converges on one result.
-     * Completes after the change is applied on this instance; other instances follow via notification/poll.
+     * Completes after the change is applied on this instance, or after {@code localApplyWaitMs} with a warning while
+     * the rebuild continues in the background; other instances follow via notification/poll.
      *
      * @param requestedVersion an exact version, or {@code latest}/empty for the highest stored release
      * @return {@code {fhirVersion, revision, included, resolved, warnings}}
      */
+    static final String NOT_APPLIED_WARNING = "Committed; this instance has not applied it yet, see /health";
+    static final String STILL_APPLYING_WARNING = "Committed; this instance is still rebuilding its validator, see /health";
+
     public Future<JsonObject> include(SupportedFhirVersion fhirVersion, String name, String requestedVersion) {
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
@@ -101,13 +119,42 @@ public class IgPackageService {
                                         .put("resolved", new JsonArray(resolution.resolved())));
                     });
                 }))
-                .compose(result -> applyLocally.apply(fhirVersion)
+                .compose(result -> awaitLocal(applyLocally.apply(fhirVersion), warnings)
                         .recover(err -> {
-                            warnings.add("Committed, but this instance could not apply it yet: " + err.getMessage());
+                            // The cause goes to the log (with the request id); clients get curated text (Principle IV).
+                            logger.warn("Included IG {}#{} in {} is committed but not applied locally yet", name,
+                                    requestedVersion, fhirVersion, err);
+                            warnings.add(NOT_APPLIED_WARNING);
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
                 .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
+    }
+
+    /**
+     * {@code applied}, or success with a "still applying" warning once {@code localApplyWaitMs} has passed.
+     */
+    private Future<Void> awaitLocal(Future<Void> applied, List<String> warnings) {
+        if (applied.isComplete()) {
+            return applied;
+        }
+        Promise<Void> answer = Promise.promise();
+        long timer = vertx.setTimer(localApplyWaitMs, id -> {
+            if (!answer.future().isComplete()) {
+                // Add the warning first: completing the promise renders the response synchronously.
+                warnings.add(STILL_APPLYING_WARNING);
+                answer.tryComplete();
+            }
+        });
+        applied.onComplete(ar -> {
+            vertx.cancelTimer(timer);
+            if (ar.succeeded()) {
+                answer.tryComplete();
+            } else {
+                answer.tryFail(ar.cause());
+            }
+        });
+        return answer.future();
     }
 
     /**

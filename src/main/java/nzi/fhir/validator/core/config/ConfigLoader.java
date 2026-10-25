@@ -103,7 +103,13 @@ public final class ConfigLoader {
         JsonObject merged = classpathDefaults();
         String file = env.get("FV_CONFIG_FILE");
         if (file != null && !file.isBlank()) {
-            deepMerge(merged, readFile(file));
+            JsonObject fromFile = readFile(file);
+            JsonObject log = fromFile.getJsonObject("log");
+            if (log != null && log.containsKey("format")) {
+                // Log4j picks its layout before this loader runs, so a file value would be silently ignored (FR-028).
+                throw new IllegalStateException("Invalid FV_CONFIG_FILE: log.format cannot be set in a file; use FV_LOG_FORMAT");
+            }
+            deepMerge(merged, fromFile);
         }
         for (Entry e : ENTRIES) {
             String raw = blankToNull(env.get(e.env()));

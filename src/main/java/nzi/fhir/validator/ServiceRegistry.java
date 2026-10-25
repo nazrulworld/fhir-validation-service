@@ -30,6 +30,7 @@ import nzi.fhir.validator.web.endpoint.ValidationApi;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -53,6 +54,7 @@ public final class ServiceRegistry {
     private final SafePackageFetcher fetcher;
     private final AtomicInteger boundPort = new AtomicInteger(-1);
     private final AtomicInteger inFlight = new AtomicInteger();
+    private final AtomicBoolean refusingNewRequests = new AtomicBoolean();
     private ServiceMetrics metrics;
 
     private ServiceRegistry(ApplicationConfig config, Pool pool, Executors executors, HealthService healthService,
@@ -95,6 +97,7 @@ public final class ServiceRegistry {
         ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), executors, registry, stores,
                 config.syncPollIntervalMs());
         igPackageService.setApplyLocally(sync::syncNow);
+        igPackageService.setLocalApplyWaitMs(Math.min(10_000, config.httpRequestTimeoutMs() / 2));
         Map<SupportedFhirVersion, ProfileService> profileServices = new EnumMap<>(SupportedFhirVersion.class);
         stores.forEach((v, store) -> profileServices.put(v, new ProfileService(pool, executors, store, sync::syncNow)));
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
@@ -180,6 +183,11 @@ public final class ServiceRegistry {
     /** Requests currently being served (all HTTP verticle instances). */
     public AtomicInteger inFlight() {
         return inFlight;
+    }
+
+    /** Set once a drain has passed its pre-drain window: new requests are answered 503 (FR-029). */
+    public AtomicBoolean refusingNewRequests() {
+        return refusingNewRequests;
     }
 
     /** The port the HTTP server actually listens on (useful when configured with port 0). */

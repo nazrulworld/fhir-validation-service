@@ -50,6 +50,15 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void logFormatInConfigFileIsRefused(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("log", new JsonObject().put("format", "json")).encode());
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_CONFIG_FILE", file.toString(), "FV_PG_PASSWORD", "pw")));
+        assertTrue(e.getMessage().contains("FV_LOG_FORMAT"), e.getMessage());
+    }
+
+    @Test
     void legacyAliasesAreAcceptedButFvNamesWin() {
         ApplicationConfig aliasOnly = ConfigLoader.load(env("PG_HOST", "db1", "PG_PASSWORD", "pw"));
         assertEquals("db1", aliasOnly.pgHost());

@@ -148,9 +148,18 @@ public class SafePackageFetcher {
                         : new ProblemException(400, "invalid-request", "The package source answered HTTP " + status));
             }
             String length = resp.getHeader("Content-Length");
-            if (length != null && Long.parseLong(length.trim()) > maxBytes) {
-                req.reset();
-                return Future.failedFuture(tooLarge());
+            if (length != null) {
+                long declared;
+                try {
+                    declared = Long.parseLong(length.trim());
+                } catch (NumberFormatException e) {
+                    req.reset();
+                    return Future.failedFuture(invalidResponse());
+                }
+                if (declared > maxBytes) {
+                    req.reset();
+                    return Future.failedFuture(tooLarge());
+                }
             }
             Promise<Buffer> body = Promise.promise();
             Buffer data = Buffer.buffer();
@@ -165,7 +174,18 @@ public class SafePackageFetcher {
             resp.exceptionHandler(body::tryFail);
             resp.endHandler(v -> body.tryComplete(data));
             return body.future();
+        }).recover(err -> {
+            // A response the HTTP decoder rejects (e.g. a malformed Content-Length) is the source's fault, not ours.
+            // Connection failures and timeouts stay server-side errors (dependency failure).
+            if (err instanceof IllegalArgumentException || err instanceof io.netty.handler.codec.DecoderException) {
+                return Future.failedFuture(invalidResponse());
+            }
+            return Future.failedFuture(err);
         });
+    }
+
+    private static ProblemException invalidResponse() {
+        return new ProblemException(400, "invalid-request", "The package source sent an invalid HTTP response");
     }
 
     static boolean isNonPublic(InetAddress a) {

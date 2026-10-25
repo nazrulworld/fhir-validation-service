@@ -30,7 +30,14 @@ public class ProfileStore {
     private final SupportedFhirVersion version;
     private final FhirContext fhirContext;
     private final Map<String, IBaseResource> profiles = new ConcurrentHashMap<>();
+    /** Change timestamp of each loaded profile, so re-read rows that did not change are skipped. */
+    private final Map<String, OffsetDateTime> loadedAt = new ConcurrentHashMap<>();
     private static final OffsetDateTime EPOCH = OffsetDateTime.parse("1970-01-01T00:00:00Z");
+    /**
+     * {@code modified_at} is a transaction start time, so a registration can commit after one that started later.
+     * Incremental refreshes re-read this far back so such rows are not missed (FR-001, FR-003).
+     */
+    static final java.time.Duration COMMIT_ORDER_OVERLAP = java.time.Duration.ofSeconds(60);
     private volatile OffsetDateTime lastSeenChange = EPOCH;
 
     public ProfileStore(SupportedFhirVersion version, FhirContext fhirContext) {
@@ -79,10 +86,14 @@ public class ProfileStore {
     }
 
     /**
-     * Loads profiles changed since the last seen change timestamp (poll fallback and change notifications).
+     * Loads profiles changed since the last seen change timestamp, minus {@link #COMMIT_ORDER_OVERLAP} (poll fallback
+     * and change notifications).
+     *
+     * @return the number of profiles that are new or changed (re-read unchanged rows are not counted)
      */
     public Future<Integer> refreshChanged(Pool pool, Executors executors) {
-        return load(pool, executors, lastSeenChange);
+        OffsetDateTime seen = lastSeenChange;
+        return load(pool, executors, seen.equals(EPOCH) ? EPOCH : seen.minus(COMMIT_ORDER_OVERLAP));
     }
 
     private Future<Integer> load(Pool pool, Executors executors, OffsetDateTime since) {
@@ -101,18 +112,26 @@ public class ProfileStore {
                         int loaded = 0;
                         for (Row row : list) {
                             String url = row.getString(0);
+                            OffsetDateTime changed = row.getOffsetDateTime(2);
+                            if (changed != null && changed.equals(loadedAt.get(url))) {
+                                continue; // re-read through the overlap window, unchanged
+                            }
                             try {
                                 profiles.put(url, fhirContext.newJsonParser().parseResource(row.getString(1)));
                                 loaded++;
                             } catch (Exception e) {
                                 logger.error("Stored profile {} ({}) cannot be parsed and is ignored", url, version);
                             }
-                            OffsetDateTime changed = row.getOffsetDateTime(2);
+                            if (changed != null) {
+                                loadedAt.put(url, changed);
+                            }
                             if (changed != null && changed.isAfter(lastSeenChange)) {
                                 lastSeenChange = changed;
                             }
                         }
-                        logger.info("Loaded {} profile(s) for {} changed since {}", loaded, version, since);
+                        if (loaded > 0) {
+                            logger.info("Loaded {} profile(s) for {} changed since {}", loaded, version, since);
+                        }
                         return loaded;
                     }, false);
                 });
