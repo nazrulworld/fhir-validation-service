@@ -39,6 +39,7 @@ class RegistryFallbackTest extends BaseTestContainer {
     private HttpServer slowHas;
     private HttpServer hangs;
     private final AtomicInteger hits = new AtomicInteger();
+    private final AtomicInteger hangingClosed = new AtomicInteger();
 
     @BeforeEach
     void setUp(Vertx vertx, VertxTestContext ctx) {
@@ -57,7 +58,8 @@ class RegistryFallbackTest extends BaseTestContainer {
                 req.response().setStatusCode(404).end();
             }
         }));
-        hangs = vertx.createHttpServer().requestHandler(req -> { /* never answers */ });
+        hangs = vertx.createHttpServer().requestHandler(req ->
+                req.connection().closeHandler(v -> hangingClosed.incrementAndGet()) /* never answers */);
         Future.all(fast404.listen(0), slowHas.listen(0), hangs.listen(0)).onComplete(ctx.succeedingThenComplete());
     }
 
@@ -105,6 +107,15 @@ class RegistryFallbackTest extends BaseTestContainer {
                     assertTrue(System.currentTimeMillis() - start < 5_000);
                     ctx.completeNow();
                 })));
+    }
+
+    @Test
+    void outstandingRequestsAreCancelledOnceOneRegistryAnswers(Vertx vertx, VertxTestContext ctx) {
+        // A long timeout: only cancellation can close the hanging request quickly.
+        manager(vertx, 30_000, hangs, slowHas).loadPackage("example.remote#1.2.0", false, false)
+                .compose(pkg -> nzi.fhir.validator.testsupport.Await.until(vertx, 3_000, "hanging request reset",
+                        () -> Future.succeededFuture(hangingClosed.get() > 0)))
+                .onComplete(ctx.succeedingThenComplete());
     }
 
     @Test

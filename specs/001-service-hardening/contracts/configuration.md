@@ -6,17 +6,20 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 
 | Env var | Config key | Default | Bounds / notes |
 |---------|-----------|---------|----------------|
-| `FV_PROFILE` | `profile` | `prod` | `dev` allows a missing DB password and enables verbose logs |
-| `FV_HTTP_PORT` | `http.port` | `8880` | 1–65535 (fixes D6) |
+| `FV_PROFILE` | `profile` | `prod` | `dev` allows a missing DB password, an ephemeral port and insecure package sources (tests) |
+| `FV_LOG_FORMAT` | `log.format` | `text` | `text` or `json` (one JSON object per line; `contextMap.requestId` carries the correlation id). Read by Log4j at startup |
+| `FV_HTTP_PORT` | `http.port` | `8880` | 1–65535 (fixes D6); `0` = ephemeral port, only with `FV_PROFILE=dev` (tests) |
 | `FV_HTTP_INSTANCES` | `http.instances` | min(cores, 8) | 1–64 |
 | `FV_HTTP_MAX_BODY_MB` | `http.maxBodyMb` | `20` | 1–200 |
+| `FV_HTTP_REQUEST_TIMEOUT_MS` | `http.requestTimeoutMs` | `60000` | 1000–600000. A request not completed in time is answered 503 `not-ready` with `Retry-After` (FR-020) |
 | `FV_CORS_ALLOWED_ORIGINS` | `http.cors.allowedOrigins` | *(empty → CORS off)* | Comma-separated exact origins. `*` is refused when `FV_PROFILE=prod` |
 | `FV_VALIDATION_WORKERS` | `validation.workers` | cores | 1–256 |
 | `FV_VALIDATION_MAX_PENDING` | `validation.maxPending` | 4 × workers | ≥ workers |
+| `FV_VALIDATION_MAX_BUNDLE_ENTRIES` | `validation.maxBundleEntries` | `10000` | 1–1000000. A Bundle with more entries is refused with 413 `payload-too-large` (constitution VI) |
 | `FV_VALIDATION_TIMEOUT_MS` | `validation.timeoutMs` | `30000` | Worker max execute time: exceeding it logs a blocked-thread warning (Vert.x cannot interrupt a running validation) |
 | `FV_PACKAGE_WORKERS` | `packages.workers` | `2` | 1–16 |
 | `FV_PACKAGE_CACHE_MAX_MB` | `packages.cacheMaxMb` | `256` | 0 disables the cache |
-| `FV_PACKAGE_SOURCES` | `packages.sources` | `packages.fhir.org,packages2.fhir.org` | Hosts allowed for registry and `downloadUrl` fetches |
+| `FV_PACKAGE_SOURCES` | `packages.sources` | `packages.fhir.org,packages2.fhir.org` | Registries and approved download hosts. Each entry is a host (registry `https://<host>`) or a base URL (`scheme://host[:port]`); the host part is the allowlist for registry and `downloadUrl` fetches |
 | `FV_PACKAGE_REGISTRY_ENABLED` | `packages.registryEnabled` | `true` | `false` = offline (cache-only) |
 | `FV_PACKAGE_ALLOW_INSECURE_SOURCES` | `packages.allowInsecureSources` | `false` | **Dev profile only** (startup fails otherwise): allows http and private/loopback package sources, for tests and local registries. The allowlist still applies |
 | `FV_PACKAGE_FETCH_TIMEOUT_MS` | `packages.fetchTimeoutMs` | `30000` | |

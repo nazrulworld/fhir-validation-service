@@ -43,5 +43,8 @@ docker compose stop -t 30 validator > /dev/null
 exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$(docker compose ps -a -q validator)")
 # 143 = terminated by SIGTERM after the shutdown hooks ran (JVM convention); anything else is a crash.
 [ "$exit_code" = "0" ] || [ "$exit_code" = "143" ] || fail "validator exited with code $exit_code"
+logs=$(docker compose logs --no-color validator 2>&1)
+echo "$logs" | grep -q "drain started" || fail "no 'drain started' log line"
+echo "$logs" | grep -q "drain complete" || fail "no 'drain complete' log line"
 
 echo "SMOKE OK"

@@ -61,6 +61,12 @@ public class ServiceMetrics {
                     .tag("version", version.name()).description("Configuration revision applied on this instance").register(registry);
             Gauge.builder("fv.validator.ready", validators, v -> v.status(version) == ValidatorRegistry.Status.ACTIVE ? 1 : 0)
                     .tag("version", version.name()).description("1 when the version's validator serves requests").register(registry);
+            Gauge.builder("fv.snapshot.packages", validators, v -> v.snapshotPackages(version))
+                    .tag("version", version.name()).description("IG packages in the active validator").register(registry);
+            Gauge.builder("fv.snapshot.package.size", validators, v -> v.snapshotPackageBytes(version))
+                    .tag("version", version.name()).baseUnit("bytes")
+                    .description("Archive size of the IG packages in the active validator; a rebuild briefly holds two snapshots")
+                    .register(registry);
             ProfileStore store = profileStores.get(version);
             if (store != null) {
                 Gauge.builder("fv.profile.count", store, ProfileStore::size)

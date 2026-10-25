@@ -11,6 +11,7 @@ import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.core.validator.ValidatorSnapshot;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Validates resources with the current validator snapshot of the requested FHIR version. Stateless: validators live
@@ -24,12 +25,22 @@ public class FhirValidationService {
     private final ValidatorRegistry registry;
     private final Executors executors;
     private final AdmissionController admission;
+    private final int maxBundleEntries;
     private volatile ServiceMetrics metrics;
 
+    private record Done<T>(boolean valid, T value) {
+    }
+
     public FhirValidationService(ValidatorRegistry registry, Executors executors, AdmissionController admission) {
+        this(registry, executors, admission, Integer.MAX_VALUE);
+    }
+
+    public FhirValidationService(ValidatorRegistry registry, Executors executors, AdmissionController admission,
+                                 int maxBundleEntries) {
         this.registry = registry;
         this.executors = executors;
         this.admission = admission;
+        this.maxBundleEntries = maxBundleEntries;
     }
 
     public void setMetrics(ServiceMetrics metrics) {
@@ -42,6 +53,15 @@ public class FhirValidationService {
      */
     public Future<ValidatorSnapshot.Outcome> validate(SupportedFhirVersion version, String body,
                                                       SupportedContentType contentType, List<String> profiles) {
+        return validate(version, body, contentType, profiles, Function.identity());
+    }
+
+    /**
+     * Validates and then applies {@code finisher} to the outcome, both on the validation worker, so rendering large
+     * results never runs on the event loop (constitution Principle I).
+     */
+    public <T> Future<T> validate(SupportedFhirVersion version, String body, SupportedContentType contentType,
+                                  List<String> profiles, Function<ValidatorSnapshot.Outcome, T> finisher) {
         ValidatorSnapshot snapshot;
         try {
             snapshot = registry.current(version);
@@ -49,17 +69,20 @@ public class FhirValidationService {
             return Future.failedFuture(e);
         }
         long started = System.nanoTime();
-        return admission.admit(() -> executors.validation()
-                        .executeBlocking(() -> snapshot.validate(body, contentType, profiles), false))
+        return admission.admit(() -> executors.validation().executeBlocking(() -> {
+                    ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries);
+                    return new Done<>(outcome.result().isSuccessful(), finisher.apply(outcome));
+                }, false))
                 .onComplete(ar -> {
                     ServiceMetrics m = metrics;
                     if (m != null) {
                         String outcome = ar.succeeded()
-                                ? (ar.result().result().isSuccessful() ? ServiceMetrics.OUTCOME_VALID : ServiceMetrics.OUTCOME_INVALID)
+                                ? (ar.result().valid() ? ServiceMetrics.OUTCOME_VALID : ServiceMetrics.OUTCOME_INVALID)
                                 : (ar.cause() instanceof DataFormatException ? ServiceMetrics.OUTCOME_UNPARSEABLE : ServiceMetrics.OUTCOME_ERROR);
                         m.recordValidation(version, outcome, System.nanoTime() - started);
                     }
-                });
+                })
+                .map(Done::value);
     }
 
     public ValidatorRegistry registry() {

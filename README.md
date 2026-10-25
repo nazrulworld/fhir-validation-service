@@ -19,7 +19,9 @@ IGs and profiles reach every instance within seconds, without restarts.
 
 - Docker with Compose v2 (to run), or Java 17 and Maven (to build and develop)
 - PostgreSQL 16 (provided by `compose.yaml`)
-- About 2 GB of memory per instance (warmed validators for four FHIR versions)
+- About 2 GB of memory per instance (warmed validators for four FHIR versions). Including an IG rebuilds that
+  version's validator while the old one keeps serving, so allow headroom of at least twice the largest validator:
+  watch `fv_snapshot_package_size_bytes` (archive size; parsed packages take several times more heap)
 
 ## Quick start
 

@@ -184,6 +184,13 @@ public class IgPackageService {
         });
     }
 
+    /**
+     * Stores an uploaded archive file; it is checked on disk before being read into memory (FR-014).
+     */
+    public Future<NpmPackage> registerUploadedFile(String path) {
+        return cacheManager.storeFile(path, "UPLOAD");
+    }
+
     public Future<NpmPackage> loadIgPackage(String name, String version) {
         if (name == null || version == null) {
             return Future.failedFuture("IG name and version cannot be null");

@@ -19,6 +19,8 @@ import org.hl7.fhir.utilities.npm.NpmPackage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -105,7 +107,29 @@ public class PostgresPackageCacheManager {
         return parser.<Void>executeBlocking(() -> {
             guard.check(bytes);
             return null;
-        }, false).compose(v -> parse(bytes)).compose(npmPackage -> {
+        }, false).compose(v -> storeChecked(bytes, source));
+    }
+
+    /**
+     * Stores an archive file (an upload): size and archive checks run on the file before it is read into memory.
+     */
+    public Future<NpmPackage> storeFile(String path, String source) {
+        return parser.<byte[]>executeBlocking(() -> {
+            Path file = Path.of(path);
+            long size = Files.size(file);
+            if (size > guard.maxCompressedBytes()) {
+                throw new ProblemException(413, "package-too-large", "The archive exceeds "
+                        + guard.maxCompressedBytes() / (1024 * 1024) + " MB");
+            }
+            try (InputStream in = Files.newInputStream(file)) {
+                guard.check(in, size);
+            }
+            return Files.readAllBytes(file);
+        }, false).compose(bytes -> storeChecked(bytes, source));
+    }
+
+    private Future<NpmPackage> storeChecked(byte[] bytes, String source) {
+        return parse(bytes).compose(npmPackage -> {
             if (npmPackage.name() == null || npmPackage.name().isBlank() || npmPackage.name().length() > MAX_NAME_LENGTH) {
                 return Future.failedFuture(new ProblemException(400, "invalid-request", "The package has no valid name"));
             }
@@ -274,16 +298,21 @@ public class PostgresPackageCacheManager {
             return Future.succeededFuture(null);
         }
         Promise<Buffer> first = Promise.promise();
+        // Completed on the first success: the requests still waiting on other registries are reset.
+        Promise<Void> cancelOthers = Promise.promise();
         AtomicInteger pending = new AtomicInteger(registryUrls.size());
         for (String registry : registryUrls) {
-            fetcher.fetch(registry + "/" + name + "/" + version).onComplete(ar -> {
+            fetcher.fetch(registry + "/" + name + "/" + version, cancelOthers.future()).onComplete(ar -> {
                 if (ar.succeeded() && ar.result() != null && ar.result().length() > 0) {
-                    first.tryComplete(ar.result());
+                    if (first.tryComplete(ar.result())) {
+                        cancelOthers.tryComplete();
+                    }
                 } else if (ar.failed() && !(ar.cause() instanceof ProblemException p && p.status() == 404)) {
                     logger.info("Registry {} could not provide {}#{}: {}", registry, name, version, ar.cause().getMessage());
                 }
                 if (pending.decrementAndGet() == 0) {
                     first.tryComplete(null);
+                    cancelOthers.tryComplete();
                 }
             });
         }

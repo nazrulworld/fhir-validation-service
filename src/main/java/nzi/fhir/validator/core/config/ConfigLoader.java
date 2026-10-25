@@ -35,12 +35,15 @@ public final class ConfigLoader {
 
     private static final List<Entry> ENTRIES = List.of(
             new Entry("FV_PROFILE", "profile", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_LOG_FORMAT", "log.format", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_HTTP_PORT", "http.port", Kind.INT, 0, 65535), // 0 = ephemeral (tests)
             new Entry("FV_HTTP_INSTANCES", "http.instances", Kind.INT, 1, 64),
+            new Entry("FV_HTTP_REQUEST_TIMEOUT_MS", "http.requestTimeoutMs", Kind.LONG, 1_000, 600_000),
             new Entry("FV_HTTP_MAX_BODY_MB", "http.maxBodyMb", Kind.INT, 1, 200),
             new Entry("FV_CORS_ALLOWED_ORIGINS", "http.cors.allowedOrigins", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_VALIDATION_WORKERS", "validation.workers", Kind.INT, 1, 256),
             new Entry("FV_VALIDATION_MAX_PENDING", "validation.maxPending", Kind.INT, 1, 100_000),
+            new Entry("FV_VALIDATION_MAX_BUNDLE_ENTRIES", "validation.maxBundleEntries", Kind.INT, 1, 1_000_000),
             new Entry("FV_VALIDATION_TIMEOUT_MS", "validation.timeoutMs", Kind.LONG, 100, 3_600_000),
             new Entry("FV_PACKAGE_WORKERS", "packages.workers", Kind.INT, 1, 16),
             new Entry("FV_PACKAGE_CACHE_MAX_MB", "packages.cacheMaxMb", Kind.INT, 0, 65_536),
@@ -210,8 +213,15 @@ public final class ConfigLoader {
         if (!dev && ApplicationConfig.splitList(origins).contains("*")) {
             throw new IllegalStateException("Invalid FV_CORS_ALLOWED_ORIGINS: '*' is not allowed when FV_PROFILE=prod");
         }
+        if (!dev && Integer.valueOf(0).equals(section(c, "http").getInteger("port"))) {
+            throw new IllegalStateException("Invalid FV_HTTP_PORT: 0 (ephemeral port) is only allowed when FV_PROFILE=dev");
+        }
         if (!dev && Boolean.TRUE.equals(section(c, "packages").getBoolean("allowInsecureSources"))) {
             throw new IllegalStateException("Invalid FV_PACKAGE_ALLOW_INSECURE_SOURCES: only allowed when FV_PROFILE=dev");
+        }
+        String logFormat = section(c, "log").getString("format", "text");
+        if (!logFormat.equals("text") && !logFormat.equals("json")) {
+            throw new IllegalStateException("Invalid FV_LOG_FORMAT: '" + logFormat + "' (allowed: text, json)");
         }
         String ssl = section(c, "pg").getString("sslMode", "prefer");
         if (!SSL_MODES.contains(ssl)) {

@@ -35,6 +35,10 @@ during the audit (FT1–FT14) are recorded there and are **out of scope** for th
 - Q: During the upgrade to 1.0.0, may old (0.1.x) and new (1.0.0) instances run against the same
   database at the same time? → A: No. Stop all 0.1.x instances, migrate, then start 1.0.0 (short
   documented downtime). Zero-downtime rolling restarts apply to 1.x→1.x only.
+- Q: Is an instance ready while a version's validator is being rebuilt for a newer configuration?
+  → A: Yes. The previous validator keeps serving during the rebuild, and reporting not-ready would
+  take every instance out of the load balancer at the same moment on each IG change. Readiness is
+  false only when a version has no usable validator or cannot apply a committed configuration (FR-002).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -320,9 +324,10 @@ roll an instance under load and count failed requests.
 - **FR-010**: Pending validation work MUST be bounded. Above the bound, requests MUST be refused
   promptly with a retry-later response.
 - **FR-011**: The service MUST expose separate liveness and readiness signals. Readiness MUST be
-  false until validators for every supported version are usable at the latest committed
-  configuration, false while any version is unavailable under FR-002, and false while the shared
-  database is unreachable (P5, F5).
+  false until a validator for every supported version is usable, false while any version is
+  unavailable under FR-002 (a newer committed configuration that cannot be applied), and false while
+  the shared database is unreachable. A version that is being rebuilt keeps serving its previous
+  validator and stays ready (P5, F5).
 
 **Administration safety (US3)**
 

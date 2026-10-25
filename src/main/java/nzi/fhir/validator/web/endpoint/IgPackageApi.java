@@ -97,8 +97,7 @@ public class IgPackageApi {
             return;
         }
         FileUpload upload = ctx.fileUploads().get(0);
-        Future<JsonObject> result = ctx.vertx().fileSystem().readFile(upload.uploadedFileName())
-                .compose(buffer -> igPackageService.registerIg(buffer.getBytes(), false, "UPLOAD"))
+        Future<JsonObject> result = igPackageService.registerUploadedFile(upload.uploadedFileName())
                 .map(IgPackageApi::registered);
         ErrorResponder.respond(ctx, result);
     }

@@ -3,12 +3,14 @@
   "http": {
     "port": 8880,
     "maxBodyMb": 20,
+    "requestTimeoutMs": 60000,
     "cors": {
       "allowedOrigins": ""
     }
   },
   "validation": {
-    "timeoutMs": 30000
+    "timeoutMs": 30000,
+    "maxBundleEntries": 10000
   },
   "packages": {
     "workers": 2,

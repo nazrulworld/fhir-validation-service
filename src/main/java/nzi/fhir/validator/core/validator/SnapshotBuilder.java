@@ -54,17 +54,20 @@ public class SnapshotBuilder {
 
     public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                                            ProfileStore profileStore) {
-        List<Future<NpmPackage>> loaded = new ArrayList<>();
+        List<Future<Loaded>> loaded = new ArrayList<>();
         for (String idAndVersion : resolvedPackages) {
             loaded.add(load(idAndVersion));
         }
         return Future.all(loaded).compose(all -> executors.packages().executeBlocking(() -> {
             long started = System.currentTimeMillis();
             List<NpmPackage> npmPackages = new ArrayList<>();
-            for (Future<NpmPackage> f : loaded) {
-                npmPackages.add(f.result());
+            long archiveBytes = 0;
+            for (Future<Loaded> f : loaded) {
+                npmPackages.add(f.result().pkg());
+                archiveBytes += f.result().archiveBytes();
             }
             ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages, profileStore);
+            snapshot.setPackageArchiveBytes(archiveBytes);
             // Warm caches so the first real request does not pay HAPI's lazy initialisation.
             snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
             logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", version, revision,
@@ -77,10 +80,13 @@ public class SnapshotBuilder {
      * A parsed package from the cache, or read from the database (event loop: I/O only) and parsed on the package
      * pool.
      */
-    private Future<NpmPackage> load(String idAndVersion) {
+    private record Loaded(NpmPackage pkg, long archiveBytes) {
+    }
+
+    private Future<Loaded> load(String idAndVersion) {
         NpmPackage cached = cache.get(idAndVersion);
         if (cached != null) {
-            return Future.succeededFuture(cached);
+            return Future.succeededFuture(new Loaded(cached, cache.archiveBytes(idAndVersion)));
         }
         int hash = idAndVersion.indexOf('#');
         return packages.loadRawPackage(idAndVersion.substring(0, hash), idAndVersion.substring(hash + 1))
@@ -89,7 +95,9 @@ public class SnapshotBuilder {
                         return Future.failedFuture(new MissingPackageException(idAndVersion));
                     }
                     byte[] bytes = buffer.getBytes();
-                    return packages.parse(bytes).onSuccess(pkg -> cache.put(idAndVersion, pkg, bytes.length));
+                    return packages.parse(bytes)
+                            .onSuccess(pkg -> cache.put(idAndVersion, pkg, bytes.length))
+                            .map(pkg -> new Loaded(pkg, bytes.length));
                 });
     }
 
@@ -132,6 +140,7 @@ public class SnapshotBuilder {
         return executors.packages().executeBlocking(() -> {
             ValidatorSnapshot snapshot = assembleWith(current.version(), current.revision(), current.resolvedPackages(),
                     current.reusableSupports(), current.profileStore());
+            snapshot.setPackageArchiveBytes(current.packageArchiveBytes());
             snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
             return snapshot;
         }, false);

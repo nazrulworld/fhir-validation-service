@@ -90,6 +90,9 @@ public final class Bootstrap {
             closed.await(5_000, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            // Log4j's own shutdown hook is disabled (log4j2.xml) so the drain is logged; stop it last.
+            LogManager.shutdown();
         }
     }
 

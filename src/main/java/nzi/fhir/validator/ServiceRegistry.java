@@ -100,7 +100,8 @@ public final class ServiceRegistry {
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
         PackageCache packageCache = builder.cache();
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
-                new FhirValidationService(registry, executors, new AdmissionController(config.validationMaxPending())), profileServices,
+                new FhirValidationService(registry, executors, new AdmissionController(config.validationMaxPending()),
+                        config.validationMaxBundleEntries()), profileServices,
                 fetcher);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
         metrics.bind(services.validationService.admission(), registry, packageCache, stores);

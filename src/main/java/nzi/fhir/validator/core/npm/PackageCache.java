@@ -59,6 +59,12 @@ public class PackageCache {
         }
     }
 
+    /** Archive size of a cached package, or 0 if it is not cached. */
+    public synchronized long archiveBytes(String idAndVersion) {
+        Entry e = entries.get(idAndVersion);
+        return e == null ? 0 : e.weight() / EXPANSION_FACTOR;
+    }
+
     public synchronized long weightBytes() {
         return weight;
     }

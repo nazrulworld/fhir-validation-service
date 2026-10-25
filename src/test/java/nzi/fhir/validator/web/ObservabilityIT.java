@@ -67,7 +67,8 @@ class ObservabilityIT extends BaseTestContainer {
                     for (String metric : List.of("fv_validations_total\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0",
                             "fv_validation_seconds_count\\{version=\"R4\",?\\} 3\\.0", "fv_validation_pending \\d",
                             "fv_config_revision\\{version=\"R4\",?\\} \\d", "fv_package_cache_size_bytes \\d",
-                            "fv_profile_count\\{version=\"STU3\",?\\} \\d", "fv_validator_ready\\{version=\"R5\",?\\} 1\\.0")) {
+                            "fv_profile_count\\{version=\"STU3\",?\\} \\d", "fv_validator_ready\\{version=\"R5\",?\\} 1\\.0",
+                            "fv_snapshot_packages\\{version=\"R4\",?\\} 0\\.0", "fv_snapshot_package_size_bytes\\{version=\"R4\",?\\} 0\\.0")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
                     ctx.completeNow();

@@ -120,6 +120,22 @@ Problem `type` catalogue (stable identifiers): `invalid-request`, `invalid-resou
 `package-too-large`, `package-unsafe`, `unsupported-media-type`, `not-acceptable`,
 `payload-too-large`, `overloaded`, `not-ready`, `internal-error`.
 
+## Metrics (`GET /metrics`)
+
+Service meters, Prometheus text format (Vert.x HTTP/pool meters are added in production):
+
+| Metric | Labels | Meaning |
+|--------|--------|---------|
+| `fv_validations_total` | `version`, `outcome` (`valid`, `invalid`, `unparseable`, `error`) | Validation requests |
+| `fv_validation_seconds` | `version` | Validation duration histogram |
+| `fv_validation_pending` / `fv_validation_max_pending` | | Admitted validations / admission limit |
+| `fv_config_revision` | `version` | Configuration revision applied on this instance |
+| `fv_validator_ready` | `version` | 1 when the version's validator serves requests |
+| `fv_snapshot_packages` / `fv_snapshot_package_size_bytes` | `version` | IG packages and their archive size in the active validator |
+| `fv_snapshot_build_failures_total` | `version` | Failed validator builds |
+| `fv_profile_count` | `version` | Custom profiles loaded |
+| `fv_package_cache_size_bytes`, `fv_package_cache_hits_total`, `fv_package_cache_misses_total` | | IG package cache |
+
 ## Headers (all operations)
 
 | Header | Direction | Rule |

@@ -73,6 +73,23 @@ class EventLoopResponsivenessIT extends BaseTestContainer {
     }
 
     @Test
+    void renderingALargeOperationOutcomeDoesNotBlockTheEventLoop(VertxTestContext ctx) {
+        logs = LogCapture.start();
+        app.client().post(app.port(), "localhost", "/R4/validate").timeout(120_000)
+                .putHeader("Content-Type", "application/json")
+                .putHeader("Accept", "application/fhir+xml")
+                .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.patientBundle(1500)))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    assertTrue(r.bodyAsString().startsWith("<OperationOutcome"));
+                    assertEquals(java.util.List.of(), logs.from(BLOCKED_THREAD_CHECKER).stream()
+                            .filter(e -> e.message().contains("vert.x-eventloop")).map(LogCapture.Captured::message).toList(),
+                            "rendering must not block an event loop");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     void probesStayResponsiveWhileAnIgIsUploadedAndIncluded(VertxTestContext ctx) throws URISyntaxException {
         Path usCore = Path.of(getClass().getClassLoader().getResource(Fixtures.US_CORE_IG).toURI());
         AtomicLong maxLiveness = new AtomicLong();

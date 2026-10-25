@@ -53,7 +53,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     // A local http package host: allowed only through the dev-profile switch.
                     // The package host doubles as the only registry (it answers 404 for unknown packages).
                     config.put("packages", new JsonObject().put("sources", "http://localhost:" + server.actualPort())
-                            .put("allowInsecureSources", true));
+                            .put("allowInsecureSources", true).put("maxCompressedMb", 1));
                     return AppHarness.start(vertx, config);
                 })
                 .compose(a -> {
@@ -103,6 +103,24 @@ class IgPackageApiContractTest extends BaseTestContainer {
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 404, "package-not-found");
                     assertTrue(System.currentTimeMillis() - start < 5_000);
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void uploadOverTheCompressedLimitIsRefusedBeforeReading(Vertx vertx, VertxTestContext ctx) throws java.io.IOException {
+        java.nio.file.Path big = java.nio.file.Files.createTempFile("too-big", ".tgz");
+        java.nio.file.Files.write(big, new byte[2 * 1024 * 1024]);
+        AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/upload")).timeout(10_000)
+                .sendMultipartForm(io.vertx.ext.web.multipart.MultipartForm.create()
+                        .binaryFileUpload("file", "too-big.tgz", big.toString(), "application/gzip"))
+                .compose(r -> {
+                    ctx.verify(() -> assertProblem(r, 413, "package-too-large"));
+                    return app.bootstrap().services().pool().query(
+                            "SELECT count(*) FROM fhir_validator_schema.fhir_implementation_guides WHERE source = 'UPLOAD'").execute();
+                })
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(0L, rows.iterator().next().getLong(0), "nothing stored");
                     ctx.completeNow();
                 })));
     }

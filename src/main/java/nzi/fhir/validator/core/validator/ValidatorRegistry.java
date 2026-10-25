@@ -281,6 +281,21 @@ public class ValidatorRegistry {
         return details;
     }
 
+    /** Package count and archive bytes of the active snapshot (0 when there is none). */
+    public long snapshotPackages(SupportedFhirVersion version) {
+        Slot slot = slot(version);
+        synchronized (slot) {
+            return slot.snapshot == null ? 0 : slot.snapshot.resolvedPackages().size();
+        }
+    }
+
+    public long snapshotPackageBytes(SupportedFhirVersion version) {
+        Slot slot = slot(version);
+        synchronized (slot) {
+            return slot.snapshot == null ? 0 : slot.snapshot.packageArchiveBytes();
+        }
+    }
+
     public Status status(SupportedFhirVersion version) {
         Slot slot = slot(version);
         synchronized (slot) {

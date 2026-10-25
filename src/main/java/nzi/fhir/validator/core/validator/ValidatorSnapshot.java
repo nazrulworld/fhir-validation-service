@@ -12,7 +12,10 @@ import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
+import ca.uhn.fhir.util.BundleUtil;
+import nzi.fhir.validator.web.ProblemException;
 import org.hl7.fhir.instance.model.api.IAnyResource;
+import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
 import java.util.LinkedHashSet;
@@ -41,6 +44,7 @@ public final class ValidatorSnapshot {
     private final ValidationSupportChain chain;
     private final ProfileStore profileStore;
     private final List<IValidationSupport> reusableSupports;
+    private volatile long packageArchiveBytes;
 
     /**
      * @param reusableSupports immutable supports (core definitions, IG packages) that a re-assembled snapshot can
@@ -64,6 +68,15 @@ public final class ValidatorSnapshot {
         return reusableSupports;
     }
 
+    /** Total archive size of the packages this snapshot was built from (memory sizing, metrics). */
+    public long packageArchiveBytes() {
+        return packageArchiveBytes;
+    }
+
+    void setPackageArchiveBytes(long bytes) {
+        this.packageArchiveBytes = bytes;
+    }
+
     /**
      * Validates {@code body}. Must run on a worker thread.
      * <p>
@@ -74,10 +87,24 @@ public final class ValidatorSnapshot {
      * @throws DataFormatException if the body is not parseable FHIR in the given format
      */
     public Outcome validate(String body, SupportedContentType contentType, List<String> profiles) {
+        return validate(body, contentType, profiles, Integer.MAX_VALUE);
+    }
+
+    /**
+     * @param maxBundleEntries a Bundle with more entries is refused with 413 ({@code FV_VALIDATION_MAX_BUNDLE_ENTRIES})
+     */
+    public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries) {
         IParser parser = (contentType == SupportedContentType.XML || contentType == SupportedContentType.FHIR_XML)
                 ? fhirContext.newXmlParser() : fhirContext.newJsonParser();
         parser.setParserErrorHandler(new LenientErrorHandler(false).setErrorOnInvalidValue(false));
         IBaseResource resource = parser.parseResource(body);
+        if (resource instanceof IBaseBundle bundle) {
+            int entries = BundleUtil.toListOfEntries(fhirContext, bundle).size();
+            if (entries > maxBundleEntries) {
+                throw new ProblemException(413, "payload-too-large",
+                        "The Bundle has " + entries + " entries; the limit is " + maxBundleEntries);
+            }
+        }
         ValidationOptions options = new ValidationOptions();
         Set<String> applied = new LinkedHashSet<>();
         if (resource instanceof IAnyResource anyResource) {

@@ -139,6 +139,9 @@ to SemVer.
 **Decision**: Use **API keys** carried as `Authorization: Bearer <key>`. Keys are stored only as
 SHA-256 hashes in a new `api_keys` table with a role of `ADMIN` or `VALIDATE`. Declare security
 schemes in `openapi.yaml` and mount a `RouterBuilder.securityHandler("apiKey", …)`.
+**As implemented**: enforcement is one router root handler (`ApiKeyAuthHandler.rootHandler`) mounted before
+contract validation, so unauthenticated calls are refused before their input is examined; the security scheme
+stays in `openapi.yaml` as documentation. Read endpoints follow `FV_AUTH_ANONYMOUS_VALIDATE` like validation.
 - Admin operations (`/igs/*` writes, `include-ig`, `register-profile`) always require `ADMIN`.
 - Validation requires `VALIDATE` or `ADMIN`, unless `FV_AUTH_ANONYMOUS_VALIDATE=true` (default
   `true` in 1.0 for compatibility, documented as discouraged).
@@ -255,6 +258,10 @@ reinventing it. Contextual logging solves MDC loss on the event loop; manual Thr
 handling was rejected as error-prone across callbacks.
 
 ## R14. Single configuration mechanism [F6, D6, FR-028]
+
+**As implemented**: a dependency-free `ConfigLoader` replaced vertx-config (removed from `pom.xml`). It
+merges the same three sources in the same order, synchronously at startup, with an injectable environment map for
+tests; vertx-config added nothing beyond that. The rest of this decision is unchanged.
 
 **Decision**: Use only vertx-config. Store order: classpath `config.json` (defaults) → optional
 file at `FV_CONFIG_FILE` → **environment variables** (`type: env`), mapped through a documented

@@ -45,6 +45,7 @@ public class HttpVerticle extends AbstractVerticle {
                             .setRequireSecurityHandlers(false));
                     routerBuilder.rootHandler(new RequestIdHandler());
                     routerBuilder.rootHandler(new InFlightHandler(services.inFlight()));
+                    routerBuilder.rootHandler(new RequestTimeoutHandler(services.config().httpRequestTimeoutMs()));
                     CorsConfig.create(services.config()).ifPresent(routerBuilder::rootHandler);
                     routerBuilder.rootHandler(BodyHandler.create()
                             .setUploadsDirectory(uploadDirectory())

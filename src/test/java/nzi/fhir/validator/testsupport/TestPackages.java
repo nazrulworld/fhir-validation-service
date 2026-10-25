@@ -88,6 +88,17 @@ public final class TestPackages {
                         && (m.getMessage() + " " + m.getLocationString()).contains(text));
     }
 
+    /** A collection Bundle of {@code entries} Patients (validation cost grows with the size). */
+    public static String patientBundle(int entries) {
+        io.vertx.core.json.JsonArray list = new io.vertx.core.json.JsonArray();
+        for (int i = 0; i < entries; i++) {
+            list.add(new JsonObject().put("fullUrl", "urn:uuid:" + java.util.UUID.randomUUID())
+                    .put("resource", new JsonObject().put("resourceType", "Patient").put("active", true)
+                            .put("name", new io.vertx.core.json.JsonArray().add(new JsonObject().put("family", "Family" + i)))));
+        }
+        return new JsonObject().put("resourceType", "Bundle").put("type", "collection").put("entry", list).encode();
+    }
+
     /** A Patient without the elements the test profiles require. */
     public static String minimalPatient() {
         return new JsonObject().put("resourceType", "Patient").put("id", "p1").put("active", true).encode();

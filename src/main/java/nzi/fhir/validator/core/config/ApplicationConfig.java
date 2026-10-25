@@ -47,6 +47,7 @@ public final class ApplicationConfig {
 
     public int httpPort() { return section("http").getInteger("port"); }
     public int httpInstances() { return section("http").getInteger("instances"); }
+    public long httpRequestTimeoutMs() { return section("http").getLong("requestTimeoutMs"); }
     public int httpMaxBodyMb() { return section("http").getInteger("maxBodyMb"); }
     public List<String> corsAllowedOrigins() {
         return splitList(section("http").getJsonObject("cors", new JsonObject()).getString("allowedOrigins"));
@@ -54,6 +55,7 @@ public final class ApplicationConfig {
 
     public int validationWorkers() { return section("validation").getInteger("workers"); }
     public int validationMaxPending() { return section("validation").getInteger("maxPending"); }
+    public int validationMaxBundleEntries() { return section("validation").getInteger("maxBundleEntries"); }
     public long validationTimeoutMs() { return section("validation").getLong("timeoutMs"); }
 
     public int packageWorkers() { return section("packages").getInteger("workers"); }

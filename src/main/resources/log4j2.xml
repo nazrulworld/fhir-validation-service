@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN" packages="io.reactiverse.contextual.logging">
+<!-- shutdownHook="disable": the service's own shutdown hook logs the drain and then stops Log4j itself. -->
+<Configuration status="WARN" packages="io.reactiverse.contextual.logging" shutdownHook="disable">
     <Appenders>
-        <Console name="Console" target="SYSTEM_OUT">
+        <!-- FV_LOG_FORMAT=text (default) -->
+        <Console name="text" target="SYSTEM_OUT">
             <!-- %vcl{requestId} = correlation id of the request being served (empty outside requests) -->
             <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level [%vcl{requestId:-}] %logger{36} - %msg%n"/>
+        </Console>
+        <!-- FV_LOG_FORMAT=json: one JSON object per line; contextMap carries requestId -->
+        <Console name="json" target="SYSTEM_OUT">
+            <JsonLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true" includeTimeMillis="true"/>
         </Console>
     </Appenders>
     <Loggers>
         <Root level="info">
-            <AppenderRef ref="Console"/>
+            <AppenderRef ref="${sys:FV_LOG_FORMAT:-${env:FV_LOG_FORMAT:-text}}"/>
         </Root>
         <!-- Resource bodies may contain PHI: never log them above DEBUG. -->
         <Logger name="nzi.fhir.validator" level="info"/>

@@ -108,6 +108,22 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void ephemeralPortOnlyInDev() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_HTTP_PORT", "0", "FV_PG_PASSWORD", "pw")));
+        assertTrue(e.getMessage().contains("FV_HTTP_PORT"));
+        assertEquals(0, ConfigLoader.load(env("FV_HTTP_PORT", "0", "FV_PROFILE", "dev")).httpPort());
+    }
+
+    @Test
+    void logFormatIsTextOrJson() {
+        assertDoesNotThrow(() -> ConfigLoader.load(env("FV_LOG_FORMAT", "json", "FV_PG_PASSWORD", "pw")));
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_LOG_FORMAT", "xml", "FV_PG_PASSWORD", "pw")));
+        assertTrue(e.getMessage().contains("FV_LOG_FORMAT"));
+    }
+
+    @Test
     void blankValuesMeanNotSet() {
         ApplicationConfig cfg = ConfigLoader.load(env("FV_HTTP_INSTANCES", "", "FV_HTTP_PORT", " ", "FV_PG_PASSWORD", "pw"));
         assertEquals(8880, cfg.httpPort());

@@ -63,10 +63,17 @@ public class SafePackageFetcher {
     }
 
     public Future<Buffer> fetch(String url) {
-        return fetch(url, MAX_REDIRECTS);
+        return fetch(url, Promise.<Void>promise().future());
     }
 
-    private Future<Buffer> fetch(String url, int redirectsLeft) {
+    /**
+     * @param cancelled when it completes, an in-flight request is reset (e.g. another registry already answered)
+     */
+    public Future<Buffer> fetch(String url, Future<Void> cancelled) {
+        return fetch(url, MAX_REDIRECTS, cancelled);
+    }
+
+    private Future<Buffer> fetch(String url, int redirectsLeft, Future<Void> cancelled) {
         URI uri;
         try {
             uri = URI.create(url);
@@ -104,10 +111,14 @@ public class SafePackageFetcher {
                 }
             }
             return addresses.get(0);
-        }, false).compose(address -> request(uri, host, port, path, https, address, redirectsLeft));
+        }, false).compose(address -> request(uri, host, port, path, https, address, redirectsLeft, cancelled));
     }
 
-    private Future<Buffer> request(URI uri, String host, int port, String path, boolean https, InetAddress address, int redirectsLeft) {
+    private Future<Buffer> request(URI uri, String host, int port, String path, boolean https, InetAddress address,
+                                   int redirectsLeft, Future<Void> cancelled) {
+        if (cancelled.isComplete()) {
+            return Future.failedFuture(new ProblemException(404, "package-not-found", "Fetch cancelled"));
+        }
         RequestOptions options = new RequestOptions()
                 .setMethod(HttpMethod.GET)
                 .setServer(SocketAddress.inetSocketAddress(port, address.getHostAddress()))
@@ -117,14 +128,18 @@ public class SafePackageFetcher {
                 .setSsl(https)
                 .setFollowRedirects(false)
                 .setTimeout(timeoutMs);
-        return client.request(options).compose(req -> req.send().compose(resp -> {
+        return client.request(options).compose(req -> {
+            cancelled.onComplete(v -> req.reset());
+            return req.send();
+        }).compose(resp -> {
+            io.vertx.core.http.HttpClientRequest req = resp.request();
             int status = resp.statusCode();
             if (status >= 300 && status < 400 && resp.getHeader("Location") != null) {
                 req.reset();
                 if (redirectsLeft <= 0) {
                     return Future.failedFuture(notAllowed("Too many redirects"));
                 }
-                return fetch(uri.resolve(resp.getHeader("Location")).toString(), redirectsLeft - 1);
+                return fetch(uri.resolve(resp.getHeader("Location")).toString(), redirectsLeft - 1, cancelled);
             }
             if (status != 200) {
                 req.reset();
@@ -150,7 +165,7 @@ public class SafePackageFetcher {
             resp.exceptionHandler(body::tryFail);
             resp.endHandler(v -> body.tryComplete(data));
             return body.future();
-        }));
+        });
     }
 
     static boolean isNonPublic(InetAddress a) {

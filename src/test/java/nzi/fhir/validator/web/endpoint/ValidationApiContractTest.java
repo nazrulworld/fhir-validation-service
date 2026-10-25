@@ -43,6 +43,7 @@ class ValidationApiContractTest extends BaseTestContainer {
         resetSchema();
         JsonObject config = AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE, POSTGRES_USERNAME, POSTGRES_PASSWORD);
         config.getJsonObject("http").put("maxBodyMb", 1);
+        config.getJsonObject("validation").put("maxBundleEntries", 5);
         AppHarness.start(vertx, config)
                 .compose(a -> {
                     app = a;
@@ -211,6 +212,25 @@ class ValidationApiContractTest extends BaseTestContainer {
         validate("R4", "application/json", "application/json", big)
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 413, "payload-too-large");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void bundleOverEntryLimitIs413(VertxTestContext ctx) {
+        validate("R4", "application/json", "application/json", nzi.fhir.validator.testsupport.TestPackages.patientBundle(6))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject p = assertProblem(r, 413, "payload-too-large");
+                    assertTrue(p.getString("detail").contains("limit is 5"), p.getString("detail"));
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void bundleWithinEntryLimitIsValidated(VertxTestContext ctx) {
+        validate("R4", "application/json", "application/json", nzi.fhir.validator.testsupport.TestPackages.patientBundle(5))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertLegacyJson(r);
                     ctx.completeNow();
                 })));
     }

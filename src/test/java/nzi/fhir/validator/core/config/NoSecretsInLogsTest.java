@@ -42,11 +42,12 @@ class NoSecretsInLogsTest extends BaseTestContainer {
                     List<String> lines = logs.events().stream().map(e -> e.message()).toList();
                     assertFalse(lines.isEmpty());
                     for (String line : lines) {
-                        for (int i = 0; i + 6 <= PASSWORD.length(); i++) {
-                            assertFalse(line.contains(PASSWORD.substring(i, i + 6)), "password fragment logged: " + line);
+                        // Any 4-character fragment counts (T087); the secrets contain no ordinary words.
+                        for (int i = 0; i + 4 <= PASSWORD.length(); i++) {
+                            assertFalse(line.contains(PASSWORD.substring(i, i + 4)), "password fragment logged: " + line);
                         }
-                        for (int i = 0; i + 6 <= ADMIN_KEY.length(); i++) {
-                            assertFalse(line.contains(ADMIN_KEY.substring(i, i + 6)), "admin key fragment logged: " + line);
+                        for (int i = 0; i + 4 <= ADMIN_KEY.length(); i++) {
+                            assertFalse(line.contains(ADMIN_KEY.substring(i, i + 4)), "admin key fragment logged: " + line);
                         }
                     }
                     ctx.completeNow();

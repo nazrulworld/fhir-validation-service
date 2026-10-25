@@ -82,8 +82,8 @@ public class ValidationApi {
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         Future<String> rendered = validationService
                 .validate(version, ctx.body().asString(), contentType,
-                        ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate())
-                .map(outcome -> OutcomeRenderer.render(outcome, responseFormat))
+                        ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate(),
+                        outcome -> OutcomeRenderer.render(outcome, responseFormat))
                 .recover(err -> err instanceof DataFormatException
                         ? Future.failedFuture(invalidResource(err.getMessage()))
                         : Future.failedFuture(err));

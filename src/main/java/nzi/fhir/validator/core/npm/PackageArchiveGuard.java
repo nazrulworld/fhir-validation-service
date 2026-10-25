@@ -50,13 +50,22 @@ public class PackageArchiveGuard {
      * @throws ProblemException 413 {@code package-too-large} or 422 {@code package-unsafe}
      */
     public void check(byte[] archive) {
-        if (archive.length > maxCompressed) {
+        check(new ByteArrayInputStream(archive), archive.length);
+    }
+
+    /**
+     * Checks an archive read from a stream (e.g. an uploaded file), without holding it in memory.
+     *
+     * @param compressedSize size of the archive in bytes
+     */
+    public void check(InputStream archive, long compressedSize) {
+        if (compressedSize > maxCompressed) {
             throw tooLarge("The archive exceeds " + maxCompressed / MB + " MB");
         }
         long expanded = 0;
         int entries = 0;
         byte[] buffer = new byte[64 * 1024];
-        try (InputStream gzip = new GzipCompressorInputStream(new ByteArrayInputStream(archive));
+        try (InputStream gzip = new GzipCompressorInputStream(archive);
              TarArchiveInputStream tar = new TarArchiveInputStream(gzip)) {
             TarArchiveEntry entry;
             while ((entry = tar.getNextEntry()) != null) {
@@ -74,7 +83,7 @@ public class PackageArchiveGuard {
                     if (expanded > maxExpanded) {
                         throw tooLarge("The archive expands beyond " + maxExpanded / MB + " MB");
                     }
-                    if (expanded > (long) maxRatio * Math.max(archive.length, 1)) {
+                    if (expanded > (long) maxRatio * Math.max(compressedSize, 1)) {
                         throw unsafe("The archive expands more than " + maxRatio + " times its size");
                     }
                 }
