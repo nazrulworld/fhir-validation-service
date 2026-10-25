@@ -81,6 +81,10 @@ Upgrading from 0.1.x moves data out of the container: follow [docs/upgrade-1.0.m
   (Netty 4.1.118 → 4.1.139: CVE-2026-75595). The Netty native transports now follow Vert.x's Netty version, the
   SCRAM client moves to `com.ongres.scram:scram-client` 3.2 (required by the newer PostgreSQL client), and the
   obsolete `org.codehaus.woodstox:woodstox-core-asl` pin, which shadowed the StAX API HAPI needs, is removed.
+- Dependency upgrades closing the remaining 10 HIGH vulnerabilities: Jackson 2.17.1 → 2.21.7 (CVE-2026-54512,
+  CVE-2026-54513, CVE-2026-68494, CVE-2026-68497, CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777),
+  now managed through `jackson-bom` so every Jackson module shares one version, and the SCRAM client 3.2 → 3.3
+  (CVE-2026-53712). The image scans with no HIGH or CRITICAL findings.
 
 ### Removed
 
