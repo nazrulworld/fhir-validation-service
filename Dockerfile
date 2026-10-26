@@ -6,7 +6,14 @@ WORKDIR /build
 
 COPY pom.xml mvnw ./
 COPY .mvn .mvn
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
+# Downloads Maven itself and the dependencies; retried, since a network blip on repo.maven.apache.org otherwise fails
+# the whole build.
+RUN --mount=type=cache,target=/root/.m2 \
+    for attempt in 1 2 3; do \
+      ./mvnw -B -q dependency:go-offline && exit 0; \
+      [ "$attempt" = 3 ] || { echo "Maven download failed (attempt $attempt of 3); retrying" >&2; sleep $((attempt * 10)); }; \
+    done; \
+    exit 1
 
 COPY src ./src
 # Tests run in CI before the image is built (see .github/workflows).
