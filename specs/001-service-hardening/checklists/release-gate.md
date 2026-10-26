@@ -15,32 +15,32 @@
 - [ ] CHK003 - Does the spec require an audit trail (who changed which IG or profile, and when) for administrative changes that affect every consumer? [Gap, Spec §FR-015]
 - [ ] CHK004 - Is PHI handling in logs (no full resource bodies at INFO or above) restated as a requirement, or is FR-030 limited to credentials? [Gap, Spec §FR-030, Constitution §Security]
 - [ ] CHK005 - Are limits on resource or bundle size (not only request body size) specified, as constitution Principle VI requires? [Gap, Spec §FR-010]
-- [ ] CHK006 - Is a default request timeout specified for FR-020's "within the configured request timeout", and is it distinct from the validation execution timeout? [Gap, Spec §FR-020, contracts/configuration.md]
+- [x] CHK006 - Is a default request timeout specified for FR-020's "within the configured request timeout", and is it distinct from the validation execution timeout? [Gap, Spec §FR-020, contracts/configuration.md]
 - [ ] CHK007 - Are CORS requirements (allowed origins per environment, no wildcard in production) captured in the spec, or only in the HTTP contract? [Gap, contracts/http-api.md §Headers]
 - [ ] CHK008 - Are transport-security requirements for the database connection (TLS/SSL mode) specified? [Gap, Spec §FR-027]
-- [ ] CHK009 - Are content requirements for the 1.0.0 migration note defined (each breaking status/body change, the removed config files and properties, the default port change 54329→5432)? [Completeness, Spec §Assumptions, contracts/configuration.md]
-- [ ] CHK010 - Does the spec define what happens to secrets already committed in git history (e.g. a credential-rotation requirement), and not only their removal going forward? [Gap, Spec §FR-033, Audit D4]
+- [x] CHK009 - Are content requirements for the 1.0.0 migration note defined (each breaking status/body change, the removed config files and properties, the default port change 54329→5432)? [Completeness, Spec §Assumptions, contracts/configuration.md]
+- [x] CHK010 - Does the spec define what happens to secrets already committed in git history (e.g. a credential-rotation requirement), and not only their removal going forward? [Gap, Spec §FR-033, Audit D4]
 
 ## Requirement Clarity
 
 - [ ] CHK011 - Is "promptly" in FR-010 and US4 scenario 5 quantified with a time bound, and is the `Retry-After` value or rule specified? [Clarity, Spec §FR-010, Spec §US4-AS5]
 - [ ] CHK012 - Is FR-009's "SHOULD" intentional, given that P3 is rated High and SC-004 depends on load cost? [Ambiguity, Spec §FR-009]
-- [ ] CHK013 - Is "validators are usable" in FR-011 defined: for all four versions, or per version with partial readiness? [Clarity, Spec §FR-011]
+- [x] CHK013 - Is "validators are usable" in FR-011 defined: for all four versions, or per version with partial readiness? [Clarity, Spec §FR-011]
 - [ ] CHK014 - Is the "propagation window" referenced in US1 scenario 2 bound explicitly to SC-002's 10 seconds in the requirements, not only in success criteria? [Clarity, Spec §FR-002, Spec §SC-002]
-- [ ] CHK015 - Is "lesser permission" for validation in FR-012 reconciled with plan R8's default of anonymous validation (`FV_AUTH_ANONYMOUS_VALIDATE=true`)? [Ambiguity, Spec §FR-012, research.md §R8]
+- [x] CHK015 - Is "lesser permission" for validation in FR-012 reconciled with plan R8's default of anonymous validation (`FV_AUTH_ANONYMOUS_VALIDATE=true`)? [Ambiguity, Spec §FR-012, research.md §R8]
 - [ ] CHK016 - Is the "documented default" response format in FR-017 named in the spec (JSON `ValidationResponse` vs `OperationOutcome`)? [Clarity, Spec §FR-017]
 - [ ] CHK017 - Are "approved sources" in FR-013 specified as hosts, URL prefixes or registries, and is redirect handling covered by the requirement? [Clarity, Spec §FR-013]
 - [ ] CHK018 - Is the semantic-version ordering for non-SemVer labels (`current`, `cibuild`, date-based) defined in the spec, or only in research R7? [Clarity, Spec §FR-025]
 
 ## Requirement Consistency
 
-- [ ] CHK019 - Do FR-018 and US4 scenario 3 ("invalid **or** unparseable → client-side problem") agree with plan R12, where a parseable but invalid resource returns 200? [Conflict, Spec §FR-018, Spec §US4-AS3, research.md §R12]
-- [ ] CHK020 - Is SC-001 (100% of validations reflect a change) consistent with the edge case that lets an instance keep its old snapshot when a package is missing during rebuild? [Conflict, Spec §SC-001, Spec §Edge Cases, data-model.md §2]
-- [ ] CHK021 - Is US6 scenario 1 (an all-in-one image "may exist" as a dev artefact) consistent with the plan's decision to drop it (R16)? [Consistency, Spec §US6-AS1, research.md §R16]
-- [ ] CHK022 - Are the supported FHIR versions stated identically in the spec Assumptions, FR-021, the OpenAPI enum and the data-model seed rows (STU3, R4, R4B, R5; R6 disabled)? [Consistency, Spec §FR-021, data-model.md §1.3]
+- [x] CHK019 - Do FR-018 and US4 scenario 3 ("invalid **or** unparseable → client-side problem") agree with plan R12, where a parseable but invalid resource returns 200? [Conflict, Spec §FR-018, Spec §US4-AS3, research.md §R12]
+- [x] CHK020 - Is SC-001 (100% of validations reflect a change) consistent with the edge case that lets an instance keep its old snapshot when a package is missing during rebuild? [Conflict, Spec §SC-001, Spec §Edge Cases, data-model.md §2]
+- [x] CHK021 - Is US6 scenario 1 (an all-in-one image "may exist" as a dev artefact) consistent with the plan's decision to drop it (R16)? [Consistency, Spec §US6-AS1, research.md §R16]
+- [x] CHK022 - Are the supported FHIR versions stated identically in the spec Assumptions, FR-021, the OpenAPI enum and the data-model seed rows (STU3, R4, R4B, R5; R6 disabled)? [Consistency, Spec §FR-021, data-model.md §1.3]
 - [ ] CHK023 - Is the health endpoints' auth exemption (Assumptions) consistent with FR-012 and the contract's security table (including `/metrics`)? [Consistency, Spec §Assumptions, contracts/http-api.md]
 - [ ] CHK024 - Is the multi-arch requirement (FR-032: build for x86_64 and arm64) consistent with the CI contract, which smoke-tests amd64 only? [Consistency, Spec §FR-032, contracts/container.md §3]
-- [ ] CHK025 - Do the error-format requirements apply consistently to read endpoints (dependencies, conformance), not only to validation and admin endpoints? [Consistency, Spec §FR-019, Spec §FR-023]
+- [x] CHK025 - Do the error-format requirements apply consistently to read endpoints (dependencies, conformance), not only to validation and admin endpoints? [Consistency, Spec §FR-019, Spec §FR-023]
 
 ## Acceptance Criteria Quality
 
@@ -53,9 +53,9 @@
 
 ## Scenario Coverage
 
-- [ ] CHK032 - Are upgrade requirements defined for existing deployments whose data lives in the bundled-database volume of the current image (data migration to an external database)? [Gap, Spec §FR-027, Audit D2]
+- [x] CHK032 - Are upgrade requirements defined for existing deployments whose data lives in the bundled-database volume of the current image (data migration to an external database)? [Gap, Spec §FR-027, Audit D2]
 - [ ] CHK033 - Are rollback/downgrade requirements defined for migrations V3/V4 (e.g. a 0.1.x instance running against the V3 schema, or reverting a release)? [Gap, Recovery, data-model.md §Migration plan]
-- [ ] CHK034 - Are requirements defined for a mixed-version fleet during a rolling upgrade (0.1.x and 1.0.0 instances sharing one database)? [Gap, Spec §SC-008]
+- [x] CHK034 - Are requirements defined for a mixed-version fleet during a rolling upgrade (0.1.x and 1.0.0 instances sharing one database)? [Gap, Spec §SC-008]
 - [ ] CHK035 - Are recovery requirements specified for a configuration change that commits but fails to build on some instances (retry policy, alerting, operator visibility)? [Coverage, Recovery, Spec §FR-002]
 - [ ] CHK036 - Are requirements defined for behaviour when the admission limit is hit by administrative operations (IG include during overload): queued, rejected or prioritised? [Coverage, Spec §FR-010]
 - [ ] CHK037 - Is the offline / registry-disabled scenario (no outbound access) covered by requirements for "latest" resolution and dependency fetching? [Coverage, Spec §FR-025, Spec §FR-026]
@@ -71,7 +71,7 @@
 
 - [ ] CHK042 - Are memory requirements specified for snapshot rebuilds, when old and new validators coexist (heap sizing guidance as an operator requirement)? [Gap, plan.md §Risks, Spec §FR-009]
 - [ ] CHK043 - Is a threat model or list of trust boundaries documented that justifies the chosen controls (auth, SSRF, archive guard), including which network the health and metrics endpoints are exposed to? [Traceability, Spec §US3]
-- [ ] CHK044 - Are compose requirements explicit that the observability and admin profiles must not weaken the defaults (loopback binding, required credentials)? [Completeness, Spec §FR-033]
+- [x] CHK044 - Are compose requirements explicit that the observability and admin profiles must not weaken the defaults (loopback binding, required credentials)? [Completeness, Spec §FR-033]
 - [ ] CHK045 - Are CI requirements specified for what blocks publishing (scan severity threshold, failure of the arm64 build) rather than leaving this to the plan? [Clarity, Spec §FR-035, contracts/container.md §3]
 
 ## Dependencies & Assumptions
