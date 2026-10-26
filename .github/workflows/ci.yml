@@ -63,8 +63,12 @@ jobs:
           context: .
           platforms: linux/arm64
           push: false
+          load: true
+          tags: fhir-validation-service:arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Startup smoke test under QEMU (liveness, migration, graceful stop)
+        run: sh scripts/startup-smoke.sh fhir-validation-service:arm64 linux/arm64
 
   upgrade-rehearsal:
     if: github.event_name == 'workflow_dispatch' && inputs.upgrade-rehearsal

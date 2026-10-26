@@ -75,7 +75,7 @@ the 2026-10-25 clarifications (CHK033 only partly: see below).
 | CHK021 | Satisfied | US6-AS1 permits ("may exist only as") a dev image; R16 chooses not to build one. No contradiction | — |
 | CHK022 | Satisfied | Assumptions, FR-021, openapi.yaml (`FhirVersion` pattern STU3/R4/R4B/R5) and the V3 seed rows agree. R6 is disabled everywhere | — |
 | CHK023 | Partial | Health, readiness and metrics are anonymous in Assumptions, R8 and the contract. The read endpoints (dependencies, conformance) follow `FV_AUTH_ANONYMOUS_VALIDATE`, but FR-012 doesn't mention them | Add the read endpoints to FR-012 |
-| CHK024 | **Conflict** | container.md §1: "both built and smoke-tested in CI on every PR". ci.yml: `container` (amd64 smoke) and `arm64-build` (build only). The plan's arm64 QEMU startup smoke doesn't exist | Correct the contract to "built on every PR; smoke-tested on amd64", or add the arm64 startup smoke |
+| CHK024 | **Conflict** | container.md §1: "both built and smoke-tested in CI on every PR". ci.yml: `container` (amd64 smoke) and `arm64-build` (build only). The plan's arm64 QEMU startup smoke doesn't exist | Correct the contract to "built on every PR; smoke-tested on amd64", or add the arm64 startup smoke. **Resolved 2026-10-26**: `scripts/startup-smoke.sh` runs in the `arm64-build` job, and container.md now states each platform's smoke scope |
 | CHK025 | Satisfied | FR-019 covers all endpoints. http-api.md gives dependencies 404/500 as `Problem` and deprecates conformance | — |
 
 ### Acceptance Criteria Quality
