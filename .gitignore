@@ -80,3 +80,4 @@ wiki/
 ### Local environment (secrets) ###
 .env
 compose.override.yaml
+.mcp.json
