@@ -57,7 +57,7 @@
 - [ ] CHK033 - Are rollback/downgrade requirements defined for migrations V3/V4 (e.g. a 0.1.x instance running against the V3 schema, or reverting a release)? [Gap, Recovery, data-model.md §Migration plan]
 - [x] CHK034 - Are requirements defined for a mixed-version fleet during a rolling upgrade (0.1.x and 1.0.0 instances sharing one database)? [Gap, Spec §SC-008]
 - [ ] CHK035 - Are recovery requirements specified for a configuration change that commits but fails to build on some instances (retry policy, alerting, operator visibility)? [Coverage, Recovery, Spec §FR-002]
-- [ ] CHK036 - Are requirements defined for behaviour when the admission limit is hit by administrative operations (IG include during overload): queued, rejected or prioritised? [Coverage, Spec §FR-010]
+- [x] CHK036 - Are requirements defined for behaviour when the admission limit is hit by administrative operations (IG include during overload): queued, rejected or prioritised? [Coverage, Spec §FR-010]
 - [ ] CHK037 - Is the offline / registry-disabled scenario (no outbound access) covered by requirements for "latest" resolution and dependency fetching? [Coverage, Spec §FR-025, Spec §FR-026]
 
 ## Edge Case Coverage
