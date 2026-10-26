@@ -7,7 +7,7 @@ and R18 of [research.md](../research.md).
 
 | Aspect | Contract |
 |--------|----------|
-| Platforms | `linux/amd64`, `linux/arm64` (both built and smoke-tested in CI on every PR) |
+| Platforms | `linux/amd64`, `linux/arm64`, both built and smoke-tested in CI on every PR: amd64 with the full smoke test (`scripts/smoke.sh`), arm64 with a startup smoke test under QEMU (`scripts/startup-smoke.sh`) |
 | Process | Only the service JVM, PID 1 under `tini`. No database, no shell supervisor |
 | User | Numeric non-root `10001:10001`. The image works with `--read-only` plus a tmpfs on `/tmp` |
 | Ports | `8880/tcp` (overridable through `FV_HTTP_PORT`, and `EXPOSE`/`HEALTHCHECK` follow it) |
@@ -48,7 +48,7 @@ runs, using a password instead of trust auth). Removed: `run-redis`, `run-ollama
 
 | Workflow | Trigger | Gates (in order) | Publishes |
 |----------|---------|------------------|-----------|
-| `ci.yml` (new) | PR, push | `mvn -B verify` → `hadolint Dockerfile` → `docker compose config` → build amd64 image → `scripts/smoke.sh` | nothing |
+| `ci.yml` (new) | PR, push | `mvn -B verify` → `hadolint Dockerfile` → `docker compose config` → build amd64 image → `scripts/smoke.sh`; in parallel, build arm64 image → `scripts/startup-smoke.sh` | nothing |
 | `docker-publish.yml` | push to `main`, release published | same gates → multi-arch build → `trivy` (fail on CRITICAL) | `sha-*` on main. Semver + `latest` on release |
 | `maven-publish.yml` | release created | `mvn -B verify` | Jar to GitHub Packages. Release assets: jar, `compose.yaml`, `.env.example` |
 
@@ -56,3 +56,8 @@ runs, using a password instead of trust auth). Removed: `run-redis`, `run-ollama
 the R4 fixture `src/test/resources/fhir/resources/dk/Patient.json` to `/R4/validate`, and assert
 HTTP 200 and a JSON body with a boolean `valid`. Then send SIGTERM to `validator` and assert it
 exits 0 within 30 s. Exits non-zero on any failure, printing container logs.
+
+`scripts/startup-smoke.sh <image> <platform>` contract: start a native PostgreSQL and the image on the given
+platform (emulated by QEMU in CI), wait until liveness is 200 and the schema migration has run (timeout 300 s),
+then send SIGTERM and assert a graceful exit (0 or 143, with the drain log lines). Readiness and validation are not
+checked: warming the validators for four FHIR versions under emulation takes too long for CI.
