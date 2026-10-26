@@ -322,7 +322,12 @@ roll an instance under load and count failed requests.
   shared storage for later inclusions on that instance, within a bounded, configurable memory
   budget (P3).
 - **FR-010**: Pending validation work MUST be bounded. Above the bound, requests MUST be refused
-  promptly with a retry-later response.
+  promptly with a retry-later response. Administrative operations (uploading, registering or
+  including IGs, registering profiles) MUST be bounded by a separate per-instance limit: validation
+  load never refuses administrative work, and administrative work never takes validation capacity.
+  Above that limit, administrative requests MUST likewise be refused promptly with a retry-later
+  response, not queued or prioritised. Configuration syncs an instance runs on its own (FR-002) are
+  never refused.
 - **FR-011**: The service MUST expose separate liveness and readiness signals. Readiness MUST be
   false until a validator for every supported version is usable, false while any version is
   unavailable under FR-002 (a newer committed configuration that cannot be applied), and false while

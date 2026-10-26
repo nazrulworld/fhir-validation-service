@@ -23,6 +23,9 @@
     "maxEntries": 20000,
     "maxRatio": 100
   },
+  "admin": {
+    "maxPending": 4
+  },
   "sync": {
     "pollIntervalMs": 5000
   },

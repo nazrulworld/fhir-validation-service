@@ -66,6 +66,7 @@ class ObservabilityIT extends BaseTestContainer {
                     // The exposition format may end a label set with a comma: {a="b",}.
                     for (String metric : List.of("fv_validations_total\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0",
                             "fv_validation_seconds_count\\{version=\"R4\",?\\} 3\\.0", "fv_validation_pending \\d",
+                            "fv_admin_pending \\d", "fv_admin_max_pending 4\\.0",
                             "fv_config_revision\\{version=\"R4\",?\\} \\d", "fv_package_cache_size_bytes \\d",
                             "fv_profile_count\\{version=\"STU3\",?\\} \\d", "fv_validator_ready\\{version=\"R5\",?\\} 1\\.0",
                             "fv_snapshot_packages\\{version=\"R4\",?\\} 0\\.0", "fv_snapshot_package_size_bytes\\{version=\"R4\",?\\} 0\\.0")) {

@@ -111,6 +111,7 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_AUTH_ANONYMOUS_VALIDATE` | `true` | `false` requires a key for validation and reads too |
 | `FV_HTTP_PORT` | `8880` | HTTP port |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING` | cores / 4 × workers | parallel validations / admission limit |
+| `FV_ADMIN_MAX_PENDING` | 4 | administrative operations in progress; beyond it 503 `overloaded` |
 | `FV_PACKAGE_SOURCES` | `packages.fhir.org,packages2.fhir.org` | registries and approved download hosts |
 | `FV_CORS_ALLOWED_ORIGINS` | *(none)* | browser origins allowed to call the API |
 

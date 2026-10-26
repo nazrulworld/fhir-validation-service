@@ -8,6 +8,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `FV_ADMIN_MAX_PENDING` (default 4): administrative operations (upload, register, include-ig, register-profile) have
+  their own per-instance admission limit, separate from validation. Beyond it they get 503 `overloaded` with
+  `Retry-After` instead of queueing without limit for the package workers. New metrics `fv_admin_pending` and
+  `fv_admin_max_pending`.
+
 - CI: a startup smoke test of the arm64 image under QEMU (liveness, schema migration, graceful stop), so both
   published platforms are smoke-tested on every PR as the container contract states.
 

@@ -59,6 +59,7 @@ public final class ApplicationConfig {
     public long validationTimeoutMs() { return section("validation").getLong("timeoutMs"); }
 
     public int packageWorkers() { return section("packages").getInteger("workers"); }
+    public int adminMaxPending() { return section("admin").getInteger("maxPending"); }
     public int packageCacheMaxMb() { return section("packages").getInteger("cacheMaxMb"); }
     /** Raw {@code FV_PACKAGE_SOURCES} entries: hosts ({@code packages.fhir.org}) or base URLs ({@code https://host[:port]}). */
     public List<String> packageSources() { return splitList(section("packages").getString("sources")); }

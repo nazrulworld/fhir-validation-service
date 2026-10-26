@@ -52,6 +52,7 @@ public final class ServiceRegistry {
     private final ApiKeyRepository apiKeys;
     private final ApiKeyAuthHandler auth;
     private final SafePackageFetcher fetcher;
+    private final AdmissionController adminAdmission;
     private final AtomicInteger boundPort = new AtomicInteger(-1);
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicBoolean refusingNewRequests = new AtomicBoolean();
@@ -71,6 +72,8 @@ public final class ServiceRegistry {
         this.validationService = validationService;
         this.profileServices = profileServices;
         this.fetcher = fetcher;
+        this.adminAdmission = new AdmissionController(config.adminMaxPending(),
+                "Too many administrative operations in progress; retry shortly");
         this.apiKeys = new ApiKeyRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
         this.validationApi = new ValidationApi(validationService, igPackageService);
@@ -108,7 +111,7 @@ public final class ServiceRegistry {
                         config.validationMaxBundleEntries()), profileServices,
                 fetcher);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
-        metrics.bind(services.validationService.admission(), registry, packageCache, stores);
+        metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache, stores);
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
@@ -175,6 +178,11 @@ public final class ServiceRegistry {
 
     public SafePackageFetcher fetcher() {
         return fetcher;
+    }
+
+    /** Admission limit for administrative operations ({@code FV_ADMIN_MAX_PENDING}), separate from validation. */
+    public AdmissionController adminAdmission() {
+        return adminAdmission;
     }
 
     public ServiceMetrics metrics() {

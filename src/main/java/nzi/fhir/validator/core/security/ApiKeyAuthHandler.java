@@ -61,6 +61,11 @@ public class ApiKeyAuthHandler {
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
 
+    /** Whether the request is an administrative operation: one that changes IGs, profiles or validator configuration. */
+    public static boolean isAdministrative(RoutingContext ctx) {
+        return ctx.request().method() == io.vertx.core.http.HttpMethod.POST && ADMIN_PATHS.matcher(ctx.normalizedPath()).matches();
+    }
+
     /**
      * Router-level authorisation, mounted before contract validation so unauthenticated calls are refused before
      * their input is examined: administrative operations need ADMIN, validation and read operations follow
@@ -68,11 +73,9 @@ public class ApiKeyAuthHandler {
      */
     public Handler<RoutingContext> rootHandler() {
         return ctx -> {
-            String path = ctx.normalizedPath();
-            boolean post = ctx.request().method() == io.vertx.core.http.HttpMethod.POST;
-            if (post && ADMIN_PATHS.matcher(path).matches()) {
+            if (isAdministrative(ctx)) {
                 authorise(ctx, false, Role.ADMIN);
-            } else if (VALIDATE_PATHS.matcher(path).matches()) {
+            } else if (VALIDATE_PATHS.matcher(ctx.normalizedPath()).matches()) {
                 authorise(ctx, anonymousValidate, Role.VALIDATE, Role.ADMIN);
             } else {
                 ctx.next();
