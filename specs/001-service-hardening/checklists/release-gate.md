@@ -39,7 +39,7 @@
 - [x] CHK021 - Is US6 scenario 1 (an all-in-one image "may exist" as a dev artefact) consistent with the plan's decision to drop it (R16)? [Consistency, Spec §US6-AS1, research.md §R16]
 - [x] CHK022 - Are the supported FHIR versions stated identically in the spec Assumptions, FR-021, the OpenAPI enum and the data-model seed rows (STU3, R4, R4B, R5; R6 disabled)? [Consistency, Spec §FR-021, data-model.md §1.3]
 - [ ] CHK023 - Is the health endpoints' auth exemption (Assumptions) consistent with FR-012 and the contract's security table (including `/metrics`)? [Consistency, Spec §Assumptions, contracts/http-api.md]
-- [ ] CHK024 - Is the multi-arch requirement (FR-032: build for x86_64 and arm64) consistent with the CI contract, which smoke-tests amd64 only? [Consistency, Spec §FR-032, contracts/container.md §3]
+- [x] CHK024 - Is the multi-arch requirement (FR-032: build for x86_64 and arm64) consistent with the CI contract, which smoke-tests amd64 only? [Consistency, Spec §FR-032, contracts/container.md §3]
 - [x] CHK025 - Do the error-format requirements apply consistently to read endpoints (dependencies, conformance), not only to validation and admin endpoints? [Consistency, Spec §FR-019, Spec §FR-023]
 
 ## Acceptance Criteria Quality
