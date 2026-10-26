@@ -21,6 +21,10 @@ security: []           # default: anonymous; set per operation below
 | `healthApiHealth`, `healthApiLiveness`, `healthApiReadiness` (new), `metrics` (new) | none | — |
 | `validationApiValidate` | `apiKey` (optional when `FV_AUTH_ANONYMOUS_VALIDATE=true`) | `VALIDATE` or `ADMIN` |
 | `validationApiIncludeIg` ⚠, `profileApiRegisterProfile` ⚠, `igPackageApiUploadIg` ⚠, `igPackageApiRegisterIg` ⚠ | `apiKey` | `ADMIN` |
+
+Administrative operations (the four rows above with `ADMIN`) have their own admission limit, `FV_ADMIN_MAX_PENDING`
+(default 4), separate from validation. A request holds its slot until its response ends. Beyond the limit it gets 503
+`Problem` (type `overloaded`) with `Retry-After`, after authorisation, so unauthenticated calls never take a slot.
 | `igPackageApiGetDependenciesGraph`, `igPackageApiGenerateConformanceReport` | `apiKey` (optional when `FV_AUTH_ANONYMOUS_VALIDATE=true`, like validation) | `VALIDATE` or `ADMIN` |
 
 ## New operations
@@ -132,6 +136,7 @@ Service meters, Prometheus text format (Vert.x HTTP/pool meters are added in pro
 | `fv_validations_total` | `version`, `outcome` (`valid`, `invalid`, `unparseable`, `error`) | Validation requests |
 | `fv_validation_seconds` | `version` | Validation duration histogram |
 | `fv_validation_pending` / `fv_validation_max_pending` | | Admitted validations / admission limit |
+| `fv_admin_pending` / `fv_admin_max_pending` | | Administrative operations in progress / their admission limit (`FV_ADMIN_MAX_PENDING`) |
 | `fv_config_revision` | `version` | Configuration revision applied on this instance |
 | `fv_validator_ready` | `version` | 1 when the version's validator serves requests |
 | `fv_snapshot_packages` / `fv_snapshot_package_size_bytes` | `version` | IG packages and their archive size in the active validator |

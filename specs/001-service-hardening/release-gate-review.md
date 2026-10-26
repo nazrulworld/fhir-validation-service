@@ -97,7 +97,7 @@ the 2026-10-25 clarifications (CHK033 only partly: see below).
 | CHK033 | Partial | Rolling back from 1.0.0 to 0.1.x is covered (upgrade guide "Rollback": keep the old volume; 0.1.x can't use V3/V4). Nothing covers reverting a later 1.x release whose migrations have run | Add a rollback rule for 1.x migrations (e.g. migrations stay backward compatible within 1.x) |
 | CHK034 | Satisfied | Clarification and Assumptions: mixed 0.1.x/1.0.0 fleets aren't supported; stop, migrate, start | — |
 | CHK035 | Partial | FR-002 requires 503, readiness false, retry with backoff and recovery. `/health` names the failure; `fv_snapshot_build_failures_total` exists. Backoff bounds and alerting guidance are unspecified | Specify the backoff bounds; point to the metric for alerting |
-| CHK036 | Gap | Nothing specifies it. The code admits only validations, so admin operations bypass the limit | Specify the intended behaviour (likely: not counted, but bounded by the `fv-packages` pool) |
+| CHK036 | Gap | Nothing specifies it. The code admits only validations, so admin operations bypass the limit | Specify the intended behaviour (likely: not counted, but bounded by the `fv-packages` pool). **Resolved 2026-10-26**: the `fv-packages` queue turned out to be unbounded (constitution VI), so FR-010 now requires a separate admin limit, implemented as `FV_ADMIN_MAX_PENDING` (503 `overloaded` beyond it) |
 | CHK037 | Partial | `FV_PACKAGE_REGISTRY_ENABLED=false` means offline (cache only), and R6 rule 3 falls back when registries are disabled. FR-025 and FR-026 don't cover offline | Add the offline behaviour to FR-025/FR-026 |
 
 ### Edge Case Coverage

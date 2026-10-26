@@ -46,6 +46,7 @@ public final class ConfigLoader {
             new Entry("FV_VALIDATION_MAX_BUNDLE_ENTRIES", "validation.maxBundleEntries", Kind.INT, 1, 1_000_000),
             new Entry("FV_VALIDATION_TIMEOUT_MS", "validation.timeoutMs", Kind.LONG, 100, 3_600_000),
             new Entry("FV_PACKAGE_WORKERS", "packages.workers", Kind.INT, 1, 16),
+            new Entry("FV_ADMIN_MAX_PENDING", "admin.maxPending", Kind.INT, 1, 64),
             new Entry("FV_PACKAGE_CACHE_MAX_MB", "packages.cacheMaxMb", Kind.INT, 0, 65_536),
             new Entry("FV_PACKAGE_SOURCES", "packages.sources", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_PACKAGE_REGISTRY_ENABLED", "packages.registryEnabled", Kind.BOOL, NO_MIN, NO_MAX),

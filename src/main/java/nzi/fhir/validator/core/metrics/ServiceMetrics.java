@@ -44,12 +44,16 @@ public class ServiceMetrics {
     }
 
     /** Gauges and function counters over live service state. */
-    public void bind(AdmissionController admission, ValidatorRegistry validators, PackageCache packageCache,
-                     Map<SupportedFhirVersion, ProfileStore> profileStores) {
+    public void bind(AdmissionController admission, AdmissionController adminAdmission, ValidatorRegistry validators,
+                     PackageCache packageCache, Map<SupportedFhirVersion, ProfileStore> profileStores) {
         Gauge.builder("fv.validation.pending", admission, AdmissionController::pending)
                 .description("Validations running or queued").register(registry);
         Gauge.builder("fv.validation.max.pending", admission, AdmissionController::maxPending)
                 .description("Admission limit (FV_VALIDATION_MAX_PENDING)").register(registry);
+        Gauge.builder("fv.admin.pending", adminAdmission, AdmissionController::pending)
+                .description("Administrative operations in progress").register(registry);
+        Gauge.builder("fv.admin.max.pending", adminAdmission, AdmissionController::maxPending)
+                .description("Admission limit for administrative operations (FV_ADMIN_MAX_PENDING)").register(registry);
         Gauge.builder("fv.package.cache.size", packageCache, PackageCache::weightBytes)
                 .baseUnit("bytes").description("Estimated memory of cached IG packages").register(registry);
         FunctionCounter.builder("fv.package.cache.hits", packageCache, PackageCache::hits)

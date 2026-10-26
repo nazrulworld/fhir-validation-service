@@ -19,6 +19,7 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | `FV_VALIDATION_MAX_BUNDLE_ENTRIES` | `validation.maxBundleEntries` | `10000` | 1–1000000. A Bundle with more entries is refused with 413 `payload-too-large` (constitution VI) |
 | `FV_VALIDATION_TIMEOUT_MS` | `validation.timeoutMs` | `30000` | Worker max execute time: exceeding it logs a blocked-thread warning (Vert.x cannot interrupt a running validation) |
 | `FV_PACKAGE_WORKERS` | `packages.workers` | `2` | 1–16 |
+| `FV_ADMIN_MAX_PENDING` | `admin.maxPending` | `4` | 1–64. Administrative operations (upload, register, include-ig, register-profile) in progress per instance, separate from `FV_VALIDATION_MAX_PENDING`. Beyond it: 503 `overloaded` with `Retry-After`. Background syncs are not counted |
 | `FV_PACKAGE_CACHE_MAX_MB` | `packages.cacheMaxMb` | `256` | 0 disables the cache |
 | `FV_PACKAGE_SOURCES` | `packages.sources` | `packages.fhir.org,packages2.fhir.org` | Registries and approved download hosts. Each entry is a host (registry `https://<host>`) or a base URL (`scheme://host[:port]`); the host part is the allowlist for registry and `downloadUrl` fetches |
 | `FV_PACKAGE_REGISTRY_ENABLED` | `packages.registryEnabled` | `true` | `false` = offline (cache-only) |

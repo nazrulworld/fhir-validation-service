@@ -52,6 +52,7 @@ public class HttpVerticle extends AbstractVerticle {
                     CorsConfig.create(services.config()).ifPresent(routerBuilder::rootHandler);
                     routerBuilder.rootHandler(bodyHandler());
                     routerBuilder.rootHandler(services.auth().rootHandler());
+                    routerBuilder.rootHandler(new AdminAdmissionHandler(services.adminAdmission()));
 
                     services.validationApi().includeRoutes(routerBuilder);
                     services.profileApi().includeRoutes(routerBuilder);
