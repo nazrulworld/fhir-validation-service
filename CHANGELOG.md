@@ -77,7 +77,8 @@ Upgrading from 0.1.x moves data out of the container: follow [docs/upgrade-1.0.m
   another thread used a new custom or IG profile for the first time. HL7 core's snapshot generator modifies the base
   definition it works on, and HAPI shares the core definitions JVM-wide, so lazily generated snapshots raced with
   concurrent validations (HAPI 8.4 and later). Missing snapshots are now generated up front, against private copies,
-  before profiles and IG packages become visible to validation.
+  before profiles and IG packages become visible to validation. Reported upstream as
+  [hapifhir/hapi-fhir#8756](https://github.com/hapifhir/hapi-fhir/issues/8756).
 - Registering a profile or including an IG could complete before the change was applied on the answering instance,
   when a notification-driven sync was applying it at the same time. Syncs of one FHIR version now run one after
   another, so the call returns only once its change is in effect locally.
