@@ -1,5 +1,6 @@
 package nzi.fhir.validator.testsupport;
 
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
@@ -40,6 +41,14 @@ public final class AppHarness {
 
     public static Future<AppHarness> start(Vertx vertx, JsonObject config) {
         return Bootstrap.start(vertx, ApplicationConfig.of(config)).map(b -> new AppHarness(vertx, b));
+    }
+
+    /**
+     * Like production ({@code Bootstrap.main}): {@code vertx} reports its HTTP metrics into {@code meterRegistry}, the
+     * registry {@code /metrics} serves.
+     */
+    public static Future<AppHarness> start(Vertx vertx, JsonObject config, PrometheusMeterRegistry meterRegistry) {
+        return Bootstrap.start(vertx, ApplicationConfig.of(config), meterRegistry).map(b -> new AppHarness(vertx, b));
     }
 
     public Bootstrap bootstrap() {

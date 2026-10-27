@@ -77,6 +77,10 @@ class DependencyResolverTest {
         var r = DependencyResolver.resolve(List.of("a#1.0.0"), cat);
         assertEquals(List.of("a#1.0.0"), r.resolved());
         assertEquals(2, r.warnings().size(), r.warnings().toString());
+        // FR-005: inclusion resolves against stored packages only; an unstored dependency, pinned or not, is skipped
+        // and named in the warnings rather than fetched from a registry.
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("ghost#1.0.0") && w.contains("not stored")), r.warnings().toString());
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("phantom") && w.contains("required by a#1.0.0")), r.warnings().toString());
     }
 
     @Test

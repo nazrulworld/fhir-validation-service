@@ -107,7 +107,10 @@ anything else that runs there.
 1. Skip core packages (`hl7.fhir.rX.core`), as today.
 2. A version spelled out on the dependency is used exactly.
 3. A missing version, `current` or `latest` resolves to the highest stored version by R7 ordering.
-   If none is stored and registries are enabled, use the registry's latest.
+   A dependency that is not stored is skipped with a warning: inclusion never contacts a registry, so
+   network latency stays out of the configuration transaction (FR-020). Registries are consulted when
+   an IG is registered by name: its dependencies are fetched then, an unpinned one as the highest
+   stored version or, if none is stored, the registry's latest.
 4. If the same package is reached with different versions, keep the **highest by R7 ordering** and
    log a warning with both paths.
 5. Cycles are cut by the visited set, keyed by name.
