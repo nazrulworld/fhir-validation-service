@@ -44,9 +44,9 @@ docker run --rm --network fhir_default -v "$PWD":/work:ro -v /tmp/igs:/igs:ro -e
   -e PACKAGE_NAME=hl7.fhir.r4.examples -e PACKAGE_VERSION=4.0.1 /work/perf/validate-during-ig-load.js
 ```
 
-Heap: this package needs more than the default `FV_MEMORY_LIMIT=2g` (1.5 GB heap). Before T131 the instance ran out
+Heap: this package needs more than `FV_MEMORY_LIMIT=2g` (1.5 GB heap), the default until 4g. Before T131 the instance ran out
 of heap after the rebuild and, since the include was committed, kept running out on every restart; now the include
-is refused with 413 `package-too-large` (needs about 1144 MB, 657 MB free) and nothing is committed. Use 3g or more
+is refused with 413 `package-too-large` at 2g (needs about 1144 MB, 657 MB free) and nothing is committed. The default 4g fits it
 (sizing rule under `FV_MEMORY_LIMIT` in `specs/001-service-hardening/contracts/configuration.md`). Measured with
 `FV_MEMORY_LIMIT=4g` (2026-10-26): validation p95 +14.3% over baseline, probes max 68 ms, 0% failed. Use a separate
 compose project (`COMPOSE_PROJECT_NAME=fvperf`) and `docker compose down -v` afterwards, so the test package does not
