@@ -90,4 +90,12 @@ where 1.0.0 fixes bugs, for example custom profiles that 0.1.x skipped on first 
 ## Rehearsal
 
 `scripts/upgrade-rehearsal.sh` runs this guide end to end against a throwaway 0.1.2 installation and checks that the
-counts match. Run it before upgrading production.
+counts match. It also checks that a registered profile is still in effect: the dk-core Patient profile is registered
+on 0.1.2, a complete dk Patient and one without `identifier` are validated against it before the dump and after the
+upgrade, and the error-level issues must be the same (FHIRPath character positions aside), including the
+profile-only "Patient.identifier: minimum required = 1" for the variant. Run it before upgrading production; CI runs it
+when the CI workflow is started manually with `upgrade-rehearsal` enabled.
+
+Last result (2026-10-27, local run on Apple silicon, 0.1.2 image against the 1.0.0 working tree including migration
+V5): counts 2 IGs, 1 profile, 3 configurations before and after; dk profile in effect on both versions with identical
+error-level issues (13 for the complete Patient, 11 for the variant); `REHEARSAL OK`.

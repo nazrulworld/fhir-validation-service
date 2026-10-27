@@ -1,6 +1,7 @@
 #!/bin/sh
 # Rehearses docs/upgrade-1.0.md against a throwaway 0.1.2 installation:
-#   old image + volume -> register an IG and a profile -> dump -> restore into the 1.0.0 stack -> compare counts.
+#   old image + volume -> register an IG and a profile -> record profile validation results -> dump -> restore into
+#   the 1.0.0 stack -> compare counts and profile validation results (the profile is in effect after the upgrade).
 # Usage: sh scripts/upgrade-rehearsal.sh   (repository root; needs docker, curl, jq; ~10 minutes)
 set -eu
 
@@ -9,6 +10,9 @@ PROJECT=fvrehearsal
 OLD_VOLUME="${PROJECT}_oldpgdata"
 OLD_PORT=18990
 WORK=$(mktemp -d)
+DK_PROFILE="http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
+# An issue only the dk-core profile raises (base Patient allows no identifier).
+DK_RULE="Patient.identifier: minimum required = 1"
 COUNT_SQL="SELECT 'igs', count(*) FROM fhir_validator_schema.fhir_implementation_guides UNION ALL SELECT 'profiles', count(*) FROM fhir_validator_schema.fhir_profiles UNION ALL SELECT 'configs', count(*) FROM fhir_validator_schema.fhir_validator_logs ORDER BY 1"
 
 # The 1.0.0 stack reads its settings from $WORK/.env only: compose.yaml's `env_file: .env` would otherwise need a .env
@@ -22,6 +26,27 @@ cleanup() {
   docker volume rm "$OLD_VOLUME" > /dev/null 2>&1 || true
 }
 fail() { echo "REHEARSAL FAILED: $*" >&2; cleanup; exit 1; }
+
+# Error-level issues of a validation answer ({valid, messages:[{severity, location, message}]}, the JSON shape of
+# both versions), one "location | message" per line, sorted. FHIRPath "(@char N)" positions are dropped: the newer
+# HL7 core library reports a different character offset in otherwise identical messages.
+errors() {
+  jq -r '.messages[] | select(.severity == "ERROR" or .severity == "FATAL") | .location + " | " + .message' "$1" \
+    | sed 's/ (@char [0-9]*)//g' | sort
+}
+
+# Validates the dk Patient and a variant without identifier on $1 ("old" or "new"), declaring the dk profile in
+# meta.profile (0.1.2 has no profile parameter); saves the error-level issues to $WORK/<name>.<variant>.errors.
+validate_dk() {
+  base=$1; name=$2; query=${3:-}
+  for variant in complete no-identifier; do
+    curl -fs -H 'Content-Type: application/fhir+json' -H 'Accept: application/json' --data-binary @"$WORK/patient-$variant.json" \
+      "$base/R4/validate$query" > "$WORK/$name.$variant.json" || fail "validation of the $variant dk Patient on $name"
+    errors "$WORK/$name.$variant.json" > "$WORK/$name.$variant.errors"
+  done
+  grep -qF "$DK_RULE" "$WORK/$name.no-identifier.errors" || fail "dk profile not in effect on $name (no '$DK_RULE')"
+  ! grep -qF "$DK_RULE" "$WORK/$name.complete.errors" || fail "complete dk Patient reported '$DK_RULE' on $name"
+}
 trap cleanup EXIT
 
 echo "==> old image"
@@ -50,6 +75,10 @@ COPYFILE_DISABLE=1 tar -czf "$WORK/example.rehearsal-1.0.0.tgz" -C "$WORK/pkg" p
 curl -fs -F "file=@$WORK/example.rehearsal-1.0.0.tgz;type=application/octet-stream" "http://127.0.0.1:${OLD_PORT}/igs/upload" > /dev/null || fail "upload of the rehearsal package on 0.1.2"
 curl -fs -H 'Content-Type: application/json' --data '{"igPackageId":"example.rehearsal","igPackageVersion":"1.0.0"}' "http://127.0.0.1:${OLD_PORT}/R4/include-ig" > /dev/null || fail "include on 0.1.2"
 curl -fs -H 'Content-Type: application/json' --data @src/test/resources/fhir/profiles/dk/StructureDefinition-dk-core-patient.json "http://127.0.0.1:${OLD_PORT}/R4/register-profile" > /dev/null || fail "profile on 0.1.2"
+cp src/test/resources/fhir/resources/dk/Patient.json "$WORK/patient-complete.json"
+jq 'del(.identifier)' "$WORK/patient-complete.json" > "$WORK/patient-no-identifier.json"
+validate_dk "http://127.0.0.1:${OLD_PORT}" old
+echo "    0.1.2: dk profile in effect ($(wc -l < "$WORK/old.complete.errors" | tr -d ' ') / $(wc -l < "$WORK/old.no-identifier.errors" | tr -d ' ') error-level issues)"
 docker stop -t 30 "${PROJECT}-old" > /dev/null; docker rm "${PROJECT}-old" > /dev/null
 
 # Runs $1 against the old cluster in a throwaway container. PostgreSQL is stopped cleanly afterwards: a server killed
@@ -84,7 +113,13 @@ $DC up -d --build --wait --wait-timeout 300 > /dev/null || fail "1.0.0 did not b
 packages=$(curl -fs "http://127.0.0.1:18991/health/readiness" | jq -r '.versions.R4.packages | join(",")')
 echo "    R4 packages after upgrade: $packages"
 echo "$packages" | grep -q "example.rehearsal#1.0.0" || fail "included IG not active after upgrade"
-code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/fhir+json' --data-binary @src/test/resources/fhir/resources/dk/Patient.json "http://127.0.0.1:18991/R4/validate")
-[ "$code" = "200" ] || fail "validation after upgrade returned $code"
+validate_dk "http://127.0.0.1:18991" new "?profile=$DK_PROFILE"
+jq -e --arg p "$DK_PROFILE" '.appliedProfiles | index($p)' "$WORK/new.complete.json" > /dev/null \
+  || fail "appliedProfiles lacks $DK_PROFILE after upgrade"
+for variant in complete no-identifier; do
+  diff "$WORK/old.$variant.errors" "$WORK/new.$variant.errors" \
+    || fail "error-level issues of the $variant dk Patient differ between 0.1.2 and 1.0.0"
+done
+echo "    1.0.0: dk profile in effect, same error-level issues as 0.1.2"
 
 echo "REHEARSAL OK"

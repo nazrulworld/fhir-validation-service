@@ -45,6 +45,10 @@ uses [Semantic Versioning](https://semver.org/).
   request timed out and get 503 "retry later" although it was already committed. The answer now waits at most
   min(10 s, `FV_HTTP_REQUEST_TIMEOUT_MS`/2), then returns 200 with a "still applying" warning.
 
+- `scripts/upgrade-rehearsal.sh` runs in CI (the old database is stopped cleanly between steps, and the 1.0.0
+  validator gets the rehearsal's own env file) and also checks that a registered profile is still in effect after
+  the upgrade, with the same error-level issues as on 0.1.2.
+
 - `FV_PACKAGE_FETCH_TIMEOUT_MS` now also bounds name resolution of a package source, including any wait for a free
   package worker.
 
