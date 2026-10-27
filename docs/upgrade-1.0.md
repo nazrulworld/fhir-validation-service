@@ -96,6 +96,6 @@ upgrade, and the error-level issues must be the same (FHIRPath character positio
 profile-only "Patient.identifier: minimum required = 1" for the variant. Run it before upgrading production; CI runs it
 when the CI workflow is started manually with `upgrade-rehearsal` enabled.
 
-Last result (2026-10-27, local run on Apple silicon, 0.1.2 image against the 1.0.0 working tree including migration
-V5): counts 2 IGs, 1 profile, 3 configurations before and after; dk profile in effect on both versions with identical
+Last result (2026-10-27, CI run 40552529996 on amd64 and a local run on Apple silicon, 0.1.2 image against 1.0.0
+including migration V5): counts 2 IGs, 1 profile, 3 configurations before and after; dk profile in effect on both versions with identical
 error-level issues (13 for the complete Patient, 11 for the variant); `REHEARSAL OK`.
