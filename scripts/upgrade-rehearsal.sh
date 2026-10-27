@@ -11,9 +11,14 @@ OLD_PORT=18990
 WORK=$(mktemp -d)
 COUNT_SQL="SELECT 'igs', count(*) FROM fhir_validator_schema.fhir_implementation_guides UNION ALL SELECT 'profiles', count(*) FROM fhir_validator_schema.fhir_profiles UNION ALL SELECT 'configs', count(*) FROM fhir_validator_schema.fhir_validator_logs ORDER BY 1"
 
+# The 1.0.0 stack reads its settings from $WORK/.env only: compose.yaml's `env_file: .env` would otherwise need a .env
+# in the repository root (absent in CI) or load the developer's own. Explicit -f files also skip compose.override.yaml.
+printf 'services:\n  validator:\n    env_file: !override\n      - %s/.env\n' "$WORK" > "$WORK/compose.rehearsal.yaml"
+DC="docker compose -p $PROJECT --env-file $WORK/.env -f compose.yaml -f $WORK/compose.rehearsal.yaml"
+
 cleanup() {
   docker rm -f "${PROJECT}-old" > /dev/null 2>&1 || true
-  docker compose -p "$PROJECT" --env-file "$WORK/.env" down -v > /dev/null 2>&1 || true
+  $DC down -v > /dev/null 2>&1 || true
   docker volume rm "$OLD_VOLUME" > /dev/null 2>&1 || true
 }
 fail() { echo "REHEARSAL FAILED: $*" >&2; cleanup; exit 1; }
@@ -69,7 +74,6 @@ cat "$WORK/before.txt"
 echo "==> restore into 1.0.0 (guide steps 3-4)"
 cp .env.example "$WORK/.env"
 sed -i.bak "s/^PG_PASSWORD=.*/PG_PASSWORD=rehearsal$(openssl rand -hex 8)/; s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=rehearsal$(openssl rand -hex 20)/; s/^FV_HTTP_PORT=.*/FV_HTTP_PORT=18991/" "$WORK/.env"
-DC="docker compose -p $PROJECT --env-file $WORK/.env"
 $DC up -d --wait postgres > /dev/null
 $DC exec -T postgres pg_restore -U postgres -d fhir_validator --no-owner --clean --if-exists < "$WORK/fhir_validator.dump" || true
 $DC exec -T postgres psql -U postgres -At -d fhir_validator -c "$COUNT_SQL" > "$WORK/after.txt"
