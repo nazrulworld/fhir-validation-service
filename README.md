@@ -56,8 +56,8 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag | Meaning |
 |-----|---------|
-| `1.0.0` | an exact release (recommended for production: pin it) |
-| `1.0` | the newest patch release of 1.0 |
+| `1.1.0` | an exact release (recommended for production: pin it) |
+| `1.1` | the newest patch release of 1.1 |
 | `latest` | the newest release |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
@@ -67,7 +67,7 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=1.0.0
+FV_TAG=1.1.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
 EOF
@@ -207,7 +207,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=1.0.0
+VERSION=1.1.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -227,7 +227,7 @@ export FV_ADMIN_API_KEY='<output of openssl rand -hex 32>'
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-1.0.0.jar
+  -jar fhir-validation-service-1.1.0.jar
 ```
 
 ```bash
@@ -274,7 +274,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-1.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-1.1.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
