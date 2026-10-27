@@ -166,8 +166,35 @@ class IgPackageApiContractTest extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * CHK038: an IG declared for another FHIR version is refused before anything is committed.
+     */
+    @Test
+    void includeOfAnIgForAnotherFhirVersionIs400(VertxTestContext ctx) {
+        var services = app.bootstrap().services();
+        // Source URL: uploadOverTheCompressedLimitIsRefusedBeforeReading counts UPLOAD rows in the shared schema.
+        services.igPackageService().registerIg(TestPackages.npmPackage("example.r4only", "1.0.0", Map.of(), List.of()), false, "URL")
+                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R5/include-ig")).timeout(10_000)
+                        .sendJsonObject(new JsonObject().put("igPackageId", "example.r4only").put("igPackageVersion", "1.0.0")))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(400, r.statusCode(), r.bodyAsString());
+                        JsonObject problem = r.bodyAsJsonObject();
+                        assertTrue(problem.getString("type").endsWith("/invalid-request"), problem.encode());
+                        assertTrue(problem.getString("detail").contains("R4") && problem.getString("detail").contains("R5"),
+                                problem.encode());
+                    });
+                    return nzi.fhir.validator.core.service.ConfigRevisionRepository.current(services.pool());
+                })
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(List.of(), rows.get(nzi.fhir.validator.core.enums.SupportedFhirVersion.R5).included(),
+                            "nothing was committed for R5");
+                    ctx.completeNow();
+                })));
+    }
+
     private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> include(String name) {
-        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R5/include-ig")).timeout(10_000)
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
                 .sendJsonObject(new JsonObject().put("igPackageId", name).put("igPackageVersion", "1.0.0"));
     }
 

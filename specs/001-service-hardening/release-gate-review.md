@@ -132,3 +132,47 @@ the 2026-10-25 clarifications (CHK033 only partly: see below).
 |------|---------|----------|---------------------|
 | CHK049 | Partial | traceability.md covers every finding. Two have no FR and no explicit deferral: D12 (Makefile; "Makefile review") and P7 (query shape, duplicate services; "code review only") | Record both as closed by review without an FR |
 | CHK050 | Partial | FRs without an acceptance scenario or success criterion: FR-009, FR-031, FR-034, FR-035, and FR-032's non-root and multi-arch parts. FR-022 (edge case) and FR-029 (US6-AS3, SC-008) are covered. FR-023 is covered only for B11 (US5-AS4), not for read-endpoint 404s | Add scenarios or criteria, or accept test coverage in traceability.md |
+
+## Resolution pass (2026-10-27)
+
+All 35 open items were resolved. Decisions taken with the product owner: CHK002 and CHK003 deferred (key management
+by SQL, documented in the README; no audit trail in 1.x), CHK008 keeps `prefer` with a documented recommendation,
+CHK038 rejects a mismatched IG with 400 (implemented). CHK040 is recorded as a deferral.
+
+| Item | Resolution |
+|------|------------|
+| CHK001 | FR-005 states the resolution rules (exact, highest stored, highest on conflict, cycles cut) |
+| CHK002 | Assumptions: deferral. README "API keys": add, rotate and revoke by SQL (tested against PostgreSQL 16) |
+| CHK003 | Assumptions: deferral; logs carry each change with its correlation id and revision |
+| CHK004 | FR-030 forbids logging resource bodies at INFO or above |
+| CHK005 | FR-010 bounds body size and bundle entry count ("too large") |
+| CHK007 | FR-012: CORS off by default, listed origins only, no wildcard in production |
+| CHK008 | FR-027 and README "Database connection security": `prefer` default, `require`/`verify-full` recommended off the compose network |
+| CHK011 | FR-010: refused immediately with `Retry-After: 1`; FR-002: `Retry-After: 5` |
+| CHK012 | FR-009 raised to MUST (the package cache already meets it) |
+| CHK014 | FR-002: within 10 seconds (SC-002) |
+| CHK016 | FR-017 names the default (JSON validation response) and the OperationOutcome types |
+| CHK017 | FR-013: host names, https only (dev-only exception), every redirect hop re-checked |
+| CHK018 | FR-025: non-SemVer labels sort below every semantic version |
+| CHK023 | FR-012: package read endpoints follow the validation rule; health, readiness and metrics always anonymous |
+| CHK026 | SC-003 names the reference workload (`perf/validate.js`, 3 KB dk-core Patient, R4) |
+| CHK027 | SC-007: baseline = heap in use just before the attempt, warm instance |
+| CHK028 | SC-008: 8 concurrent clients, SC-003 workload, at least 2 minutes, through the load balancer |
+| CHK029 | New SC-011 (metric families present; correlation id on every request log line) |
+| CHK030 | SC-010 defines the developer machine (4 cores, 4 GB for the container engine, warm image cache) |
+| CHK031 | Assumptions: image size and read-only root filesystem stay contract-level (the checklist's 350 MB figure is outdated; the target is ≤ 550 MB) |
+| CHK033 | Assumptions: migrations within 1.x are additive, so a 1.x rollback needs no database restore |
+| CHK035 | FR-002: backoff 1 s doubling to 60 s, failure named in health details, failed builds counted in a metric |
+| CHK037 | FR-025 and FR-026 cover offline mode (stored packages only, no registry contacted) |
+| CHK038 | Edge case added; include-ig answers 400 when the package's declared FHIR versions exclude the path version (`IgPackageApiContractTest`, `DeclaredFhirVersionTest`) |
+| CHK039 | Edge case: concurrent registrations of one profile URL, last committed wins |
+| CHK040 | Assumptions: deferral; IG memory is guarded per build (FR-008), counts are metrics |
+| CHK041 | Edge case: invalid ids replaced, reused ids accepted |
+| CHK042 | FR-008: oversized builds refused, never ending the process; operator memory sizing required (README, T132) |
+| CHK043 | Assumptions: trust boundaries, including the operator-only network for health and metrics |
+| CHK045 | FR-035: a CRITICAL scan finding or a failed build of either platform blocks publishing |
+| CHK046 | Assumptions: the 64-character claim is softened and unmeasured; longer labels are refused, never truncated |
+| CHK047 | Assumptions: registry API (versions listing, archive path, 404 for unknown packages) |
+| CHK048 | Assumptions: the three runtime libraries are named (justified in R13) |
+| CHK049 | traceability.md: D12 and P7 recorded as closed by review without an FR |
+| CHK050 | traceability.md: test or review coverage for FR-009, FR-023, FR-031, FR-032, FR-034, FR-035 |

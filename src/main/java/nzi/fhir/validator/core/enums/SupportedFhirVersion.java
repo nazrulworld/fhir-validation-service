@@ -101,6 +101,23 @@ public enum SupportedFhirVersion {
         };
     }
     /**
+     * The release a package's declared FHIR version belongs to, by major.minor ("4.0.1" and "4.0" → R4,
+     * "5.0.0-ballot" → R5); empty when the label is not a known release.
+     */
+    public static java.util.Optional<SupportedFhirVersion> fromDeclaredVersion(String declared) {
+        if (declared == null) {
+            return java.util.Optional.empty();
+        }
+        String v = declared.trim();
+        if (v.startsWith("3.0")) return java.util.Optional.of(STU3);
+        if (v.startsWith("4.0")) return java.util.Optional.of(R4);
+        if (v.startsWith("4.3")) return java.util.Optional.of(R4B);
+        if (v.startsWith("5.0")) return java.util.Optional.of(R5);
+        if (v.startsWith("6.0")) return java.util.Optional.of(R6);
+        return java.util.Optional.empty();
+    }
+
+    /**
      * Gets the default FHIR version.
      *
      * @return The default FHIR version (R4)

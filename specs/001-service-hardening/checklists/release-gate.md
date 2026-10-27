@@ -10,27 +10,27 @@
 
 ## Requirement Completeness
 
-- [ ] CHK001 - Is the dependency-resolution rule (missing versions, conflicting versions, cycles) stated in the spec itself, or does US1 scenario 5's "documented rule" depend only on research R6? [Completeness, Spec §US1-AS5, Spec §FR-005]
-- [ ] CHK002 - Are requirements defined for provisioning, rotating and revoking credentials beyond the single bootstrap admin key? [Gap, Spec §FR-012]
-- [ ] CHK003 - Does the spec require an audit trail (who changed which IG or profile, and when) for administrative changes that affect every consumer? [Gap, Spec §FR-015]
-- [ ] CHK004 - Is PHI handling in logs (no full resource bodies at INFO or above) restated as a requirement, or is FR-030 limited to credentials? [Gap, Spec §FR-030, Constitution §Security]
-- [ ] CHK005 - Are limits on resource or bundle size (not only request body size) specified, as constitution Principle VI requires? [Gap, Spec §FR-010]
+- [x] CHK001 - Is the dependency-resolution rule (missing versions, conflicting versions, cycles) stated in the spec itself, or does US1 scenario 5's "documented rule" depend only on research R6? [Completeness, Spec §US1-AS5, Spec §FR-005]
+- [x] CHK002 - Are requirements defined for provisioning, rotating and revoking credentials beyond the single bootstrap admin key? [Gap, Spec §FR-012]
+- [x] CHK003 - Does the spec require an audit trail (who changed which IG or profile, and when) for administrative changes that affect every consumer? [Gap, Spec §FR-015]
+- [x] CHK004 - Is PHI handling in logs (no full resource bodies at INFO or above) restated as a requirement, or is FR-030 limited to credentials? [Gap, Spec §FR-030, Constitution §Security]
+- [x] CHK005 - Are limits on resource or bundle size (not only request body size) specified, as constitution Principle VI requires? [Gap, Spec §FR-010]
 - [x] CHK006 - Is a default request timeout specified for FR-020's "within the configured request timeout", and is it distinct from the validation execution timeout? [Gap, Spec §FR-020, contracts/configuration.md]
-- [ ] CHK007 - Are CORS requirements (allowed origins per environment, no wildcard in production) captured in the spec, or only in the HTTP contract? [Gap, contracts/http-api.md §Headers]
-- [ ] CHK008 - Are transport-security requirements for the database connection (TLS/SSL mode) specified? [Gap, Spec §FR-027]
+- [x] CHK007 - Are CORS requirements (allowed origins per environment, no wildcard in production) captured in the spec, or only in the HTTP contract? [Gap, contracts/http-api.md §Headers]
+- [x] CHK008 - Are transport-security requirements for the database connection (TLS/SSL mode) specified? [Gap, Spec §FR-027]
 - [x] CHK009 - Are content requirements for the 1.0.0 migration note defined (each breaking status/body change, the removed config files and properties, the default port change 54329→5432)? [Completeness, Spec §Assumptions, contracts/configuration.md]
 - [x] CHK010 - Does the spec define what happens to secrets already committed in git history (e.g. a credential-rotation requirement), and not only their removal going forward? [Gap, Spec §FR-033, Audit D4]
 
 ## Requirement Clarity
 
-- [ ] CHK011 - Is "promptly" in FR-010 and US4 scenario 5 quantified with a time bound, and is the `Retry-After` value or rule specified? [Clarity, Spec §FR-010, Spec §US4-AS5]
-- [ ] CHK012 - Is FR-009's "SHOULD" intentional, given that P3 is rated High and SC-004 depends on load cost? [Ambiguity, Spec §FR-009]
+- [x] CHK011 - Is "promptly" in FR-010 and US4 scenario 5 quantified with a time bound, and is the `Retry-After` value or rule specified? [Clarity, Spec §FR-010, Spec §US4-AS5]
+- [x] CHK012 - Is FR-009's "SHOULD" intentional, given that P3 is rated High and SC-004 depends on load cost? [Ambiguity, Spec §FR-009]
 - [x] CHK013 - Is "validators are usable" in FR-011 defined: for all four versions, or per version with partial readiness? [Clarity, Spec §FR-011]
-- [ ] CHK014 - Is the "propagation window" referenced in US1 scenario 2 bound explicitly to SC-002's 10 seconds in the requirements, not only in success criteria? [Clarity, Spec §FR-002, Spec §SC-002]
+- [x] CHK014 - Is the "propagation window" referenced in US1 scenario 2 bound explicitly to SC-002's 10 seconds in the requirements, not only in success criteria? [Clarity, Spec §FR-002, Spec §SC-002]
 - [x] CHK015 - Is "lesser permission" for validation in FR-012 reconciled with plan R8's default of anonymous validation (`FV_AUTH_ANONYMOUS_VALIDATE=true`)? [Ambiguity, Spec §FR-012, research.md §R8]
-- [ ] CHK016 - Is the "documented default" response format in FR-017 named in the spec (JSON `ValidationResponse` vs `OperationOutcome`)? [Clarity, Spec §FR-017]
-- [ ] CHK017 - Are "approved sources" in FR-013 specified as hosts, URL prefixes or registries, and is redirect handling covered by the requirement? [Clarity, Spec §FR-013]
-- [ ] CHK018 - Is the semantic-version ordering for non-SemVer labels (`current`, `cibuild`, date-based) defined in the spec, or only in research R7? [Clarity, Spec §FR-025]
+- [x] CHK016 - Is the "documented default" response format in FR-017 named in the spec (JSON `ValidationResponse` vs `OperationOutcome`)? [Clarity, Spec §FR-017]
+- [x] CHK017 - Are "approved sources" in FR-013 specified as hosts, URL prefixes or registries, and is redirect handling covered by the requirement? [Clarity, Spec §FR-013]
+- [x] CHK018 - Is the semantic-version ordering for non-SemVer labels (`current`, `cibuild`, date-based) defined in the spec, or only in research R7? [Clarity, Spec §FR-025]
 
 ## Requirement Consistency
 
@@ -38,52 +38,52 @@
 - [x] CHK020 - Is SC-001 (100% of validations reflect a change) consistent with the edge case that lets an instance keep its old snapshot when a package is missing during rebuild? [Conflict, Spec §SC-001, Spec §Edge Cases, data-model.md §2]
 - [x] CHK021 - Is US6 scenario 1 (an all-in-one image "may exist" as a dev artefact) consistent with the plan's decision to drop it (R16)? [Consistency, Spec §US6-AS1, research.md §R16]
 - [x] CHK022 - Are the supported FHIR versions stated identically in the spec Assumptions, FR-021, the OpenAPI enum and the data-model seed rows (STU3, R4, R4B, R5; R6 disabled)? [Consistency, Spec §FR-021, data-model.md §1.3]
-- [ ] CHK023 - Is the health endpoints' auth exemption (Assumptions) consistent with FR-012 and the contract's security table (including `/metrics`)? [Consistency, Spec §Assumptions, contracts/http-api.md]
+- [x] CHK023 - Is the health endpoints' auth exemption (Assumptions) consistent with FR-012 and the contract's security table (including `/metrics`)? [Consistency, Spec §Assumptions, contracts/http-api.md]
 - [x] CHK024 - Is the multi-arch requirement (FR-032: build for x86_64 and arm64) consistent with the CI contract, which smoke-tests amd64 only? [Consistency, Spec §FR-032, contracts/container.md §3]
 - [x] CHK025 - Do the error-format requirements apply consistently to read endpoints (dependencies, conformance), not only to validation and admin endpoints? [Consistency, Spec §FR-019, Spec §FR-023]
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK026 - Does SC-003 specify the reference workload (resource type, size, profile/IG set) that makes "3× throughput" and "p95 < 200 ms" reproducible? [Measurability, Spec §SC-003]
-- [ ] CHK027 - Is the "baseline" in SC-007 (memory within 10% of baseline) defined: idle, steady load, or a measured pre-attempt value? [Measurability, Spec §SC-007]
-- [ ] CHK028 - Does SC-008 specify the load level and request mix during the rolling restart? [Measurability, Spec §SC-008]
-- [ ] CHK029 - Is there a measurable success criterion for FR-031 (metrics present, correlation id on every request log line)? [Gap, Spec §FR-031]
-- [ ] CHK030 - Is "developer machine" in SC-010 specified (CPU, memory, cold vs warm image cache) so that "ready within 2 minutes" is verifiable? [Measurability, Spec §SC-010]
-- [ ] CHK031 - Are the image size target (≤ 350 MB) and the read-only root filesystem compatibility promoted to spec criteria, or left as contract-only targets? [Traceability, contracts/container.md §1]
+- [x] CHK026 - Does SC-003 specify the reference workload (resource type, size, profile/IG set) that makes "3× throughput" and "p95 < 200 ms" reproducible? [Measurability, Spec §SC-003]
+- [x] CHK027 - Is the "baseline" in SC-007 (memory within 10% of baseline) defined: idle, steady load, or a measured pre-attempt value? [Measurability, Spec §SC-007]
+- [x] CHK028 - Does SC-008 specify the load level and request mix during the rolling restart? [Measurability, Spec §SC-008]
+- [x] CHK029 - Is there a measurable success criterion for FR-031 (metrics present, correlation id on every request log line)? [Gap, Spec §FR-031]
+- [x] CHK030 - Is "developer machine" in SC-010 specified (CPU, memory, cold vs warm image cache) so that "ready within 2 minutes" is verifiable? [Measurability, Spec §SC-010]
+- [x] CHK031 - Are the image size target (≤ 350 MB) and the read-only root filesystem compatibility promoted to spec criteria, or left as contract-only targets? [Traceability, contracts/container.md §1]
 
 ## Scenario Coverage
 
 - [x] CHK032 - Are upgrade requirements defined for existing deployments whose data lives in the bundled-database volume of the current image (data migration to an external database)? [Gap, Spec §FR-027, Audit D2]
-- [ ] CHK033 - Are rollback/downgrade requirements defined for migrations V3/V4 (e.g. a 0.1.x instance running against the V3 schema, or reverting a release)? [Gap, Recovery, data-model.md §Migration plan]
+- [x] CHK033 - Are rollback/downgrade requirements defined for migrations V3/V4 (e.g. a 0.1.x instance running against the V3 schema, or reverting a release)? [Gap, Recovery, data-model.md §Migration plan]
 - [x] CHK034 - Are requirements defined for a mixed-version fleet during a rolling upgrade (0.1.x and 1.0.0 instances sharing one database)? [Gap, Spec §SC-008]
-- [ ] CHK035 - Are recovery requirements specified for a configuration change that commits but fails to build on some instances (retry policy, alerting, operator visibility)? [Coverage, Recovery, Spec §FR-002]
+- [x] CHK035 - Are recovery requirements specified for a configuration change that commits but fails to build on some instances (retry policy, alerting, operator visibility)? [Coverage, Recovery, Spec §FR-002]
 - [x] CHK036 - Are requirements defined for behaviour when the admission limit is hit by administrative operations (IG include during overload): queued, rejected or prioritised? [Coverage, Spec §FR-010]
-- [ ] CHK037 - Is the offline / registry-disabled scenario (no outbound access) covered by requirements for "latest" resolution and dependency fetching? [Coverage, Spec §FR-025, Spec §FR-026]
+- [x] CHK037 - Is the offline / registry-disabled scenario (no outbound access) covered by requirements for "latest" resolution and dependency fetching? [Coverage, Spec §FR-025, Spec §FR-026]
 
 ## Edge Case Coverage
 
-- [ ] CHK038 - Is behaviour specified when a stored IG's declared FHIR version doesn't match the validator version it's included into? [Edge Case, Gap, Spec §FR-021]
-- [ ] CHK039 - Is behaviour specified when two administrators register the same profile URL simultaneously with different content (last-writer-wins and convergence)? [Edge Case, Spec §Edge Cases, Spec §FR-006]
-- [ ] CHK040 - Are limits and behaviour defined for the number of profiles or included IGs per version (memory growth with preloaded profiles and snapshots)? [Edge Case, Gap, Spec §FR-003]
-- [ ] CHK041 - Is the behaviour defined for an `X-Request-Id` supplied by a client that is invalid or reused (rejected, replaced or accepted)? [Edge Case, contracts/http-api.md §Headers]
+- [x] CHK038 - Is behaviour specified when a stored IG's declared FHIR version doesn't match the validator version it's included into? [Edge Case, Gap, Spec §FR-021]
+- [x] CHK039 - Is behaviour specified when two administrators register the same profile URL simultaneously with different content (last-writer-wins and convergence)? [Edge Case, Spec §Edge Cases, Spec §FR-006]
+- [x] CHK040 - Are limits and behaviour defined for the number of profiles or included IGs per version (memory growth with preloaded profiles and snapshots)? [Edge Case, Gap, Spec §FR-003]
+- [x] CHK041 - Is the behaviour defined for an `X-Request-Id` supplied by a client that is invalid or reused (rejected, replaced or accepted)? [Edge Case, contracts/http-api.md §Headers]
 
 ## Non-Functional Requirements
 
-- [ ] CHK042 - Are memory requirements specified for snapshot rebuilds, when old and new validators coexist (heap sizing guidance as an operator requirement)? [Gap, plan.md §Risks, Spec §FR-009]
-- [ ] CHK043 - Is a threat model or list of trust boundaries documented that justifies the chosen controls (auth, SSRF, archive guard), including which network the health and metrics endpoints are exposed to? [Traceability, Spec §US3]
+- [x] CHK042 - Are memory requirements specified for snapshot rebuilds, when old and new validators coexist (heap sizing guidance as an operator requirement)? [Gap, plan.md §Risks, Spec §FR-009]
+- [x] CHK043 - Is a threat model or list of trust boundaries documented that justifies the chosen controls (auth, SSRF, archive guard), including which network the health and metrics endpoints are exposed to? [Traceability, Spec §US3]
 - [x] CHK044 - Are compose requirements explicit that the observability and admin profiles must not weaken the defaults (loopback binding, required credentials)? [Completeness, Spec §FR-033]
-- [ ] CHK045 - Are CI requirements specified for what blocks publishing (scan severity threshold, failure of the arm64 build) rather than leaving this to the plan? [Clarity, Spec §FR-035, contracts/container.md §3]
+- [x] CHK045 - Are CI requirements specified for what blocks publishing (scan severity threshold, failure of the arm64 build) rather than leaving this to the plan? [Clarity, Spec §FR-035, contracts/container.md §3]
 
 ## Dependencies & Assumptions
 
-- [ ] CHK046 - Is the assumption that 64-character version labels cover all registry packages validated with a source or measurement? [Assumption, Spec §Assumptions, Spec §FR-024]
-- [ ] CHK047 - Is the dependency on public package registries' availability and behaviour (404 semantics, version listing format) documented as an assumption? [Dependency, Spec §FR-026]
-- [ ] CHK048 - Are the three new runtime dependencies and the "no new infrastructure" assumption reflected in the spec's Assumptions, or only in plan R13? [Assumption, Spec §Assumptions, research.md §R13]
+- [x] CHK046 - Is the assumption that 64-character version labels cover all registry packages validated with a source or measurement? [Assumption, Spec §Assumptions, Spec §FR-024]
+- [x] CHK047 - Is the dependency on public package registries' availability and behaviour (404 semantics, version listing format) documented as an assumption? [Dependency, Spec §FR-026]
+- [x] CHK048 - Are the three new runtime dependencies and the "no new infrastructure" assumption reflected in the spec's Assumptions, or only in plan R13? [Assumption, Spec §Assumptions, research.md §R13]
 
 ## Traceability
 
-- [ ] CHK049 - Does every audit finding (B1–B21, P1–P7, F1–F10, D1–D12) map to at least one FR or an explicit deferral? For example, D12 (Makefile) has no FR. [Traceability, Spec §SC-009, audit-findings.md]
-- [ ] CHK050 - Does every FR (FR-001–FR-035) have at least one acceptance scenario or success criterion that exercises it (e.g. FR-022, FR-023, FR-029)? [Traceability, Spec §Requirements]
+- [x] CHK049 - Does every audit finding (B1–B21, P1–P7, F1–F10, D1–D12) map to at least one FR or an explicit deferral? For example, D12 (Makefile) has no FR. [Traceability, Spec §SC-009, audit-findings.md]
+- [x] CHK050 - Does every FR (FR-001–FR-035) have at least one acceptance scenario or success criterion that exercises it (e.g. FR-022, FR-023, FR-029)? [Traceability, Spec §Requirements]
 
 ## Notes
 
