@@ -6,6 +6,14 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-27
+
+Upgrading from 1.0.0 needs no data migration: migration V5 (one new nullable column) is applied on startup, and a
+1.0.0 instance still runs against the migrated schema, so rolling back needs no database restore. Review
+`FV_MEMORY_LIMIT` in your `.env` (the default is now `4g`). Clients can see three new refusals: include-ig answers 400
+for an IG declared for another FHIR version and 413 for an IG set that would not fit in the heap, and administrative
+calls answer 503 `overloaded` beyond `FV_ADMIN_MAX_PENDING`.
+
 ### Added
 
 - `FV_ADMIN_MAX_PENDING` (default 4): administrative operations (upload, register, include-ig, register-profile) have
@@ -48,7 +56,8 @@ uses [Semantic Versioning](https://semver.org/).
   since the include was committed every restart crashed again. Include-ig now estimates the build's heap and refuses a
   set that does not fit with 413 `package-too-large` before committing; a committed set that an instance cannot build
   makes only that version unavailable (503, reason in `/health`) and is retried. README, `compose.yaml`,
-  `.env.example` and the configuration contract give a memory sizing rule (a 20 MB IG needs 3 GB or more).
+  `.env.example` and the configuration contract give a memory sizing rule (a 20 MB IG needs 3 GB or more; the new 4 GB
+  default fits it).
 
 - A profile registered while this instance was rebuilding the same version's validator could wait until the
   request timed out and get 503 "retry later" although it was already committed. The answer now waits at most

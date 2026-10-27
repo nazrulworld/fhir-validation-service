@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 1.0.0
+  version: 1.1.0
 
 servers:
   - url: http://localhost:8880
