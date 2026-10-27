@@ -3,7 +3,7 @@ current_dir := $(dir $(mkfile_path))
 postgres_data_dir := $(current_dir)var/postgres/data
 postgres_version := 16.8
 
-.PHONY: up up-cluster up-obs down clean logs smoke run-postgres
+.PHONY: up up-cluster up-obs down clean logs smoke rolling-restart run-postgres
 
 ## Start postgres + one validator (http://127.0.0.1:8880)
 up:
@@ -32,6 +32,10 @@ logs:
 ## Container smoke test (build, start, validate, graceful stop)
 smoke:
 	sh scripts/smoke.sh
+
+## Rolling restart of the cluster profile under k6 load; fails at >= 0.1% failed requests (SC-008)
+rolling-restart:
+	sh scripts/rolling-restart.sh
 
 ## PostgreSQL for IDE runs on 127.0.0.1:54329 (set FV_PG_PORT=54329 and FV_PG_PASSWORD accordingly)
 run-postgres:

@@ -1,6 +1,7 @@
 package nzi.fhir.validator.web.endpoint;
 
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.openapi.RouterBuilder;
@@ -49,10 +50,11 @@ public class ProfileApi {
             return;
         }
         Future<JsonObject> result = service.registerProfile(profile)
-                .map(revision -> new JsonObject()
+                .map(registration -> new JsonObject()
                         .put("status", "success")
                         .put("profileUrl", profile.getString("url"))
-                        .put("revision", revision));
+                        .put("revision", registration.revision())
+                        .put("warnings", new JsonArray(registration.warnings())));
         ErrorResponder.respond(ctx, result);
     }
 }

@@ -1,7 +1,6 @@
 package nzi.fhir.validator.core.service;
 
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -42,6 +41,7 @@ public class IgPackageService {
     private final PostgresPackageCacheManager cacheManager;
 
     private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
+    private Function<Long, Future<Void>> admitBuild = bytes -> Future.succeededFuture();
     private volatile long localApplyWaitMs = DEFAULT_LOCAL_APPLY_WAIT_MS;
 
     private IgPackageService(Vertx vertx, Pool pgPool, PostgresPackageCacheManager cacheManager) {
@@ -63,6 +63,15 @@ public class IgPackageService {
      */
     public void setApplyLocally(Function<SupportedFhirVersion, Future<Void>> applyLocally) {
         this.applyLocally = applyLocally;
+    }
+
+    /**
+     * @param admitBuild given the expanded size of a new resolved package set, fails (413 {@code package-too-large})
+     *                   if this instance could not build a validator from it; checked before the include is
+     *                   committed, so a set that would exhaust the heap never reaches the configuration
+     */
+    public void setAdmitBuild(Function<Long, Future<Void>> admitBuild) {
+        this.admitBuild = admitBuild;
     }
 
     public PostgresPackageCacheManager cacheManager() {
@@ -110,7 +119,12 @@ public class IgPackageService {
                         DependencyResolver.Resolution resolution = DependencyResolver.resolve(included, catalog);
                         warnings.addAll(resolution.warnings());
                         List<String> includedList = List.copyOf(included);
-                        return ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, resolution.resolved(), key)
+                        // An unchanged package set does not rebuild; a changed one must fit in this instance's heap.
+                        Future<Void> admitted = resolution.resolved().equals(row.resolved())
+                                ? Future.succeededFuture()
+                                : PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild);
+                        return admitted.compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList,
+                                        resolution.resolved(), key))
                                 .map(revision -> new JsonObject()
                                         .put("status", "success")
                                         .put("fhirVersion", fhirVersion.name())
@@ -119,7 +133,8 @@ public class IgPackageService {
                                         .put("resolved", new JsonArray(resolution.resolved())));
                     });
                 }))
-                .compose(result -> awaitLocal(applyLocally.apply(fhirVersion), warnings)
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                                () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             // The cause goes to the log (with the request id); clients get curated text (Principle IV).
                             logger.warn("Included IG {}#{} in {} is committed but not applied locally yet", name,
@@ -129,32 +144,6 @@ public class IgPackageService {
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
                 .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
-    }
-
-    /**
-     * {@code applied}, or success with a "still applying" warning once {@code localApplyWaitMs} has passed.
-     */
-    private Future<Void> awaitLocal(Future<Void> applied, List<String> warnings) {
-        if (applied.isComplete()) {
-            return applied;
-        }
-        Promise<Void> answer = Promise.promise();
-        long timer = vertx.setTimer(localApplyWaitMs, id -> {
-            if (!answer.future().isComplete()) {
-                // Add the warning first: completing the promise renders the response synchronously.
-                warnings.add(STILL_APPLYING_WARNING);
-                answer.tryComplete();
-            }
-        });
-        applied.onComplete(ar -> {
-            vertx.cancelTimer(timer);
-            if (ar.succeeded()) {
-                answer.tryComplete();
-            } else {
-                answer.tryFail(ar.cause());
-            }
-        });
-        return answer.future();
     }
 
     /**

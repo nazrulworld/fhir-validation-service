@@ -78,4 +78,4 @@ Test classes are under `src/test/java/nzi/fhir/validator/`; scripts under `scrip
 - **D4 history**: the old `.env` stays in git history. The password it held is treated as public; rotate it (upgrade guide step 0).
 - **P3, P7**: no dedicated behavioural tests (cache hit rate, query shape).
 - **SC-003, SC-004 (performance numbers)**: measured with `perf/` k6 scripts and attached to the PR, not part of `mvn verify`.
-- **SC-008 (rolling restart < 0.1 % failures)**: drain is tested per instance (`GracefulShutdownIT`); a fleet-wide rolling restart under load is a manual check (quickstart §6).
+- **SC-008 (rolling restart < 0.1 % failures)**: drain is tested per instance (`GracefulShutdownIT`); the fleet-wide rolling restart under load is `scripts/rolling-restart.sh` (cluster profile, k6 through the load balancer, fails at ≥ 0.1 %), run on demand rather than in `mvn verify`. Result 2026-10-26: 34,113 requests, 0.035 % failed (T130).

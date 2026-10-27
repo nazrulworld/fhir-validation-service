@@ -8,7 +8,7 @@ section 2 can be rebuilt from it (Principle II). Applied migrations V1/V2 are ne
 
 ## 1. Persistent entities
 
-### 1.1 `fhir_implementation_guides`: IG package (existing, altered in V3)
+### 1.1 `fhir_implementation_guides`: IG package (existing, altered in V3 and V5)
 
 | Column | Type | Change | Rule |
 |--------|------|--------|------|
@@ -22,6 +22,7 @@ section 2 can be rebuilt from it (Principle II). Applied migrations V1/V2 are ne
 | `dependencies` | TEXT[] | — | Raw `name#version` strings as declared |
 | `created_at` | TIMESTAMPTZ | — | No longer used to pick "latest" (R7) |
 | `updated_at` | **TIMESTAMPTZ NULL** | V3 (new) | Set on upsert |
+| `expanded_bytes` | **BIGINT NULL** | V5 (new) | Total size of the package's files, set on upsert. Include-ig estimates a build's heap from it before committing (T131). NULL for packages stored before V5: 10 × the archive size stands in |
 
 Unique: `(ig_package_id, ig_package_version)`. **"latest" is computed in the application** with
 `PackageVersionComparator` (R7).

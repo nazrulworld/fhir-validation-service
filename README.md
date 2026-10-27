@@ -22,9 +22,12 @@ IGs and profiles reach every instance within seconds, without restarts.
   - Java 17 or later and your own PostgreSQL ([option C](#option-c-jar-with-your-own-postgresql)), or
   - Java 17 and Maven, to build and develop
 - PostgreSQL 16 (provided by the Compose setup)
-- About 2 GB of memory per instance (warmed validators for four FHIR versions). Including an IG rebuilds that
-  version's validator while the old one keeps serving, so allow headroom of at least twice the largest validator:
-  watch `fv_snapshot_package_size_bytes` (archive size; parsed packages take several times more heap)
+- About 2 GB of memory per instance (warmed validators for four FHIR versions take about 0.9 GB of heap). Including
+  an IG rebuilds that version's validator while the old one keeps serving, and a build holds about 6 times the IG
+  set's expanded size. Size the container as heap / 0.75 with heap ≈ 0.9 GB + 64 MB + 6 × the largest IG set's
+  expanded size: 2 GB fits IG sets up to about 100 MB expanded (roughly a 10 MB archive); a 20 MB IG such as
+  `hl7.fhir.r4.examples` (180 MB expanded) needs 3 GB or more. An include that would not fit is refused with 413
+  `package-too-large` and nothing is committed. Watch `fv_snapshot_package_size_bytes` (archive size).
 
 ## Installation
 

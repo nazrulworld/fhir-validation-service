@@ -157,7 +157,8 @@ paths:
       summary: Include a stored Implementation Guide in the validator configuration of a FHIR version
       description: >-
         Replaces any other version of the same package. The response confirms the committed configuration; other
-        instances apply it within the propagation window.
+        instances apply it within the propagation window. A package set whose validator would not fit in this
+        instance's heap is refused with 413 package-too-large before it is committed.
       parameters:
         - name: version
           in: path
@@ -188,6 +189,8 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '404':
+          $ref: '#/components/responses/Problem'
+        '413':
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
@@ -233,6 +236,11 @@ paths:
                   revision:
                     type: integer
                     format: int64
+                  warnings:
+                    type: array
+                    description: Curated notes, e.g. that this instance is still applying the committed change
+                    items:
+                      type: string
         '400':
           $ref: '#/components/responses/Problem'
         '500':

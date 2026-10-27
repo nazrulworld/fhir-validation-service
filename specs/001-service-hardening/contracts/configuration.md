@@ -18,13 +18,13 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | `FV_VALIDATION_MAX_PENDING` | `validation.maxPending` | 4 × workers | ≥ workers |
 | `FV_VALIDATION_MAX_BUNDLE_ENTRIES` | `validation.maxBundleEntries` | `10000` | 1–1000000. A Bundle with more entries is refused with 413 `payload-too-large` (constitution VI) |
 | `FV_VALIDATION_TIMEOUT_MS` | `validation.timeoutMs` | `30000` | Worker max execute time: exceeding it logs a blocked-thread warning (Vert.x cannot interrupt a running validation) |
-| `FV_PACKAGE_WORKERS` | `packages.workers` | `2` | 1–16 |
+| `FV_PACKAGE_WORKERS` | `packages.workers` | `2` | 1–16. Full validator builds use at most `workers - 1` of them (at least 1), so one worker stays free for profile parsing and refresh, upload parsing and DNS resolution while validators rebuild (FR-008, SC-002). With `1` nothing is reserved; use at least `2` in production |
 | `FV_ADMIN_MAX_PENDING` | `admin.maxPending` | `4` | 1–64. Administrative operations (upload, register, include-ig, register-profile) in progress per instance, separate from `FV_VALIDATION_MAX_PENDING`. Beyond it: 503 `overloaded` with `Retry-After`. Background syncs are not counted |
 | `FV_PACKAGE_CACHE_MAX_MB` | `packages.cacheMaxMb` | `256` | 0 disables the cache |
 | `FV_PACKAGE_SOURCES` | `packages.sources` | `packages.fhir.org,packages2.fhir.org` | Registries and approved download hosts. Each entry is a host (registry `https://<host>`) or a base URL (`scheme://host[:port]`); the host part is the allowlist for registry and `downloadUrl` fetches |
 | `FV_PACKAGE_REGISTRY_ENABLED` | `packages.registryEnabled` | `true` | `false` = offline (cache-only) |
 | `FV_PACKAGE_ALLOW_INSECURE_SOURCES` | `packages.allowInsecureSources` | `false` | **Dev profile only** (startup fails otherwise): allows http and private/loopback package sources, for tests and local registries. The allowlist still applies |
-| `FV_PACKAGE_FETCH_TIMEOUT_MS` | `packages.fetchTimeoutMs` | `30000` | |
+| `FV_PACKAGE_FETCH_TIMEOUT_MS` | `packages.fetchTimeoutMs` | `30000` | Bounds each step of a download: name resolution (including any wait for a free package worker) and the HTTP request |
 | `FV_PACKAGE_MAX_COMPRESSED_MB` | `packages.maxCompressedMb` | `50` | |
 | `FV_PACKAGE_MAX_EXPANDED_MB` | `packages.maxExpandedMb` | `500` | |
 | `FV_PACKAGE_MAX_ENTRIES` | `packages.maxEntries` | `20000` | |
@@ -44,6 +44,7 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | `FV_PG_POOL_SIZE` (alias `PG_POOL_SIZE`) | `pg.poolSize` | `15` | 1–200 |
 | `FV_PG_SSL_MODE` | `pg.sslMode` | `prefer` | `disable` \| `prefer` \| `require` \| `verify-full` |
 | `JAVA_OPTS` | *(JVM; container only)* | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` | |
+| `FV_MEMORY_LIMIT` | *(compose only: container memory)* | `2g` | The JVM takes 75% as heap. Size it as: heap ≈ 0.9 GB (four warmed core validators) + 64 MB + 6 × the expanded size of the largest IG set of one version; container = heap / 0.75. The default fits IG sets up to about 100 MB expanded (roughly a 10 MB archive). A 20 MB IG such as `hl7.fhir.r4.examples#4.0.1` (180 MB expanded) needs **3g** or more (SC-004 measured at 4g). Include-ig refuses a set that does not fit with 413 `package-too-large` (T131) |
 
 **Removed** ⚠: `application.properties`, `application-production.properties`,
 `application-docker.properties`, the `-Dvertx.environment`, `-Dapplication.config.path` and

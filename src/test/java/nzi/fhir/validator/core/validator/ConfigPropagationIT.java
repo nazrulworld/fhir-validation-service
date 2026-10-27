@@ -184,6 +184,44 @@ class ConfigPropagationIT extends BaseTestContainer {
     }
 
     /**
+     * FR-008 / SC-002 (T128): slow validator rebuilds of two other versions on B must not occupy every package worker,
+     * so a profile registered through A still reaches B within the propagation window.
+     */
+    @Test
+    void slowRebuildsOfOtherVersionsDoNotDelayProfilePropagation(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger buildsBlocked = new java.util.concurrent.atomic.AtomicInteger();
+        SnapshotBuilder builderB = b.services().snapshotBuilder();
+        builderB.setBuildHook(() -> {
+            buildsBlocked.incrementAndGet();
+            try {
+                release.await(60, TimeUnit.SECONDS); // a long rebuild holding its worker thread
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        String url = "http://example.org/fhir/StructureDefinition/during-rebuilds";
+        ValidatorRegistry registryB = b.services().validatorRegistry();
+        a.services().igPackageService().registerIg(TestPackages.npmPackage("example.slowbuild", "1.0.0", Map.of(), List.of()))
+                .compose(p -> {
+                    // Two rebuilds on B (R4B and R5), each blocked inside the package pool.
+                    registryB.apply(SupportedFhirVersion.R4B, 1_000, List.of("example.slowbuild#1.0.0"));
+                    registryB.apply(SupportedFhirVersion.R5, 1_000, List.of("example.slowbuild#1.0.0"));
+                    return Await.until(vertx, PROPAGATION_MS, "a rebuild is running on B",
+                            () -> Future.succeededFuture(buildsBlocked.get() >= 1));
+                })
+                .compose(ms -> a.services().profileServices().get(SupportedFhirVersion.R4)
+                        .registerProfile(TestPackages.requiredPatientElements(url, "birthDate")))
+                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "profile reaches B during the rebuilds",
+                        () -> bEnforces(url, "birthDate")))
+                .onComplete(ar -> {
+                    builderB.setBuildHook(null);
+                    release.countDown();
+                })
+                .onComplete(ctx.succeedingThenComplete());
+    }
+
+    /**
      * A local apply (as after a profile registration) must not complete while a background sync of the same version
      * is still applying: otherwise the caller returns before its own change took effect on this instance.
      */

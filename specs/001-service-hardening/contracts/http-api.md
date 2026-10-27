@@ -68,6 +68,7 @@ Body unchanged (`igPackageId`, `igPackageVersion` default `latest`). Responses:
 |--------|------|
 | 200 | `{status:"success", fhirVersion, revision, included:[…], resolved:["name#version", …], warnings:[…]}` (additive) |
 | 404 ⚠ | `Problem`: package not stored (previously 400) |
+| 413 | `Problem` (`type: …/problems/package-too-large`): the new IG set would not fit in the answering instance's heap. Nothing is committed; the detail names the estimate, the free heap and `FV_MEMORY_LIMIT` |
 | 401/403, 400, 500 | `Problem` |
 
 Success means the change is **committed**. Other instances apply it within the propagation window
@@ -76,9 +77,19 @@ most min(10 s, `FV_HTTP_REQUEST_TIMEOUT_MS`/2); after that it answers 200 with a
 entry in `warnings` while the rebuild continues (FR-020). Warnings are curated text and never carry
 exception messages.
 
+Before committing a changed package set, the instance estimates the build's heap (64 MB plus 6 × the
+packages' expanded size) and answers 413 if it exceeds the free heap. A committed set that an instance
+cannot build (for example one committed through an instance with more memory) fails that instance's
+build the same way: the version answers 503 and `/health` names the shortfall, the other versions keep
+serving, and the process stays up. It is retried with backoff.
+
 ### `POST /{version}/register-profile`
 
-- 200 response gains `revision`.
+- 200 response gains `revision` and `warnings` (additive).
+- Success means the profile is **committed**. The answering instance applies it before answering, but
+  that apply can queue behind a validator rebuild of the same version, so the response waits at most
+  min(10 s, `FV_HTTP_REQUEST_TIMEOUT_MS`/2). After that it answers 200 with a "still applying" entry in
+  `warnings` (FR-020). Warnings are curated text and never carry exception messages.
 - 400 `Problem` when the profile's `fhirVersion` doesn't match the path, or the version is not
   enabled (no more silent R6→R4 mapping, B15).
 

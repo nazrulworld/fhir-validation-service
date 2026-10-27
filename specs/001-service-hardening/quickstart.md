@@ -109,9 +109,9 @@ docker compose start postgres; sleep 12; curl -s -o /dev/null -w '%{http_code}\n
 docker compose logs validator | grep -ci password                                                                  # 0
 ```
 
-Graceful stop under load (SC-008): run `perf/validate.js`, then
-`docker compose --profile cluster restart validator`. Expected: k6 reports a failure rate below
-0.1%, and `validator` logs show `drain started` → `drain complete`.
+Graceful stop under load (SC-008): `sh scripts/rolling-restart.sh` runs `perf/validate.js` through the
+load balancer while restarting `validator` and then `validator-2`. Expected: `ROLLING RESTART OK`
+(failure rate below 0.1%), and both instances' logs show `drain started` → `drain complete`.
 
 ## Teardown
 

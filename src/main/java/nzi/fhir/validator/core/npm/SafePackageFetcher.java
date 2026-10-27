@@ -21,6 +21,7 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Downloads package archives without server-side request forgery (FR-013, research R9): https only, host must be on
@@ -111,7 +112,10 @@ public class SafePackageFetcher {
                 }
             }
             return addresses.get(0);
-        }, false).compose(address -> request(uri, host, port, path, https, address, redirectsLeft, cancelled));
+        }, false)
+                // The fetch timeout covers name resolution too, including any wait for a free package worker.
+                .timeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .compose(address -> request(uri, host, port, path, https, address, redirectsLeft, cancelled));
     }
 
     private Future<Buffer> request(URI uri, String host, int port, String path, boolean https, InetAddress address,

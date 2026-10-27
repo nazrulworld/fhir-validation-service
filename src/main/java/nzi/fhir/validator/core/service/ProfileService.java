@@ -3,6 +3,7 @@ package nzi.fhir.validator.core.service;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.DataFormatException;
 import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Tuple;
@@ -14,6 +15,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
 
 import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
@@ -21,25 +24,47 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
 /**
  * Custom profiles of one FHIR version. Registration stores the profile and bumps the configuration revision in one
  * transaction (other instances are notified on commit), then applies the change locally before answering, so the
- * very next validation on this instance uses it (B1, B2).
+ * very next validation on this instance uses it (B1, B2). The local apply can queue behind a validator rebuild, so
+ * the answer waits for it at most {@code localApplyWaitMs} and then reports the change as still being applied (FR-020).
  */
 public class ProfileService {
     private static final Logger logger = LogManager.getLogger(ProfileService.class);
+    static final String NOT_APPLIED_WARNING = "Committed; this instance has not applied it yet, see /health";
+    static final String STILL_APPLYING_WARNING = "Committed; this instance is still applying it, see /health";
 
+    /**
+     * Outcome of a registration: the configuration revision that includes it, plus curated warnings.
+     */
+    public record Registration(long revision, List<String> warnings) {
+    }
+
+    private final Vertx vertx;
     private final Pool pgPool;
     private final Executors executors;
     private final ProfileStore profileStore;
-    private final Function<SupportedFhirVersion, Future<Void>> applyLocally;
+    private volatile Function<SupportedFhirVersion, Future<Void>> applyLocally;
+    private volatile long localApplyWaitMs;
 
     /**
-     * @param applyLocally brings this instance up to the latest committed configuration of a version
+     * @param applyLocally     brings this instance up to the latest committed configuration of a version
+     * @param localApplyWaitMs how long a registration waits for {@code applyLocally} before answering anyway
      */
-    public ProfileService(Pool pgPool, Executors executors, ProfileStore profileStore,
-                          Function<SupportedFhirVersion, Future<Void>> applyLocally) {
+    public ProfileService(Vertx vertx, Pool pgPool, Executors executors, ProfileStore profileStore,
+                          Function<SupportedFhirVersion, Future<Void>> applyLocally, long localApplyWaitMs) {
+        this.vertx = vertx;
         this.pgPool = pgPool;
         this.executors = executors;
         this.profileStore = profileStore;
         this.applyLocally = applyLocally;
+        this.localApplyWaitMs = localApplyWaitMs;
+    }
+
+    public void setApplyLocally(Function<SupportedFhirVersion, Future<Void>> applyLocally) {
+        this.applyLocally = applyLocally;
+    }
+
+    public void setLocalApplyWaitMs(long waitMs) {
+        this.localApplyWaitMs = waitMs;
     }
 
     public SupportedFhirVersion version() {
@@ -56,9 +81,9 @@ public class ProfileService {
     /**
      * Validates and stores a StructureDefinition.
      *
-     * @return the configuration revision that includes the change
+     * @return the configuration revision that includes the change, with warnings if it is not applied locally yet
      */
-    public Future<Long> registerProfile(JsonObject profile) {
+    public Future<Registration> registerProfile(JsonObject profile) {
         if (profile == null || profile.isEmpty()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "The profile body is empty"));
         }
@@ -104,12 +129,16 @@ public class ProfileService {
                         .compose(r -> ConfigRevisionRepository.bump(tx, version(), ConfigRevisionRepository.KIND_PROFILE, url))))
                 .compose(revision -> {
                     logger.info("Registered profile {} for {} (revision {})", url, version(), revision);
-                    return applyLocally.apply(version())
+                    List<String> warnings = new ArrayList<>();
+                    return LocalApplyWait.await(vertx, applyLocally.apply(version()), localApplyWaitMs,
+                                    () -> warnings.add(STILL_APPLYING_WARNING))
                             .recover(err -> {
-                                logger.warn("Profile {} stored but not yet applied locally: {}", url, err.getMessage());
+                                // The cause goes to the log; clients get curated text (Principle IV).
+                                logger.warn("Profile {} stored but not yet applied locally", url, err);
+                                warnings.add(NOT_APPLIED_WARNING);
                                 return Future.succeededFuture();
                             })
-                            .map(revision);
+                            .map(v -> new Registration(revision, List.copyOf(warnings)));
                 });
     }
 }

@@ -25,7 +25,8 @@ x-validator: &validator
   depends_on:
     postgres:
       condition: service_healthy
-  # Warmed validators for 4 FHIR versions need ~1.5 GB of heap; 2 GB container = 1.5 GB heap at 75%.
+  # 2 GB container = 1.5 GB heap at 75%: ~0.9 GB for 4 warmed FHIR versions, room for IG sets up to ~100 MB expanded.
+  # Larger IGs need more (a 20 MB IG: 3g or more); see FV_MEMORY_LIMIT in contracts/configuration.md.
   mem_limit: ${FV_MEMORY_LIMIT:-2g}
   stop_grace_period: 30s
   restart: unless-stopped

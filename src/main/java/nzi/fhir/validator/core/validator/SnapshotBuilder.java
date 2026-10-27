@@ -5,6 +5,7 @@ import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
 import ca.uhn.fhir.context.support.IValidationSupport;
 import ca.uhn.fhir.validation.FhirValidator;
 import io.vertx.core.Future;
+import nzi.fhir.validator.core.concurrency.AsyncLimiter;
 import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
@@ -28,6 +29,10 @@ import java.util.List;
 /**
  * Builds {@link ValidatorSnapshot}s. Package archives are read from the database on the event loop (I/O only);
  * decompression, parsing and validator construction run on the {@code fv-packages} pool.
+ * <p>
+ * Full builds can take minutes, so at most {@code maxConcurrentBuilds} run at once (one less than the pool size):
+ * the remaining worker stays free for profile parsing and refresh, re-assembly after profile changes, upload parsing
+ * and DNS resolution, so profile changes keep propagating while validators rebuild (FR-008, SC-002).
  */
 public class SnapshotBuilder {
     private static final Logger logger = LogManager.getLogger(SnapshotBuilder.class);
@@ -45,35 +50,68 @@ public class SnapshotBuilder {
     private final Executors executors;
     private final PostgresPackageCacheManager packages;
     private final PackageCache cache;
+    private final AsyncLimiter builds;
+    private final HeapBudget heap;
+    private volatile Runnable buildHook;
 
-    public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache) {
+    /**
+     * @param packageWorkers size of the {@code fv-packages} pool ({@code FV_PACKAGE_WORKERS})
+     * @param heap           refuses builds that would not fit in the heap
+     */
+    public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache, int packageWorkers,
+                           HeapBudget heap) {
         this.executors = executors;
         this.packages = packages;
         this.cache = cache;
+        this.builds = new AsyncLimiter(maxConcurrentBuilds(packageWorkers));
+        this.heap = heap;
+    }
+
+    /** One worker is kept for short package work; with a single worker there is nothing to keep. */
+    public static int maxConcurrentBuilds(int packageWorkers) {
+        return Math.max(1, packageWorkers - 1);
     }
 
     public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                                            ProfileStore profileStore) {
+        return builds.run(() -> buildNow(version, revision, resolvedPackages, profileStore));
+    }
+
+    private Future<ValidatorSnapshot> buildNow(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
+                                               ProfileStore profileStore) {
         List<Future<Loaded>> loaded = new ArrayList<>();
         for (String idAndVersion : resolvedPackages) {
             loaded.add(load(idAndVersion));
         }
         return Future.all(loaded).compose(all -> executors.packages().executeBlocking(() -> {
+            Runnable hook = buildHook;
+            if (hook != null) {
+                hook.run();
+            }
             long started = System.currentTimeMillis();
             List<NpmPackage> npmPackages = new ArrayList<>();
             long archiveBytes = 0;
+            long expandedBytes = 0;
             for (Future<Loaded> f : loaded) {
                 npmPackages.add(f.result().pkg());
                 archiveBytes += f.result().archiveBytes();
+                expandedBytes += PostgresPackageCacheManager.expandedBytes(f.result().pkg());
             }
-            ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages, profileStore);
-            completeProfiles(snapshot);
-            snapshot.setPackageArchiveBytes(archiveBytes);
-            // Warm caches so the first real request does not pay HAPI's lazy initialisation.
-            snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
-            logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", version, revision,
-                    npmPackages.size(), System.currentTimeMillis() - started);
-            return snapshot;
+            // A build that cannot fit fails like any other (version STALE, reason in /health) instead of ending the
+            // process with an OutOfMemoryError.
+            long reserved = heap.reserve(expandedBytes);
+            try {
+                ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages, profileStore);
+                completeProfiles(snapshot);
+                snapshot.setPackageArchiveBytes(archiveBytes);
+                // Warm caches so the first real request does not pay HAPI's lazy initialisation.
+                snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
+                logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", version, revision,
+                        npmPackages.size(), System.currentTimeMillis() - started);
+                return snapshot;
+            } finally {
+                heap.release(reserved);
+            }
         }, false));
     }
 
@@ -111,6 +149,11 @@ public class SnapshotBuilder {
         if (completed > 0) {
             logger.info("Generated snapshots for {} stored profile(s) of {}", completed, snapshot.version());
         }
+    }
+
+    /** Test hook: runs on the package worker at the start of every full build (e.g. to simulate a slow one). */
+    public void setBuildHook(Runnable hook) {
+        this.buildHook = hook;
     }
 
     public PackageCache cache() {

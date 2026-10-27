@@ -340,6 +340,9 @@ public class ValidatorRegistry {
         if (t instanceof SnapshotBuilder.MissingPackageException) {
             return t.getMessage();
         }
+        if (t instanceof HeapBudget.InsufficientHeapException) {
+            return "validator build " + t.getMessage();
+        }
         return "validator build failed (see the instance log)";
     }
 

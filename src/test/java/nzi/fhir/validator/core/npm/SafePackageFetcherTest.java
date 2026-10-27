@@ -74,6 +74,31 @@ class SafePackageFetcherTest {
         });
     }
 
+    /**
+     * T128: the fetch timeout covers name resolution, including a wait for a busy resolver pool.
+     */
+    @Test
+    void slowResolutionFailsWithinTheFetchTimeout(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        SafePackageFetcher fetcher = new SafePackageFetcher(vertx, pool, List.of("packages.fhir.org"), 300, ONE_MB, false, host -> {
+            try {
+                release.await(10, TimeUnit.SECONDS); // a resolver (or pool) that does not answer in time
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return List.of(InetAddress.getByName("93.184.216.34"));
+        });
+        long started = System.currentTimeMillis();
+        fetcher.fetch("https://packages.fhir.org/x")
+                .onComplete(ar -> release.countDown())
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    long elapsed = System.currentTimeMillis() - started;
+                    assertTrue(elapsed < 3_000, "took " + elapsed + " ms");
+                    assertInstanceOf(java.util.concurrent.TimeoutException.class, err);
+                    ctx.completeNow();
+                })));
+    }
+
     private SafePackageFetcher localInsecure(Vertx vertx) {
         return new SafePackageFetcher(vertx, pool, List.of("localhost"), 5_000, ONE_MB, true,
                 host -> List.of(InetAddress.getLoopbackAddress()));

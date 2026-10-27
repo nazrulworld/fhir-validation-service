@@ -9,6 +9,7 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.Tuple;
 import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.web.ProblemException;
@@ -146,20 +147,56 @@ public class PostgresPackageCacheManager {
             String[] dependencies = npmPackage.dependencies() == null ? new String[0] : npmPackage.dependencies().toArray(String[]::new);
             String sql = """
                 INSERT INTO %s
-                    (ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies, content_sha256, source, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+                    (ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies, content_sha256, source,
+                     expanded_bytes, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
                 ON CONFLICT (ig_package_id, ig_package_version)
                 DO UPDATE SET ig_package_meta = $3, content_raw = $4, dependencies = $5, content_sha256 = $6,
-                              source = $7, updated_at = now()
+                              source = $7, expanded_bytes = $8, updated_at = now()
                 """.formatted(TABLE);
             return pgPool.preparedQuery(sql)
-                    .execute(Tuple.of(npmPackage.name(), npmPackage.version(), createNpmPackageMeta(npmPackage),
-                            Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source))
+                    .execute(Tuple.from(new Object[]{npmPackage.name(), npmPackage.version(), createNpmPackageMeta(npmPackage),
+                            Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source, expandedBytes(npmPackage)}))
                     .map(rows -> {
                         logger.info("Stored package {}#{} ({} bytes, source {})", npmPackage.name(), npmPackage.version(), bytes.length, source);
                         return npmPackage;
                     });
         });
+    }
+
+    /**
+     * Expanded size per archive byte, for packages stored before their expanded size was recorded (V5); measured
+     * 9 to 13 on published IGs.
+     */
+    static final int LEGACY_EXPANSION_FACTOR = 10;
+
+    /**
+     * Total size of a parsed package's files, which is what a validator build holds in memory (and more).
+     */
+    public static long expandedBytes(NpmPackage pkg) {
+        long total = 0;
+        for (NpmPackage.NpmPackageFolder folder : pkg.getFolders().values()) {
+            for (byte[] content : folder.getContent().values()) {
+                total += content.length;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * Expanded size of the stored packages {@code idAndVersions} in total, for the heap check before an include is
+     * committed. Packages stored before V5 have no recorded size: their archive size times
+     * {@link #LEGACY_EXPANSION_FACTOR} stands in. Packages that are not stored count as 0.
+     */
+    public static Future<Long> expandedBytes(SqlClient client, List<String> idAndVersions) {
+        if (idAndVersions.isEmpty()) {
+            return Future.succeededFuture(0L);
+        }
+        return client.preparedQuery("SELECT coalesce(sum(coalesce(expanded_bytes, octet_length(content_raw)::bigint * "
+                        + LEGACY_EXPANSION_FACTOR + ")), 0) FROM " + TABLE
+                        + " WHERE ig_package_id || '#' || ig_package_version = ANY($1)")
+                .execute(Tuple.of(idAndVersions.toArray(String[]::new)))
+                .map(rows -> rows.iterator().next().getLong(0));
     }
 
     public Future<NpmPackage> addPackageToCache(InputStream inputStream) {
