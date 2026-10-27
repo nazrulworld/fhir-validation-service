@@ -47,9 +47,17 @@ curl -fs -H 'Content-Type: application/json' --data '{"igPackageId":"example.reh
 curl -fs -H 'Content-Type: application/json' --data @src/test/resources/fhir/profiles/dk/StructureDefinition-dk-core-patient.json "http://127.0.0.1:${OLD_PORT}/R4/register-profile" > /dev/null || fail "profile on 0.1.2"
 docker stop -t 30 "${PROJECT}-old" > /dev/null; docker rm "${PROJECT}-old" > /dev/null
 
+# Runs $1 against the old cluster in a throwaway container. PostgreSQL is stopped cleanly afterwards: a server killed
+# with the container leaves postmaster.pid behind, and the next pg_ctl -w start then returns while the server is still
+# recovering ("the database system is starting up").
 old_db() {
-  docker run --rm -i --entrypoint bash -v "$OLD_VOLUME":/var/lib/postgresql/16/main "$OLD_IMAGE" -c \
-    "gosu postgres /usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main -w -l /tmp/pg.log start >/dev/null && $1"
+  docker run --rm -i --entrypoint bash -v "$OLD_VOLUME":/var/lib/postgresql/16/main "$OLD_IMAGE" -c "
+    bin=/usr/lib/postgresql/16/bin; data=/var/lib/postgresql/16/main
+    gosu postgres \$bin/pg_ctl -D \$data -w -t 120 -l /tmp/pg.log start >/dev/null || exit 1
+    i=0; until gosu postgres \$bin/pg_isready -q; do i=\$((i+1)); [ \$i -ge 120 ] && exit 1; sleep 1; done
+    $1; rc=\$?
+    gosu postgres \$bin/pg_ctl -D \$data -m fast -w stop >/dev/null
+    exit \$rc"
 }
 
 echo "==> dump (guide step 2)"
