@@ -37,7 +37,7 @@ Invariants:
   profile), so compose refuses to start without them.
 - `.env` is git-ignored. `.env.example` is committed and complete.
 - `validator` has `depends_on: postgres: condition: service_healthy`, `stop_grace_period: 30s`,
-  and a memory limit from `FV_MEMORY_LIMIT` (default `2g`: warmed validators for 4 FHIR versions need ~1.5 GB heap; measured OOM at 1g).
+  and a memory limit from `FV_MEMORY_LIMIT` (default `4g`, so a 20 MB IG fits (SC-004); warmed validators for 4 FHIR versions take ~0.9 GB heap, and 1g ran out of heap while warming).
 - The compose file runs standalone (image reference) or from a checkout (`build: .`).
 
 `Makefile` targets: `up`, `up-cluster`, `up-obs`, `down` (keeps volumes), `clean` (removes

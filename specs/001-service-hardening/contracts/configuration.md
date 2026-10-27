@@ -44,7 +44,7 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | `FV_PG_POOL_SIZE` (alias `PG_POOL_SIZE`) | `pg.poolSize` | `15` | 1–200 |
 | `FV_PG_SSL_MODE` | `pg.sslMode` | `prefer` | `disable` \| `prefer` \| `require` \| `verify-full` |
 | `JAVA_OPTS` | *(JVM; container only)* | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` | |
-| `FV_MEMORY_LIMIT` | *(compose only: container memory)* | `2g` | The JVM takes 75% as heap. Size it as: heap ≈ 0.9 GB (four warmed core validators) + 64 MB + 6 × the expanded size of the largest IG set of one version; container = heap / 0.75. The default fits IG sets up to about 100 MB expanded (roughly a 10 MB archive). A 20 MB IG such as `hl7.fhir.r4.examples#4.0.1` (180 MB expanded) needs **3g** or more (SC-004 measured at 4g). Include-ig refuses a set that does not fit with 413 `package-too-large` (T131) |
+| `FV_MEMORY_LIMIT` | *(compose only: container memory)* | `4g` (was `2g`) | The JVM takes 75% as heap. Size it as: heap ≈ 0.9 GB (four warmed core validators) + 64 MB + 6 × the expanded size of the largest IG set of one version; container = heap / 0.75. The default (4g) fits IG sets up to about 350 MB expanded (roughly a 30 MB archive), including a 20 MB IG such as `hl7.fhir.r4.examples#4.0.1` (180 MB expanded; SC-004 measured at 4g). `2g` fits IG sets up to about 100 MB expanded. Include-ig refuses a set that does not fit with 413 `package-too-large` (T131) |
 
 **Removed** ⚠: `application.properties`, `application-production.properties`,
 `application-docker.properties`, the `-Dvertx.environment`, `-Dapplication.config.path` and

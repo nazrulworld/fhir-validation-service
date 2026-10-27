@@ -22,11 +22,13 @@ IGs and profiles reach every instance within seconds, without restarts.
   - Java 17 or later and your own PostgreSQL ([option C](#option-c-jar-with-your-own-postgresql)), or
   - Java 17 and Maven, to build and develop
 - PostgreSQL 16 (provided by the Compose setup)
-- About 2 GB of memory per instance (warmed validators for four FHIR versions take about 0.9 GB of heap). Including
-  an IG rebuilds that version's validator while the old one keeps serving, and a build holds about 6 times the IG
-  set's expanded size. Size the container as heap / 0.75 with heap ≈ 0.9 GB + 64 MB + 6 × the largest IG set's
-  expanded size: 2 GB fits IG sets up to about 100 MB expanded (roughly a 10 MB archive); a 20 MB IG such as
-  `hl7.fhir.r4.examples` (180 MB expanded) needs 3 GB or more. An include that would not fit is refused with 413
+- Up to 4 GB of memory per instance (the default container limit; the JVM takes 75% as heap). Warmed validators for
+  four FHIR versions take about 0.9 GB of heap. Including an IG rebuilds that version's validator while the old one
+  keeps serving, and a build holds about 6 times the IG set's expanded size. Size the container as heap / 0.75 with
+  heap ≈ 0.9 GB + 64 MB + 6 × the largest IG set's expanded size: 4 GB fits IG sets up to about 350 MB expanded
+  (roughly a 30 MB archive), including a 20 MB IG such as `hl7.fhir.r4.examples` (180 MB expanded); 2 GB is enough
+  for IG sets up to about 100 MB expanded (roughly a 10 MB archive). The cluster profile runs two instances, so the
+  host needs room for two such limits. An include that would not fit is refused with 413
   `package-too-large` and nothing is committed. Watch `fv_snapshot_package_size_bytes` (archive size).
 
 ## Installation
@@ -109,7 +111,7 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8880:8880"      # drop "127.0.0.1:" to listen on every interface
-    mem_limit: 2g                  # the JVM uses 75% as heap
+    mem_limit: 4g                  # the JVM uses 75% as heap
     stop_grace_period: 30s
     restart: unless-stopped
 
@@ -224,7 +226,7 @@ export FV_PG_PASSWORD='choose-a-strong-password'
 export FV_ADMIN_API_KEY='<output of openssl rand -hex 32>'
 export FV_HTTP_PORT=8880
 
-java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx1536m \
+java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
   -jar fhir-validation-service-1.0.0.jar
 ```
 
@@ -260,7 +262,7 @@ Wants=network-online.target
 User=fhir
 Group=fhir
 EnvironmentFile=/etc/fhir-validator/env
-ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xmx1536m -jar /opt/fhir-validator/fhir-validation-service.jar
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xmx3g -jar /opt/fhir-validator/fhir-validation-service.jar
 # SIGTERM drains in-flight requests; allow FV_SHUTDOWN_PRE_DRAIN_MS + FV_SHUTDOWN_GRACE_MS
 TimeoutStopSec=30
 Restart=on-failure

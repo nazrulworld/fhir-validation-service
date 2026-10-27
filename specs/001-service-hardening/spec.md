@@ -507,8 +507,8 @@ roll an instance under load and count failed requests.
   defer. Every closed bug has a regression test that fails without the fix.
 - **SC-010**: From a clean checkout, a single documented command brings up the database and a
   service instance that reports ready within 2 minutes on a developer machine: at least 4 CPU cores
-  and 4 GB of memory available to the container engine, with images already built or pulled (the
-  first build or pull is excluded). A second documented command brings up two load-balanced
+  and 6 GB of memory available to the container engine (the default instance limit is 4 GB), with
+  images already built or pulled (the first build or pull is excluded). A second documented command brings up two load-balanced
   instances sharing one database.
 - **SC-011**: The metrics endpoint exposes every metric family FR-031 names (request rate, latency
   distribution, validation outcomes, queue saturation, cache effectiveness), and 100% of log lines

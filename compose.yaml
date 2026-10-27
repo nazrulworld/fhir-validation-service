@@ -25,9 +25,9 @@ x-validator: &validator
   depends_on:
     postgres:
       condition: service_healthy
-  # 2 GB container = 1.5 GB heap at 75%: ~0.9 GB for 4 warmed FHIR versions, room for IG sets up to ~100 MB expanded.
-  # Larger IGs need more (a 20 MB IG: 3g or more); see FV_MEMORY_LIMIT in contracts/configuration.md.
-  mem_limit: ${FV_MEMORY_LIMIT:-2g}
+  # 4 GB container = 3 GB heap at 75%: ~0.9 GB for 4 warmed FHIR versions, room for IG sets up to ~350 MB expanded
+  # (a 20 MB IG fits). 2g fits IG sets up to ~100 MB expanded; see FV_MEMORY_LIMIT in contracts/configuration.md.
+  mem_limit: ${FV_MEMORY_LIMIT:-4g}
   stop_grace_period: 30s
   restart: unless-stopped
   healthcheck:

@@ -24,6 +24,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The default `FV_MEMORY_LIMIT` (compose container memory) is now `4g` instead of `2g`, so a 20 MB IG such as
+  `hl7.fhir.r4.examples` fits with the default settings (SC-004). The sizing rule is unchanged: 4g fits IG sets up to
+  about 350 MB expanded. Hosts running the `cluster` profile need room for two such limits. An `.env` that still sets
+  `FV_MEMORY_LIMIT=2g` keeps the old limit.
+
 - Include-ig refuses an IG that declares other FHIR versions than the one in the path (for example an R5 IG included
   into R4) with 400 `invalid-request`; before, it was accepted silently. Packages that declare no FHIR version are
   still accepted.
