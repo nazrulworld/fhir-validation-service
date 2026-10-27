@@ -16,10 +16,37 @@ uses [Semantic Versioning](https://semver.org/).
 - CI: a startup smoke test of the arm64 image under QEMU (liveness, schema migration, graceful stop), so both
   published platforms are smoke-tested on every PR as the container contract states.
 
+- `POST /{version}/register-profile` returns a `warnings` array (additive), like include-ig.
+
+- `scripts/rolling-restart.sh` (`make rolling-restart`): restarts the two `cluster` instances one at a time under
+  k6 load and fails at 0.1% or more failed requests (SC-008). `perf/validate-during-ig-load.js` takes the IG
+  archive from `PACKAGE`, `PACKAGE_NAME` and `PACKAGE_VERSION`, so SC-004 can be measured with a 20 MB IG.
+
 ### Changed
 
 - Image build: the Maven and dependency download step is retried up to 3 times, so a transient network error on
   repo.maven.apache.org no longer fails the build.
+
+- Full validator builds use at most `FV_PACKAGE_WORKERS - 1` package workers (at least 1). The free worker keeps
+  profile registration and propagation, upload parsing and DNS resolution moving while validators rebuild.
+
+- Migration V5 adds `fhir_implementation_guides.expanded_bytes`, recorded when a package is stored.
+
+### Fixed
+
+- An IG set too large for the heap no longer crashes the instance in a loop. With the default 2 GB container, including
+  a 20 MB IG (`hl7.fhir.r4.examples#4.0.1`) exhausted the heap, `-XX:+ExitOnOutOfMemoryError` ended the process, and
+  since the include was committed every restart crashed again. Include-ig now estimates the build's heap and refuses a
+  set that does not fit with 413 `package-too-large` before committing; a committed set that an instance cannot build
+  makes only that version unavailable (503, reason in `/health`) and is retried. README, `compose.yaml`,
+  `.env.example` and the configuration contract give a memory sizing rule (a 20 MB IG needs 3 GB or more).
+
+- A profile registered while this instance was rebuilding the same version's validator could wait until the
+  request timed out and get 503 "retry later" although it was already committed. The answer now waits at most
+  min(10 s, `FV_HTTP_REQUEST_TIMEOUT_MS`/2), then returns 200 with a "still applying" warning.
+
+- `FV_PACKAGE_FETCH_TIMEOUT_MS` now also bounds name resolution of a package source, including any wait for a free
+  package worker.
 
 ## [1.0.0] - 2026-10-26
 

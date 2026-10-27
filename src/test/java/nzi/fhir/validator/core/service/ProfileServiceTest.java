@@ -55,7 +55,7 @@ class ProfileServiceTest extends BaseTestContainer {
         String url = "http://example.org/fhir/StructureDefinition/registered";
         r4.registerProfile(TestPackages.requiredPatientElements(url, "birthDate"))
                 .compose(first -> r4.registerProfile(TestPackages.requiredPatientElements(url, "gender").put("name", "Updated"))
-                        .map(second -> new long[]{first, second}))
+                        .map(second -> new long[]{first.revision(), second.revision()}))
                 .onComplete(ctx.succeeding(revs -> ctx.verify(() -> {
                     assertTrue(revs[1] > revs[0]);
                     StructureDefinition sd = (StructureDefinition) r4.getProfile(url);

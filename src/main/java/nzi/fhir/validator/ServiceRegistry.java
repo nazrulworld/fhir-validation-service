@@ -22,6 +22,7 @@ import nzi.fhir.validator.core.service.HealthService;
 import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.core.service.ProfileService;
 import nzi.fhir.validator.core.validator.ConfigSync;
+import nzi.fhir.validator.core.validator.HeapBudget;
 import nzi.fhir.validator.core.validator.ProfileStore;
 import nzi.fhir.validator.core.validator.SnapshotBuilder;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
@@ -53,6 +54,8 @@ public final class ServiceRegistry {
     private final ApiKeyAuthHandler auth;
     private final SafePackageFetcher fetcher;
     private final AdmissionController adminAdmission;
+    private SnapshotBuilder snapshotBuilder;
+    private HeapBudget heapBudget;
     private final AtomicInteger boundPort = new AtomicInteger(-1);
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicBoolean refusingNewRequests = new AtomicBoolean();
@@ -95,15 +98,23 @@ public final class ServiceRegistry {
         for (SupportedFhirVersion v : SupportedFhirVersion.enabled()) {
             stores.put(v, new ProfileStore(v, FhirContextLoader.getInstance().getContext(v)));
         }
-        SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()));
+        HeapBudget heap = HeapBudget.ofRuntime();
+        SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()),
+                config.packageWorkers(), heap);
         ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, stores);
         stores.forEach((v, store) -> store.setSnapshotSources(() -> registry.activeSupports(v)));
         ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), executors, registry, stores,
                 config.syncPollIntervalMs());
         igPackageService.setApplyLocally(sync::syncNow);
-        igPackageService.setLocalApplyWaitMs(Math.min(10_000, config.httpRequestTimeoutMs() / 2));
+        igPackageService.setAdmitBuild(expandedBytes -> executors.packages().executeBlocking(() -> {
+            heap.admitInclude(expandedBytes);
+            return null;
+        }, false));
+        long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
+        igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         Map<SupportedFhirVersion, ProfileService> profileServices = new EnumMap<>(SupportedFhirVersion.class);
-        stores.forEach((v, store) -> profileServices.put(v, new ProfileService(pool, executors, store, sync::syncNow)));
+        stores.forEach((v, store) -> profileServices.put(v,
+                new ProfileService(vertx, pool, executors, store, sync::syncNow, localApplyWaitMs)));
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
         PackageCache packageCache = builder.cache();
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
@@ -115,6 +126,8 @@ public final class ServiceRegistry {
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
+        services.snapshotBuilder = builder;
+        services.heapBudget = heap;
         return services;
     }
 
@@ -146,6 +159,14 @@ public final class ServiceRegistry {
 
     public ValidatorRegistry validatorRegistry() {
         return validatorRegistry;
+    }
+
+    public HeapBudget heapBudget() {
+        return heapBudget;
+    }
+
+    public SnapshotBuilder snapshotBuilder() {
+        return snapshotBuilder;
     }
 
     public ConfigSync configSync() {

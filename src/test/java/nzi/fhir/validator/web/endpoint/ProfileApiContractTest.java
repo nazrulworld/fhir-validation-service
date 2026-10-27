@@ -1,6 +1,7 @@
 package nzi.fhir.validator.web.endpoint;
 
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
@@ -9,6 +10,7 @@ import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.service.ProfileService;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import nzi.fhir.validator.testsupport.AppHarness;
 import nzi.fhir.validator.testsupport.TestPackages;
@@ -95,6 +97,41 @@ class ProfileApiContractTest extends BaseTestContainer {
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 400, "invalid-request");
                     assertNull(app.bootstrap().services().profileServices().get(SupportedFhirVersion.R4).getProfile(url));
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * FR-020 / T127: a profile registered while the local rebuild is still running is answered within the bounded
+     * wait, with a curated warning, instead of timing out.
+     */
+    @Test
+    void registrationAnswersWhileTheLocalApplyIsStillRunning(VertxTestContext ctx) {
+        ProfileService r4 = app.bootstrap().services().profileServices().get(SupportedFhirVersion.R4);
+        String url = "http://example.org/fhir/StructureDefinition/slow-apply";
+        r4.setApplyLocally(v -> Promise.<Void>promise().future()); // never completes, like a long rebuild
+        r4.setLocalApplyWaitMs(300);
+        register("R4", TestPackages.requiredPatientElements(url, "birthDate"))
+                .onComplete(ar -> {
+                    r4.setApplyLocally(app.bootstrap().services().configSync()::syncNow);
+                    r4.setLocalApplyWaitMs(10_000);
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    JsonObject body = r.bodyAsJsonObject();
+                    assertNotNull(body.getLong("revision"));
+                    String warnings = body.getJsonArray("warnings").encode();
+                    assertTrue(warnings.contains("still applying") && warnings.contains("/health"), warnings);
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void registrationWithoutDelayHasNoWarnings(VertxTestContext ctx) {
+        register("R4", TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/fast-apply", "gender"))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    assertTrue(r.bodyAsJsonObject().getJsonArray("warnings").isEmpty(), r.bodyAsString());
                     ctx.completeNow();
                 })));
     }
