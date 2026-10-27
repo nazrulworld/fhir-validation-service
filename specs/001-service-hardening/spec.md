@@ -317,11 +317,15 @@ roll an instance under load and count failed requests.
   previous version before the new configuration takes effect (B5).
 - **FR-005**: IG dependency resolution MUST be deterministic and version-aware. The same inputs
   MUST always resolve to the same package set, and the resolved set MUST be visible to the
-  administrator (B6). Rules: core packages (`hl7.fhir.rX.core`) are skipped; a version spelled out
-  on a dependency is used exactly; a missing version, `current` or `latest` resolves to the highest
-  stored version under FR-025 ordering (or, if none is stored and registries are enabled, the
-  registry's latest); a package reached with different versions resolves to the highest of them,
-  and the choice is reported; dependency cycles are cut.
+  administrator (B6). Resolution at inclusion uses stored packages only, so no registry is contacted
+  while the configuration is being changed. Rules: core packages (`hl7.fhir.rX.core`) are skipped; a
+  version spelled out on a dependency is used exactly; a missing version, `current` or `latest`
+  resolves to the highest stored version under FR-025 ordering; a dependency that is not stored is
+  skipped and reported in the response; a package reached with different versions resolves to the
+  highest of them, and the choice is reported; dependency cycles are cut. Registries come in
+  earlier: registering an IG by name also fetches its dependencies, where an unpinned dependency is
+  the highest stored version or, if none is stored and registries are enabled, the registry's latest.
+  Uploads and downloads by URL store only the archive itself.
 - **FR-006**: A configuration change MUST take effect atomically for validation: each validation
   runs entirely against either the old or the new configuration (B4).
 
