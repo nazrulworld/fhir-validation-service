@@ -39,7 +39,7 @@ Test classes are under `src/test/java/nzi/fhir/validator/`; scripts under `scrip
 | P4 unbounded upload/download buffering | T066–T068 | `core/npm/PackageArchiveGuardTest`, `core/npm/SafePackageFetcherTest#oversizedChunkedResponseIsAbortedWhileStreaming`. Uploads are still read whole, but only up to `FV_HTTP_MAX_BODY_MB` |
 | P5 slow, opaque startup | T022, T048, T040 (warm-up) | `BootstrapIT#livenessAnswersAndUnknownRouteIsProblem` (liveness before validators) |
 | P6 duplicate registry downloads | T083 | `core/npm/RegistryFallbackTest#slowerRegistryWithThePackageWinsOverFast404` (stored once) |
-| P7 transaction for single SELECT; duplicate services | T084 | Code review only (no behavioural test) |
+| P7 transaction for single SELECT; duplicate services | T084 | Closed by code review, without an FR: an internal code-quality finding with no observable behaviour to specify |
 
 ## Flow, architecture, security
 
@@ -71,7 +71,7 @@ Test classes are under `src/test/java/nzi/fhir/validator/`; scripts under `scrip
 | D9 compose defects | T026, T049, T090 | `docker compose --profile cluster --profile observability --profile admin config`; cluster run in containers (IG propagated to both instances) |
 | D10 untested publishing | T029, T091, T092 | CI workflow structure (test → image + smoke + scan → push) |
 | D11 fragile first RUN, old builder, "continue anyway" | T021, T024 | `DatabaseService` retries until the database is reachable (`NoSecretsInLogsTest` exercises the retry path) |
-| D12 Makefile leftovers | T028 | Makefile review |
+| D12 Makefile leftovers | T028 | Closed by Makefile review, without an FR: developer tooling outside the service's specified behaviour |
 
 ## Deferred / not covered by automated tests
 
@@ -79,3 +79,18 @@ Test classes are under `src/test/java/nzi/fhir/validator/`; scripts under `scrip
 - **P3, P7**: no dedicated behavioural tests (cache hit rate, query shape).
 - **SC-003, SC-004 (performance numbers)**: measured with `perf/` k6 scripts and attached to the PR, not part of `mvn verify`.
 - **SC-008 (rolling restart < 0.1 % failures)**: drain is tested per instance (`GracefulShutdownIT`); the fleet-wide rolling restart under load is `scripts/rolling-restart.sh` (cluster profile, k6 through the load balancer, fails at ≥ 0.1 %), run on demand rather than in `mvn verify`. Result 2026-10-26: 34,113 requests, 0.035 % failed (T130).
+
+## Requirements without an acceptance scenario (CHK050)
+
+Most FRs are exercised by a user-story scenario, an edge case or a success criterion. These are covered by tests or
+by a review instead:
+
+| Requirement | Covered by |
+|-------------|------------|
+| FR-009 package reuse | No dedicated test (see P3 above). Cache effectiveness is visible in `fv_package_cache_*` metrics |
+| FR-023 read-endpoint 404s | `web/endpoint/IgPackageApiContractTest#dependenciesOfUnknownPackageIs404`, `core/validator/ValidatorSnapshotSwapIT#includeOfUnknownPackageIs404` |
+| FR-031 metrics and correlation ids | SC-011; `web/ObservabilityIT` |
+| FR-032 non-root, signals, multi-arch | Dockerfile review (`USER 10001:10001`, tini); `scripts/smoke.sh` graceful stop; CI `container` (amd64) and `arm64-build` (QEMU startup smoke) |
+| FR-034 health checks | Compose and Dockerfile health checks use `/health/readiness` (D8 above) |
+| FR-035 publishing gates | CI workflow structure (D10 above): tests, image smoke test and a CRITICAL-severity scan run before the push job |
+| FR-021 IG version mismatch (edge case) | `web/endpoint/IgPackageApiContractTest#includeOfAnIgForAnotherFhirVersionIs400`, `core/service/DeclaredFhirVersionTest` |

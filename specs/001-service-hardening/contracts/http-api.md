@@ -68,6 +68,7 @@ Body unchanged (`igPackageId`, `igPackageVersion` default `latest`). Responses:
 |--------|------|
 | 200 | `{status:"success", fhirVersion, revision, included:[…], resolved:["name#version", …], warnings:[…]}` (additive) |
 | 404 ⚠ | `Problem`: package not stored (previously 400) |
+| 400 | `Problem` (`invalid-request`): the package declares FHIR versions (`fhirVersions`, else `fhirVersion`) and none is the path version. Nothing is committed. A package that declares none is accepted |
 | 413 | `Problem` (`type: …/problems/package-too-large`): the new IG set would not fit in the answering instance's heap. Nothing is committed; the detail names the estimate, the free heap and `FV_MEMORY_LIMIT` |
 | 401/403, 400, 500 | `Problem` |
 

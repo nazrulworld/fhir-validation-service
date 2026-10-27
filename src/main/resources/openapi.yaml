@@ -158,7 +158,8 @@ paths:
       description: >-
         Replaces any other version of the same package. The response confirms the committed configuration; other
         instances apply it within the propagation window. A package set whose validator would not fit in this
-        instance's heap is refused with 413 package-too-large before it is committed.
+        instance's heap is refused with 413 package-too-large before it is committed. A package whose declared FHIR
+        versions don't include this version is refused with 400 invalid-request.
       parameters:
         - name: version
           in: path

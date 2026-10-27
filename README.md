@@ -322,6 +322,35 @@ curl -H "$AUTH" -H 'Content-Type: application/json' --data @my-profile.json http
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
+### API keys
+
+`FV_ADMIN_API_KEY` installs the bootstrap administrator key at startup. There is no API for other keys in 1.x: manage
+them in the `fhir_validator_schema.api_keys` table, which stores only the SHA-256 of each key. Roles are `ADMIN` and
+`VALIDATE` (validation and the package read endpoints, needed when `FV_AUTH_ANONYMOUS_VALIDATE=false`).
+
+```bash
+KEY=$(openssl rand -hex 32)      # give this to the client; it is not stored
+psql "$DB_URL" -v key="$KEY" <<'SQL'
+-- add (or replace) a key
+INSERT INTO fhir_validator_schema.api_keys (name, key_hash, role)
+VALUES ('reporting-service', sha256(convert_to(:'key', 'UTF8')), 'VALIDATE')
+ON CONFLICT (name) DO UPDATE SET key_hash = EXCLUDED.key_hash, role = EXCLUDED.role, revoked_at = NULL;
+SQL
+
+# revoke
+psql "$DB_URL" -c "UPDATE fhir_validator_schema.api_keys SET revoked_at = now() WHERE name = 'reporting-service'"
+```
+
+To rotate a key without downtime, add the new one under a second name, switch the client over, then revoke the old one.
+Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so a revoked key keeps working for up to that
+long. Don't use the name `bootstrap`: that row is overwritten from `FV_ADMIN_API_KEY` at every start.
+
+### Database connection security
+
+`FV_PG_SSL_MODE` defaults to `prefer`, which falls back to an unencrypted connection when the server offers no TLS. The
+bundled compose database runs on a private compose network. When the database is reached over any other network, set
+`FV_PG_SSL_MODE=require`, or `verify-full` to also check the server certificate.
+
 ### Health and metrics
 
 | Endpoint | Meaning |

@@ -112,7 +112,8 @@ public class IgPackageService {
                                 "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
                     }
                     String key = name + "#" + concrete.get();
-                    return ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
+                    return checkFhirVersion(tx, fhirVersion, name, concrete.get())
+                            .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
                         Set<String> included = new TreeSet<>();
                         row.included().stream().filter(p -> !p.startsWith(name + "#")).forEach(included::add);
                         included.add(key);
@@ -144,6 +145,42 @@ public class IgPackageService {
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
                 .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
+    }
+
+    /**
+     * 400 when the package declares FHIR versions and none of them is {@code fhirVersion}'s release (CHK038). A
+     * package that declares none, or only labels that are not known releases, is accepted.
+     */
+    private static Future<Void> checkFhirVersion(SqlClient tx, SupportedFhirVersion fhirVersion, String name, String version) {
+        return tx.preparedQuery("SELECT ig_package_meta FROM %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME)
+                        + "WHERE ig_package_id = $1 AND ig_package_version = $2")
+                .execute(Tuple.of(name, version))
+                .compose(rows -> {
+                    Set<SupportedFhirVersion> declared = declaredFhirVersions(
+                            rows.size() == 0 ? null : (JsonObject) rows.iterator().next().getValue(0));
+                    if (declared.isEmpty() || declared.contains(fhirVersion)) {
+                        return Future.succeededFuture();
+                    }
+                    return Future.failedFuture(new ProblemException(400, "invalid-request", "IG package " + name + "#"
+                            + version + " is for FHIR " + declared.stream().map(Enum::name).sorted().collect(Collectors.joining(", "))
+                            + ", not " + fhirVersion.name()));
+                });
+    }
+
+    /** FHIR releases a stored package declares ({@code fhirVersions}, else {@code fhirVersion}); unknown labels are skipped. */
+    static Set<SupportedFhirVersion> declaredFhirVersions(JsonObject meta) {
+        Set<SupportedFhirVersion> declared = new TreeSet<>();
+        if (meta == null) {
+            return declared;
+        }
+        JsonArray list = meta.getJsonArray("fhirVersions");
+        if (list != null) {
+            list.forEach(v -> SupportedFhirVersion.fromDeclaredVersion(String.valueOf(v)).ifPresent(declared::add));
+        }
+        if (declared.isEmpty() && meta.getValue("fhirVersion") instanceof String single) {
+            SupportedFhirVersion.fromDeclaredVersion(single).ifPresent(declared::add);
+        }
+        return declared;
     }
 
     /**

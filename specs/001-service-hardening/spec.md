@@ -270,6 +270,14 @@ roll an instance under load and count failed requests.
   validation uses either the old or the new definition consistently, never a partial mix.
 - Two administrators include different versions of the same IG at the same moment on different
   instances: the final state is one defined version, the same on every instance.
+- Two administrators register the same profile URL for the same FHIR version at the same moment
+  with different content: the last committed registration wins, and every instance converges on
+  it (FR-002, FR-006).
+- An IG declares FHIR versions that don't include the version it is being included into (for
+  example an R5 IG included into R4): the inclusion is refused as a client error and nothing is
+  committed. A package that declares no FHIR version is accepted.
+- A client sends an `X-Request-Id` that doesn't match the accepted format: a new id is generated
+  and returned. Ids are not checked for uniqueness, so a reused id is accepted as is.
 - An IG's dependency tree contains a cycle or two different versions of the same package: inclusion
   completes deterministically and reports which version was chosen.
 - The database is briefly unavailable during startup: the instance keeps retrying, stays alive but
@@ -296,11 +304,12 @@ roll an instance under load and count failed requests.
   arrived, including on the first request after startup, registration or cache expiry. A cache miss
   MUST NOT change the result (B1).
 - **FR-002**: Changes to profiles, included IGs or validator configuration made through any
-  instance MUST become effective on all instances within the propagation window, without a
-  restart (B2, B3). An instance that knows of a newer committed configuration but cannot apply it
-  MUST stop serving that FHIR version (503 with retry-later, readiness false). It MUST retry with
-  backoff and resume automatically once the change is applied. It MUST NOT answer from the
-  outdated configuration.
+  instance MUST become effective on all instances within 10 seconds (SC-002), without a restart
+  (B2, B3). An instance that knows of a newer committed configuration but cannot apply it MUST stop
+  serving that FHIR version (503 with `Retry-After: 5`, readiness false) and name the failure in its
+  health details. It MUST retry with exponential backoff, starting at 1 second and capped at 60
+  seconds, count each failed build in a metric operators can alert on, and resume automatically once
+  the change is applied. It MUST NOT answer from the outdated configuration.
 - **FR-003**: Shared storage MUST remain the single source of truth. Any instance MUST be able to
   rebuild its complete validation state from it, and cached state MUST NOT outlive a change to the
   source (B2, B3, F8).
@@ -308,7 +317,11 @@ roll an instance under load and count failed requests.
   previous version before the new configuration takes effect (B5).
 - **FR-005**: IG dependency resolution MUST be deterministic and version-aware. The same inputs
   MUST always resolve to the same package set, and the resolved set MUST be visible to the
-  administrator (B6).
+  administrator (B6). Rules: core packages (`hl7.fhir.rX.core`) are skipped; a version spelled out
+  on a dependency is used exactly; a missing version, `current` or `latest` resolves to the highest
+  stored version under FR-025 ordering (or, if none is stored and registries are enabled, the
+  registry's latest); a package reached with different versions resolves to the highest of them,
+  and the choice is reported; dependency cycles are cut.
 - **FR-006**: A configuration change MUST take effect atomically for validation: each validation
   runs entirely against either the old or the new configuration (B4).
 
@@ -317,16 +330,22 @@ roll an instance under load and count failed requests.
 - **FR-007**: Each instance MUST process validations concurrently, up to a configurable limit that
   defaults to the number of available cores (P1).
 - **FR-008**: Package decompression, parsing and loading MUST NOT delay request handling, health
-  or readiness responses on that instance (P2).
-- **FR-009**: Packages loaded once on an instance SHOULD NOT be read and decompressed again from
+  or readiness responses on that instance (P2). A validator build that would not fit in the
+  instance's memory MUST be refused before it starts (an inclusion as a client error before it is
+  committed; an already committed configuration as under FR-002), never end the process. Operator
+  documentation MUST state how to size memory for the largest IG set, allowing for the old and new
+  validator coexisting during a rebuild.
+- **FR-009**: Packages loaded once on an instance MUST NOT be read and decompressed again from
   shared storage for later inclusions on that instance, within a bounded, configurable memory
   budget (P3).
 - **FR-010**: Pending validation work MUST be bounded. Above the bound, requests MUST be refused
-  promptly with a retry-later response. Administrative operations (uploading, registering or
+  immediately, without waiting for capacity, with 503 and `Retry-After: 1`. The size of one
+  validation MUST also be bounded: request bodies by a configurable byte limit, and bundles by a
+  configurable entry count, both refused as "too large". Administrative operations (uploading, registering or
   including IGs, registering profiles) MUST be bounded by a separate per-instance limit: validation
   load never refuses administrative work, and administrative work never takes validation capacity.
-  Above that limit, administrative requests MUST likewise be refused promptly with a retry-later
-  response, not queued or prioritised. Configuration syncs an instance runs on its own (FR-002) are
+  Above that limit, administrative requests MUST likewise be refused immediately with 503 and
+  `Retry-After: 1`, not queued or prioritised. Configuration syncs an instance runs on its own (FR-002) are
   never refused.
 - **FR-011**: The service MUST expose separate liveness and readiness signals. Readiness MUST be
   false until a validator for every supported version is usable, false while any version is
@@ -339,10 +358,17 @@ roll an instance under load and count failed requests.
 - **FR-012**: All operations that change IGs, profiles or validator configuration MUST always
   require administrator authorisation. With no administrator credential configured, they MUST be
   refused. Validation MUST be anonymous by default, and an operator setting MUST be able to require
-  a credential with a validate-only (or administrator) permission (F2).
+  a credential with a validate-only (or administrator) permission (F2). Read endpoints that expose
+  stored packages (dependency graph, file listing) follow the same rule as validation. Health,
+  readiness and metrics are always anonymous (see Assumptions). Cross-origin browser access MUST be
+  off by default and limited to operator-listed origins; a wildcard origin MUST be refused in
+  production.
 - **FR-013**: Package downloads MUST be limited to an operator-configured list of approved
-  sources. Requests to other destinations, including private, link-local and loopback addresses,
-  MUST be refused before any connection is opened (F1).
+  sources, given as host names and reached over https only (a development-only setting may allow
+  http and private addresses for local registries). Requests to other destinations,
+  including private, link-local and loopback addresses, MUST be refused before any connection is
+  opened (F1). Redirects MUST be limited in number, and every hop MUST be checked against the same
+  rules before it is followed.
 - **FR-014**: Uploaded and downloaded archives MUST be checked against configurable limits on
   compressed size, expanded size, entry count and expansion ratio. Path-traversal entries MUST be
   rejected. Limits MUST be enforced while reading, not after full buffering (F3, P4).
@@ -357,8 +383,10 @@ roll an instance under load and count failed requests.
 **API behaviour (US4)**
 
 - **FR-017**: Validation MUST accept standard HTTP content negotiation, including wildcards, absent
-  headers and media-type parameters. It MUST answer in the negotiated format, with an explicit
-  documented default (B12, B13).
+  headers and media-type parameters. It MUST answer in the negotiated format (B12, B13). The default,
+  for an absent `Accept`, `*/*` or `application/json`, is the JSON validation response (`valid`,
+  `messages`). `application/fhir+json`, `application/fhir+xml` and `application/xml` receive a FHIR
+  `OperationOutcome`.
 - **FR-018**: Responses MUST distinguish three outcomes: a completed validation, valid or invalid
   (success status with the `valid` flag and issues); a body that cannot be parsed as FHIR (client
   error); and the service being unable to validate (server error) (B16).
@@ -380,10 +408,13 @@ roll an instance under load and count failed requests.
 
 - **FR-024**: Package version labels up to 64 characters MUST be storable and retrievable (B8).
 - **FR-025**: "latest" MUST resolve to the highest version under semantic-version ordering,
-  preferring released over pre-release versions, regardless of upload order (B7, B19).
+  preferring released over pre-release versions, regardless of upload order (B7, B19). Labels that
+  don't follow semantic versioning (e.g. `current`, `dev`) sort below every semantic version. With
+  registries disabled (offline), "latest" considers stored packages only.
 - **FR-026**: When several registries are configured, a package MUST be fetched if any registry
   has it, stored once, and reported missing only when all registries report it missing or time out
-  (B9, B19, P6).
+  (B9, B19, P6). With registries disabled (offline), only stored packages are used: a package or
+  dependency that is not stored is reported missing, and no registry is contacted.
 
 **Operability (US6)**
 
@@ -391,14 +422,19 @@ roll an instance under load and count failed requests.
   NOT embed one (F4). The release MUST include a tested migration guide for deployments of the
   previous image. It moves the data from the bundled database's volume into the external database
   (dump and restore) and ends with a verification step: the numbers of IG packages, profiles and
-  validator configuration rows match before and after. No automatic migration is provided.
+  validator configuration rows match before and after. No automatic migration is provided. The
+  database connection's TLS mode MUST be configurable. The default (`prefer`) allows an unencrypted
+  connection, so operator documentation MUST recommend `require` or `verify-full` whenever the
+  database is reached over a network other than the local compose network.
 - **FR-028**: All settings MUST be supplied through one configuration mechanism that environment
   variables can override. Documented settings that are not honoured MUST be removed or implemented
   (F6).
 - **FR-029**: On termination, an instance MUST stop accepting new requests, complete in-flight
   requests within a configurable grace period, and release its connections (F7).
 - **FR-030**: Logs MUST NOT contain credentials or fragments of credentials, and the service MUST
-  NOT ship with usable default production credentials (B18).
+  NOT ship with usable default production credentials (B18). Validated resources can contain
+  personal health information: their bodies MUST NOT be logged at INFO level or above
+  (constitution, Security).
 - **FR-031**: The service MUST expose metrics for request rate, latency distribution, validation
   outcome counts, concurrency/queue saturation and cache effectiveness. Each log line produced
   while serving a request MUST carry that request's correlation id (F5).
@@ -416,7 +452,9 @@ roll an instance under load and count failed requests.
 - **FR-034**: Container health checks MUST use the readiness/liveness signals (FR-011) so that a
   transient database outage does not cause restart loops (D8).
 - **FR-035**: Images MUST be published only after the automated test suite and a container smoke
-  test pass. Release artefacts MUST be usable without a source checkout (D10).
+  test pass. A CRITICAL finding in the image vulnerability scan, or a failed build for either
+  platform, MUST block publishing. Release artefacts MUST be usable without a source checkout
+  (D10).
 
 ### Key Entities
 
@@ -442,7 +480,9 @@ roll an instance under load and count failed requests.
   within 10 seconds, with no restart.
 - **SC-003**: On a warm instance, validation throughput with 4 cores is at least 3× the throughput
   with 1 core for single-resource validations. 95% of single-resource validations complete in under
-  200 ms at the configured concurrency limit.
+  200 ms at the configured concurrency limit. Reference workload: the `perf/validate.js` load test,
+  which validates the 3 KB dk-core Patient fixture against R4 with its declared profile and no
+  extra IGs included.
 - **SC-004**: While a 20 MB IG is being uploaded or included, 95th-percentile latency of concurrent
   validation requests rises by no more than 20%, and every health/readiness check answers within
   1 second.
@@ -451,16 +491,24 @@ roll an instance under load and count failed requests.
 - **SC-006**: 0 administrative operations succeed without administrator authorisation, and 0
   outbound connections are made to destinations outside the approved sources, in security tests.
 - **SC-007**: A decompression-bomb archive (expanding to more than 100× the configured limit) is
-  rejected, and the instance's memory use stays within 10% of its baseline during the attempt.
+  rejected, and the instance's memory use stays within 10% of its baseline during the attempt. The
+  baseline is the heap in use immediately before the attempt, on a warm instance.
 - **SC-008**: During a rolling restart between 1.x versions under steady load, fewer than 0.1% of
-  requests fail. The one-time 0.1.x → 1.0.0 upgrade is excluded: it is a documented
+  requests fail. Steady load: 8 concurrent clients sending the SC-003 reference validation through
+  the load balancer for at least 2 minutes, while each instance is restarted in turn
+  (`scripts/rolling-restart.sh`). The one-time 0.1.x → 1.0.0 upgrade is excluded: it is a documented
   stop-migrate-start with planned downtime.
 - **SC-009**: The 21 bugs (B1–B21), 7 performance issues (P1–P7), 10 flow issues (F1–F10) and 12
   deployment issues (D1–D12) in the audit each have a closing test or a recorded decision to
   defer. Every closed bug has a regression test that fails without the fix.
 - **SC-010**: From a clean checkout, a single documented command brings up the database and a
-  service instance that reports ready within 2 minutes on a developer machine. A second documented
-  command brings up two load-balanced instances sharing one database.
+  service instance that reports ready within 2 minutes on a developer machine: at least 4 CPU cores
+  and 4 GB of memory available to the container engine, with images already built or pulled (the
+  first build or pull is excluded). A second documented command brings up two load-balanced
+  instances sharing one database.
+- **SC-011**: The metrics endpoint exposes every metric family FR-031 names (request rate, latency
+  distribution, validation outcomes, queue saturation, cache effectiveness), and 100% of log lines
+  written while serving a request carry that request's correlation id, in the observability tests.
 
 ## Assumptions
 
@@ -479,11 +527,40 @@ roll an instance under load and count failed requests.
   endpoints for health/readiness/metrics stay unauthenticated, but should be reachable only from
   the operator's network.
 - **Infrastructure**: cross-instance propagation uses the existing shared database. No new
-  infrastructure component is assumed (constitution Principles II and VIII).
+  infrastructure component is assumed (constitution Principles II and VIII). Three runtime
+  libraries are added: Micrometer with its Prometheus registry (FR-031 metrics) and Vert.x
+  contextual logging (FR-031 correlation ids), justified in research R13.
+- **Deferred: credential management** (decided 2026-10-27): beyond the bootstrap administrator key
+  (`FV_ADMIN_API_KEY`), there is no API for creating, rotating or revoking keys in 1.x. Operators
+  manage the `api_keys` table with SQL, following the README procedure.
+- **Deferred: audit trail** (decided 2026-10-27): who changed an IG or profile is not recorded in
+  the database. Logs carry each change with its correlation id and the resulting revision.
+- **Deferred: per-version limits on profiles and IGs** (decided 2026-10-27): there is no limit on
+  the number of profiles or included IGs per version. Memory for IG sets is guarded per build
+  (FR-008), and the counts are exposed as metrics.
+- **Trust boundaries**: (1) clients reach the HTTP API, which may be on an untrusted network:
+  administrative operations need an administrator credential (FR-012), and every input is bounded
+  (FR-010, FR-014); (2) the health, readiness and metrics endpoints are anonymous and belong on the
+  operator's network only; (3) package registries and download URLs are outside the trust boundary:
+  only approved https hosts on public addresses are contacted (FR-013), and archives are checked
+  before unpacking (FR-014); (4) the shared database is trusted and reached with operator-supplied
+  credentials (FR-027, FR-030).
+- **Schema rollback within 1.x**: schema migrations within 1.x are additive (new tables, new
+  nullable columns), so an earlier 1.x release keeps working against a newer 1.x schema and a
+  release can be rolled back without restoring the database. A migration that can't meet this
+  requires a MAJOR version. Rolling back from 1.0.0 to 0.1.x follows the upgrade guide (keep the
+  old volume).
+- **Container targets**: the image size target and read-only root filesystem compatibility are
+  contract-level targets (contracts/container.md), not success criteria.
 - **Performance**: the performance targets use the constitution's provisional baseline (p95 <
   200 ms, warm validator) on a reference resource size of up to 50 KB.
-- **Version labels**: 64 characters covers all version labels observed on the public FHIR package
-  registry.
+- **Version labels**: 64 characters is assumed to cover registry version labels in practice
+  (published labels are SemVer-like and much shorter). This is not measured against the whole
+  registry: a longer label is refused as a client error, never truncated.
+- **Package registries**: approved registries implement the FHIR package registry's npm-style
+  API: `GET /{name}` lists a package's `versions` (and `dist-tags`), `GET /{name}/{version}`
+  returns the archive, and an unknown package answers 404. "latest" is computed from `versions`,
+  not taken from `dist-tags`.
 - **Compatibility**: changes to status codes and error bodies for existing clients (FR-018,
   FR-019) are treated as breaking API changes. They ship with a MAJOR version bump and a migration
   note per constitution Principle IV.

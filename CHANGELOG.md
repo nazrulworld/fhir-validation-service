@@ -24,6 +24,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Include-ig refuses an IG that declares other FHIR versions than the one in the path (for example an R5 IG included
+  into R4) with 400 `invalid-request`; before, it was accepted silently. Packages that declare no FHIR version are
+  still accepted.
+
 - Image build: the Maven and dependency download step is retried up to 3 times, so a transient network error on
   repo.maven.apache.org no longer fails the build.
 
