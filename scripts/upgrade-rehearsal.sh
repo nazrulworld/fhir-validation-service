@@ -11,9 +11,14 @@ OLD_PORT=18990
 WORK=$(mktemp -d)
 COUNT_SQL="SELECT 'igs', count(*) FROM fhir_validator_schema.fhir_implementation_guides UNION ALL SELECT 'profiles', count(*) FROM fhir_validator_schema.fhir_profiles UNION ALL SELECT 'configs', count(*) FROM fhir_validator_schema.fhir_validator_logs ORDER BY 1"
 
+# The 1.0.0 stack reads its settings from $WORK/.env only: compose.yaml's `env_file: .env` would otherwise need a .env
+# in the repository root (absent in CI) or load the developer's own. Explicit -f files also skip compose.override.yaml.
+printf 'services:\n  validator:\n    env_file: !override\n      - %s/.env\n' "$WORK" > "$WORK/compose.rehearsal.yaml"
+DC="docker compose -p $PROJECT --env-file $WORK/.env -f compose.yaml -f $WORK/compose.rehearsal.yaml"
+
 cleanup() {
   docker rm -f "${PROJECT}-old" > /dev/null 2>&1 || true
-  docker compose -p "$PROJECT" --env-file "$WORK/.env" down -v > /dev/null 2>&1 || true
+  $DC down -v > /dev/null 2>&1 || true
   docker volume rm "$OLD_VOLUME" > /dev/null 2>&1 || true
 }
 fail() { echo "REHEARSAL FAILED: $*" >&2; cleanup; exit 1; }
@@ -47,9 +52,17 @@ curl -fs -H 'Content-Type: application/json' --data '{"igPackageId":"example.reh
 curl -fs -H 'Content-Type: application/json' --data @src/test/resources/fhir/profiles/dk/StructureDefinition-dk-core-patient.json "http://127.0.0.1:${OLD_PORT}/R4/register-profile" > /dev/null || fail "profile on 0.1.2"
 docker stop -t 30 "${PROJECT}-old" > /dev/null; docker rm "${PROJECT}-old" > /dev/null
 
+# Runs $1 against the old cluster in a throwaway container. PostgreSQL is stopped cleanly afterwards: a server killed
+# with the container leaves postmaster.pid behind, and the next pg_ctl -w start then returns while the server is still
+# recovering ("the database system is starting up").
 old_db() {
-  docker run --rm -i --entrypoint bash -v "$OLD_VOLUME":/var/lib/postgresql/16/main "$OLD_IMAGE" -c \
-    "gosu postgres /usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main -w -l /tmp/pg.log start >/dev/null && $1"
+  docker run --rm -i --entrypoint bash -v "$OLD_VOLUME":/var/lib/postgresql/16/main "$OLD_IMAGE" -c "
+    bin=/usr/lib/postgresql/16/bin; data=/var/lib/postgresql/16/main
+    gosu postgres \$bin/pg_ctl -D \$data -w -t 120 -l /tmp/pg.log start >/dev/null || exit 1
+    i=0; until gosu postgres \$bin/pg_isready -q; do i=\$((i+1)); [ \$i -ge 120 ] && exit 1; sleep 1; done
+    $1; rc=\$?
+    gosu postgres \$bin/pg_ctl -D \$data -m fast -w stop >/dev/null
+    exit \$rc"
 }
 
 echo "==> dump (guide step 2)"
@@ -61,7 +74,6 @@ cat "$WORK/before.txt"
 echo "==> restore into 1.0.0 (guide steps 3-4)"
 cp .env.example "$WORK/.env"
 sed -i.bak "s/^PG_PASSWORD=.*/PG_PASSWORD=rehearsal$(openssl rand -hex 8)/; s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=rehearsal$(openssl rand -hex 20)/; s/^FV_HTTP_PORT=.*/FV_HTTP_PORT=18991/" "$WORK/.env"
-DC="docker compose -p $PROJECT --env-file $WORK/.env"
 $DC up -d --wait postgres > /dev/null
 $DC exec -T postgres pg_restore -U postgres -d fhir_validator --no-owner --clean --if-exists < "$WORK/fhir_validator.dump" || true
 $DC exec -T postgres psql -U postgres -At -d fhir_validator -c "$COUNT_SQL" > "$WORK/after.txt"
