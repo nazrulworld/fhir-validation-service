@@ -6,6 +6,12 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-28
+
+The first release under an explicit license, PolyForm Noncommercial 1.0.0: free for noncommercial use, commercial use
+needs a separate license. Upgrading from 1.1.0 changes nothing in the service: no migration, configuration, API or
+behaviour change. The jar and image only gain license and notice files and two image labels.
+
 ### Changed
 
 - The project is now licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). It is free for any
