@@ -24,7 +24,7 @@ class ThirdPartyNoticesTest {
     private static final Path LISTING = Path.of("target/classes/META-INF/THIRD-PARTY.txt");
     private static final Path TEXTS = Path.of("src/main/resources/META-INF/third-party-licenses");
     private static final Path CLARIFICATIONS = Path.of("src/main/resources/META-INF/THIRD-PARTY-CLARIFICATIONS.md");
-    private static final Path OVERRIDES = Path.of("src/license/THIRD-PARTY.properties");
+    private static final Path OVERRIDES = Path.of("src/license/override-THIRD-PARTY.properties");
 
     /** {@code (Apache-2.0) (MIT) Name (group:artifact:version - url)}. */
     private static final Pattern LINE = Pattern.compile("^\\s*((?:\\([^()]+\\)\\s*)+)(.*)\\(([^:\\s]+):([^:\\s]+):([^\\s]+) - .*\\)\\s*$");

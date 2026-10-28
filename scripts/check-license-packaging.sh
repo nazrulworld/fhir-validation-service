@@ -12,12 +12,13 @@ AUTHORS="Md Nazrul Islam <email2nazrul@gmail.com>"
 
 usage() { echo "usage: $0 <jar> [<image>] | --image <image>" >&2; exit 2; }
 [ $# -ge 1 ] || usage
+tmp="$(mktemp -d)"
+container=""
+trap '[ -z "$container" ] || docker rm -f "$container" > /dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 if [ "$1" = "--image" ]; then
   [ $# -eq 2 ] || usage
   IMAGE="$2"
-  tmp="$(mktemp -d)"
   container="$(docker create "$IMAGE")"
-  trap 'docker rm -f "$container" > /dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
   docker cp "$container:/app/app.jar" "$tmp/app.jar" > /dev/null
   JAR="$tmp/app.jar"
 else
@@ -41,6 +42,7 @@ echo "==> jar $JAR"
 check "LICENSE.md at the jar root" has_entry LICENSE.md
 check "LICENSE.md identical to the repository's" same_license
 check "META-INF/NOTICE starts with the Required Notice" notice_first
+check "NOTICE at the jar root" has_entry NOTICE
 check "META-INF/THIRD-PARTY.txt" has_entry META-INF/THIRD-PARTY.txt
 check "META-INF/THIRD-PARTY-CLARIFICATIONS.md" has_entry META-INF/THIRD-PARTY-CLARIFICATIONS.md
 check "META-INF/third-party-licenses/*.txt" has_texts
@@ -49,14 +51,26 @@ if [ -n "$IMAGE" ]; then
   label() { docker image inspect -f "{{ index .Config.Labels \"$1\" }}" "$IMAGE"; }
   label_is() { [ "$(label "$1")" = "$2" ]; }
   in_image() { docker run --rm --entrypoint sh "$IMAGE" -c "$1"; }
+  same_as_jar() { # same_as_jar <image path> <jar entry>
+    docker run --rm --entrypoint cat "$IMAGE" "$1" > "$tmp/image-file" \
+      && unzip -p "$JAR" "$2" > "$tmp/jar-entry" \
+      && cmp -s "$tmp/image-file" "$tmp/jar-entry"
+  }
 
   echo "==> image $IMAGE"
   check "label org.opencontainers.image.licenses = $SPDX" label_is org.opencontainers.image.licenses "$SPDX"
   check "label org.opencontainers.image.authors = $AUTHORS" label_is org.opencontainers.image.authors "$AUTHORS"
   check "files under /app/licenses" in_image 'test -f /app/LICENSE.md && test -f /app/licenses/NOTICE \
     && test -f /app/licenses/THIRD-PARTY.txt && test -f /app/licenses/THIRD-PARTY-CLARIFICATIONS.md \
-    && test -f /app/licenses/IMAGE-COMPONENTS.md && test -d /app/licenses/third-party-licenses'
+    && test -f /app/licenses/NOTICE-ROOT && test -f /app/licenses/IMAGE-COMPONENTS.md \
+    && test -d /app/licenses/third-party-licenses'
   check "/app/LICENSE.md starts with the Required Notice" in_image "[ \"\$(head -1 /app/LICENSE.md)\" = \"$NOTICE\" ]"
+  check "/app/LICENSE.md identical to the jar's" same_as_jar /app/LICENSE.md LICENSE.md
+  check "/app/licenses/NOTICE identical to the jar's META-INF/NOTICE" same_as_jar /app/licenses/NOTICE META-INF/NOTICE
+  check "/app/licenses/NOTICE-ROOT identical to the jar's NOTICE" same_as_jar /app/licenses/NOTICE-ROOT NOTICE
+  check "/app/licenses/THIRD-PARTY.txt identical to the jar's" same_as_jar /app/licenses/THIRD-PARTY.txt META-INF/THIRD-PARTY.txt
+  check "/app/licenses/THIRD-PARTY-CLARIFICATIONS.md identical to the jar's" \
+    same_as_jar /app/licenses/THIRD-PARTY-CLARIFICATIONS.md META-INF/THIRD-PARTY-CLARIFICATIONS.md
 fi
 
 if [ "$failures" -gt 0 ]; then

@@ -277,3 +277,11 @@ Task: "Write docker/licenses/IMAGE-COMPONENTS.md"
 - If a dependency bump later introduces a new license spelling or id, the build fails by design
   (FR-015). The fix is to add a `licenseMerges` entry, a text, or a clarification.
 - Commit after each phase. Each phase's checkpoint is a mergeable state.
+
+---
+
+## Phase 8: Convergence
+
+- [X] T027 Extend `scripts/check-license-packaging.sh` to cover the remaining rows of `contracts/distribution-layout.md`: assert the jar has a root `NOTICE` entry, assert `/app/licenses/NOTICE-ROOT` exists in the image, and check that the image's `/app/LICENSE.md`, `/app/licenses/NOTICE`, `/app/licenses/NOTICE-ROOT`, `/app/licenses/THIRD-PARTY.txt` and `/app/licenses/THIRD-PARTY-CLARIFICATIONS.md` are byte-identical to the corresponding jar entries (for example by comparing `sha256sum` output from inside the container with `unzip -p` of the jar) per SC-004 (partial)
+- [X] T028 Add the header comment `# Licenses for artifacts whose POM declares none. Each entry MUST be explained in META-INF/THIRD-PARTY-CLARIFICATIONS.md.` to `src/license/THIRD-PARTY.properties`, replacing the plugin-generated header. Then run `./mvnw -B -q generate-resources` and confirm the plugin does not overwrite the file; if it does, put the explanation in a pom.xml comment next to `<missingFile>` instead, per T013 (partial)
+- [X] T029 Replace the `useMissingFile`/`missingFile` setup from T012/T013 with `overrideUrl=file://${project.basedir}/src/license/override-THIRD-PARTY.properties` (rename the file, carry the T013 header comment and the `jakarta-regexp` entry over, and update `ThirdPartyNoticesTest`, `THIRD-PARTY-CLARIFICATIONS.md` and the plan, research, data-model and quickstart docs). The plugin rewrote the missing file on every build (found in T028); it only reads the override file. The FR-015 negative check still fails the build and names the artifact per T028 (contradicts)
