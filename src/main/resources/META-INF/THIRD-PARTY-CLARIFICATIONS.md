@@ -42,7 +42,7 @@ License ids are SPDX identifiers.
 
 - **Coordinates**: `jakarta-regexp:jakarta-regexp:1.4`
 - **Metadata**: The POM declares no license.
-- **Asserted**: Apache-2.0, via `src/license/THIRD-PARTY.properties` in the source repository.
+- **Asserted**: Apache-2.0, via `src/license/override-THIRD-PARTY.properties` in the source repository.
 - **Reason**: Jakarta Regexp is a project of the Apache Software Foundation (Apache Jakarta) and was distributed under
   the Apache License.
 

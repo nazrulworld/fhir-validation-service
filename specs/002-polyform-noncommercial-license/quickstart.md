@@ -25,8 +25,8 @@ The same check runs automatically as `LicenseFileTest` in `./mvnw verify`.
 - `target/classes/META-INF/THIRD-PARTY.txt` exists and contains no `Unknown license`.
 
 **Negative check (FR-015)**: Temporarily remove the `jakarta-regexp` line from
-`src/license/THIRD-PARTY.properties` and run `./mvnw -B -q package -DskipTests`. The build
-MUST fail and name the artifact. Restore the line afterwards.
+`src/license/override-THIRD-PARTY.properties` and run `./mvnw -B package -DskipTests` (not `-q`,
+which hides the warning that names it). The build MUST fail and name the artifact. Restore the line afterwards.
 
 ## 3. Jar carries license and notices (US3, FR-008, SC-004)
 

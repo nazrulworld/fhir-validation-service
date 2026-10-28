@@ -100,7 +100,7 @@ pom.xml                                      # url, licenses, developers, scm, l
 Dockerfile                                   # extract notices from jar → /app; OCI labels
 .github/workflows/ci.yml                     # run scripts/check-license-packaging.sh
 scripts/check-license-packaging.sh           # new
-src/license/THIRD-PARTY.properties           # new: missing-license overrides
+src/license/override-THIRD-PARTY.properties  # new: missing-license overrides (read-only)
 src/main/resources/META-INF/
 ├── THIRD-PARTY-CLARIFICATIONS.md            # new
 └── third-party-licenses/<SPDX-id>.txt       # new: ~8 texts

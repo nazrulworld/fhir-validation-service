@@ -62,9 +62,12 @@
     allowed. So the alternatives that are not elected (EPL-1.0, MPL-1.1, LGPL-2.1,
     GPL-2.0-with-classpath-exception) stay off the allowlist and need no text. A library offered
     *only* under one of them fails the build, as intended.
-  - `failOnMissing=true` together with `useMissingFile` and `src/license/THIRD-PARTY.properties`:
-    an artifact with no license metadata fails the build unless someone states its license
-    in that file.
+  - `failOnMissing=true`, plus `overrideUrl` pointing at
+    `src/license/override-THIRD-PARTY.properties`: an artifact with no license metadata is listed
+    as `Unknown license`, which is not on the allowlist, so the build fails and names it unless
+    someone states its license in that file. The plugin only reads the override file. A
+    `useMissingFile`/`missingFile` setup was tried first and dropped, because the plugin rewrites
+    that file (header and timestamp) on every build.
   - `generateBundle=true` and `bundleThirdPartyPath=META-INF/THIRD-PARTY.txt`. The listing is
     written to `target/generated-sources/license/META-INF/`, which the plugin registers as a
     resource root, so it lands in the jar.
@@ -100,7 +103,7 @@
     (BSD-2-Clause / CC0-1.0) → BSD-2-Clause.
   - **Missing metadata**: `jakarta-regexp:jakarta-regexp:1.4` has no license in its POM.
     It is an Apache Jakarta project and Apache-2.0 licensed, and this is also stated in
-    `THIRD-PARTY.properties`.
+    `override-THIRD-PARTY.properties`.
   - **MPL-2.0 (Saxon-HE)**: the library is redistributed unmodified, and its source is
     available from Saxonica / Maven Central.
   - **EPL-2.0**: the library is redistributed unmodified, and its source is available from

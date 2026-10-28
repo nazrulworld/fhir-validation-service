@@ -391,8 +391,9 @@
                             <generateBundle>true</generateBundle>
                             <bundleThirdPartyPath>META-INF/THIRD-PARTY.txt</bundleThirdPartyPath>
                             <failOnMissing>true</failOnMissing>
-                            <useMissingFile>true</useMissingFile>
-                            <missingFile>${project.basedir}/src/license/THIRD-PARTY.properties</missingFile>
+                            <!-- Licenses for artifacts whose POM declares none; read-only for the plugin (a missingFile
+                                 would be rewritten on every build). -->
+                            <overrideUrl>file://${project.basedir}/src/license/override-THIRD-PARTY.properties</overrideUrl>
                             <failOnBlacklist>true</failOnBlacklist>
                             <!-- Exactly the texts in src/main/resources/META-INF/third-party-licenses/. A library is
                                  accepted when one of its licenses is listed; elections are explained in
