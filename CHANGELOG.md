@@ -6,6 +6,23 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The project is now licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). It is free for any
+  noncommercial use; commercial use needs a separate license from Md Nazrul Islam (email2nazrul@gmail.com). Releases up
+  to and including 1.1.0 were published without an explicit license. Contributions are accepted under the same license
+  (`CONTRIBUTING.md`).
+
+### Added
+
+- The jar and the container image carry the license and the third-party notices for every bundled library. In the jar:
+  `LICENSE.md`, `META-INF/THIRD-PARTY.txt` (library, version, license), `META-INF/NOTICE` (merged notices),
+  `META-INF/THIRD-PARTY-CLARIFICATIONS.md` and `META-INF/third-party-licenses/`. In the image: `/app/LICENSE.md` and
+  `/app/licenses/`. The listing is generated from the shipped dependencies on every build. A library with a missing or
+  unlisted license fails the build until its license text and a clarification are added.
+- Image labels `org.opencontainers.image.licenses` (`PolyForm-Noncommercial-1.0.0`) and
+  `org.opencontainers.image.authors`. The published POM declares the license, the developer and the SCM.
+
 ## [1.1.0] - 2026-10-27
 
 Upgrading from 1.0.0 needs no data migration: migration V5 (one new nullable column) is applied on startup, and a

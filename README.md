@@ -1,5 +1,7 @@
 # FHIR Validation Service
 
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE.md)
+
 A horizontally scalable FHIR resource validation service built with Vert.x, HAPI FHIR and PostgreSQL.
 
 It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, stored Implementation Guide (IG)
@@ -396,3 +398,23 @@ FV_PROFILE=dev FV_PG_PORT=54329 FV_PG_PASSWORD=... java -jar target/fhir-validat
 - Design and decisions: [`specs/001-service-hardening/`](specs/001-service-hardening/)
 - Project principles: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
 - Changes: [`CHANGELOG.md`](CHANGELOG.md)
+- Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+
+## License
+
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md)
+([official text](https://polyformproject.org/licenses/noncommercial/1.0.0)). This summary is for convenience only;
+[`LICENSE.md`](LICENSE.md) is what applies.
+
+- **Noncommercial use is free.** You may use, copy, modify and share the software for any noncommercial purpose:
+  personal use, research, experiment and testing, hobby projects, and use by charities, educational institutions,
+  public research organisations, public safety or health organisations, environmental protection organisations and
+  government institutions.
+- **Commercial use needs a separate license.** Any other use, including use inside a for-profit company, requires a
+  commercial license. Contact **Md Nazrul Islam** at [email2nazrul@gmail.com](mailto:email2nazrul@gmail.com).
+- **Third-party components keep their own licenses.** The libraries bundled in the service are not covered by
+  PolyForm Noncommercial. Their licenses, notices and clarifications ship inside each package:
+  - jar: `META-INF/THIRD-PARTY.txt`, `META-INF/NOTICE`, `META-INF/THIRD-PARTY-CLARIFICATIONS.md` and
+    `META-INF/third-party-licenses/`;
+  - container image: `/app/LICENSE.md` and `/app/licenses/` (which also points to the licenses of the Java runtime
+    and OS packages in the image).

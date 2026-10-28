@@ -11,6 +11,28 @@
 
     <name>FHIR Validation Service</name>
     <description>A Vert.x-based FHIR validation service with PostgreSQL</description>
+    <url>https://github.com/nazrulworld/fhir-validation-service</url>
+
+    <licenses>
+        <license>
+            <name>PolyForm Noncommercial License 1.0.0</name>
+            <url>https://polyformproject.org/licenses/noncommercial/1.0.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>nazrulworld</id>
+            <name>Md Nazrul Islam</name>
+            <email>email2nazrul@gmail.com</email>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/nazrulworld/fhir-validation-service</url>
+        <connection>scm:git:https://github.com/nazrulworld/fhir-validation-service.git</connection>
+    </scm>
 
     <properties>
         <testcontainers.version>1.21.4</testcontainers.version>
@@ -28,6 +50,8 @@
         <!-- HL7 FHIR core shipped with hapi-fhir (its fhir_core_version). -->
         <fhir.utilities.version>6.9.12</fhir.utilities.version>
         <ph_schematron_version>7.1.2</ph_schematron_version>
+        <!-- Generates META-INF/THIRD-PARTY.txt (build-only). -->
+        <license-maven-plugin.version>2.4.0</license-maven-plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
     </properties>
@@ -325,6 +349,18 @@
 </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- The project license, at the jar root (META-INF/LICENSE* is reserved for the shade transformer). -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <includes>
+                    <include>LICENSE.md</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -334,6 +370,50 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                 </configuration>
+            </plugin>
+            <!-- META-INF/THIRD-PARTY.txt from the shipped dependency tree; fails on a missing or unlisted license. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${license-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>third-party-notices</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>add-third-party</goal>
+                        </goals>
+                        <configuration>
+                            <excludedScopes>test,provided,system</excludedScopes>
+                            <!-- Without force an up-to-date run skips adding the listing to the resources, so an
+                                 incremental build would package a jar without it. -->
+                            <force>true</force>
+                            <generateBundle>true</generateBundle>
+                            <bundleThirdPartyPath>META-INF/THIRD-PARTY.txt</bundleThirdPartyPath>
+                            <failOnMissing>true</failOnMissing>
+                            <useMissingFile>true</useMissingFile>
+                            <missingFile>${project.basedir}/src/license/THIRD-PARTY.properties</missingFile>
+                            <failOnBlacklist>true</failOnBlacklist>
+                            <!-- Exactly the texts in src/main/resources/META-INF/third-party-licenses/. A library is
+                                 accepted when one of its licenses is listed; elections are explained in
+                                 META-INF/THIRD-PARTY-CLARIFICATIONS.md. -->
+                            <includedLicenses>Apache-2.0|MIT|BSD-2-Clause|BSD-3-Clause|EPL-2.0|MPL-2.0|Unicode-3.0|CC0-1.0</includedLicenses>
+                            <licenseMerges>
+                                <licenseMerge>Apache-2.0|Apache License, Version 2.0|The Apache Software License, Version 2.0|Apache Software License 2.0|Apache 2|The Apache License, Version 2.0|Apache License version 2.0|Apache License 2.0|Apache 2.0</licenseMerge>
+                                <licenseMerge>MIT|MIT License|The MIT License</licenseMerge>
+                                <licenseMerge>BSD-2-Clause|BSD 2-Clause "Simplified" License|BSD 2-Clause License|The BSD 2-Clause License</licenseMerge>
+                                <licenseMerge>BSD-3-Clause|BSD 3 Clause|Eclipse Distribution License - v 1.0|EDL 1.0</licenseMerge>
+                                <licenseMerge>EPL-1.0|Eclipse Public License - v 1.0</licenseMerge>
+                                <licenseMerge>EPL-2.0|Eclipse Public License - v 2.0|EPL 2.0</licenseMerge>
+                                <licenseMerge>MPL-2.0|Mozilla Public License Version 2.0</licenseMerge>
+                                <licenseMerge>MPL-1.1|MPL 1.1</licenseMerge>
+                                <licenseMerge>LGPL-2.1|LGPL 2.1</licenseMerge>
+                                <licenseMerge>GPL-2.0-with-classpath-exception|GPL2 w/ CPE</licenseMerge>
+                                <licenseMerge>CC0-1.0|Public Domain, per Creative Commons CC0</licenseMerge>
+                            </licenseMerges>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -355,6 +435,16 @@
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <!-- Root LICENSE of the ph-* libraries: the Apache-2.0 text, shipped as
+                                             META-INF/third-party-licenses/Apache-2.0.txt. -->
+                                        <exclude>LICENSE</exclude>
+                                    </excludes>
+                                </filter>
+                                <!-- license-maven-plugin's unbundled copy; META-INF/THIRD-PARTY.txt is the shipped one. -->
+                                <filter>
+                                    <artifact>${project.groupId}:${project.artifactId}</artifact>
+                                    <excludes>
+                                        <exclude>THIRD-PARTY.txt</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -365,6 +455,30 @@
                                     </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- Dependency LICENSE files collide; their texts ship in META-INF/third-party-licenses/. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <!-- Merges every dependency's META-INF/NOTICE into META-INF/NOTICE, after the project's
+                                     Required Notice (preamble1; the header parts that would follow are emptied). -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                    <addHeader>true</addHeader>
+                                    <preamble1>Required Notice: Copyright 2025-2026 Md Nazrul Islam (https://github.com/nazrulworld)
+
+FHIR Validation Service, licensed under the PolyForm Noncommercial License 1.0.0 (LICENSE.md).
+
+This product includes third-party software listed in META-INF/THIRD-PARTY.txt. Their licenses are in
+META-INF/third-party-licenses/ and clarifications in META-INF/THIRD-PARTY-CLARIFICATIONS.md. The notices of
+those libraries follow; libraries that keep their NOTICE at the jar root (the ph-* libraries) are collected
+in /NOTICE.
+
+</preamble1>
+                                    <projectName></projectName>
+                                    <preamble2></preamble2>
+                                    <preamble3></preamble3>
+                                </transformer>
+                                <!-- The ph-* libraries keep their NOTICE at the jar root instead of META-INF/. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>NOTICE</resource>
+                                </transformer>
                             </transformers>
                         </configuration>
                     </execution>
