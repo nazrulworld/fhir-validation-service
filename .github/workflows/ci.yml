@@ -27,6 +27,8 @@ jobs:
           cache: maven
       - name: Unit, integration (Testcontainers) and contract tests
         run: ./mvnw -B verify
+      - name: License and third-party notices in the jar
+        run: sh scripts/check-license-packaging.sh target/fhir-validation-service-*.jar
 
   container:
     needs: test
@@ -69,6 +71,8 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Startup smoke test under QEMU (liveness, migration, graceful stop)
         run: sh scripts/startup-smoke.sh fhir-validation-service:arm64 linux/arm64
+      - name: License and third-party notices in the image
+        run: sh scripts/check-license-packaging.sh --image fhir-validation-service:arm64
 
   upgrade-rehearsal:
     if: github.event_name == 'workflow_dispatch' && inputs.upgrade-rehearsal

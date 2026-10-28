@@ -16,9 +16,22 @@ RUN --mount=type=cache,target=/root/.m2 \
     exit 1
 
 COPY src ./src
+# Packaged into the jar root (pom.xml <resources>).
+COPY LICENSE.md ./
 # Tests run in CI before the image is built (see .github/workflows).
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -DskipTests \
     && cp target/fhir-validation-service-*.jar /build/app.jar
+
+# License and third-party notices, taken from the jar so the image carries exactly what the jar carries
+# (specs/002-polyform-noncommercial-license/contracts/distribution-layout.md).
+COPY docker/licenses/IMAGE-COMPONENTS.md /build/notices/app/licenses/
+WORKDIR /build/notices/jar
+RUN jar xf /build/app.jar LICENSE.md NOTICE META-INF/NOTICE META-INF/THIRD-PARTY.txt \
+        META-INF/THIRD-PARTY-CLARIFICATIONS.md META-INF/third-party-licenses \
+    && mv LICENSE.md /build/notices/app/ \
+    && mv NOTICE /build/notices/app/licenses/NOTICE-ROOT \
+    && mv META-INF/* /build/notices/app/licenses/ \
+    && chmod -R a-w,a+rX /build/notices/app
 
 # --- Stage 2: runtime — the service JVM only (no database, no shell supervisor) ---------------------------------
 FROM eclipse-temurin:17-jre-jammy AS runtime
@@ -29,7 +42,9 @@ LABEL org.opencontainers.image.title="fhir-validation-service" \
       org.opencontainers.image.description="Vert.x-based FHIR validation service" \
       org.opencontainers.image.source="https://github.com/nazrulworld/fhir-validation-service" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${REVISION}"
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
+      org.opencontainers.image.authors="Md Nazrul Islam <email2nazrul@gmail.com>"
 
 # tini: PID 1 that forwards signals to the JVM; curl: container health check.
 RUN apt-get update \
@@ -40,6 +55,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder --chown=root:root --chmod=0444 /build/app.jar /app/app.jar
+# /app/LICENSE.md and /app/licenses/ (files 0444, directories 0555, set in the builder).
+COPY --from=builder --chown=root:root /build/notices/app/ /app/
 
 ENV FV_HTTP_PORT=8880 \
     JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"

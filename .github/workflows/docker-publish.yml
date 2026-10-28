@@ -51,6 +51,8 @@ jobs:
           sed -i "s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=ci$(openssl rand -hex 24)/" .env
           sed -i "s|^FV_TAG=.*|FV_TAG=ci|" .env
           sh scripts/smoke.sh
+      - name: License and third-party notices in the image
+        run: sh scripts/check-license-packaging.sh --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:ci
       - name: Scan image (fail on CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -88,6 +90,11 @@ jobs:
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+          # These labels override the Dockerfile's; without them the license label comes from GitHub's detected
+          # repository license, which classes PolyForm as "Other".
+          labels: |
+            org.opencontainers.image.licenses=PolyForm-Noncommercial-1.0.0
+            org.opencontainers.image.authors=Md Nazrul Islam <email2nazrul@gmail.com>
       - name: Build and push (amd64, arm64)
         uses: docker/build-push-action@v6
         with:
@@ -101,3 +108,13 @@ jobs:
             REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Published images carry the license label
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            licenses="$(docker buildx imagetools inspect "$IMAGE" --format "{{ json (index .Image \"$platform\").Config.Labels }}" \
+              | jq -r '.["org.opencontainers.image.licenses"]')"
+            echo "$platform: $licenses"
+            [ "$licenses" = "PolyForm-Noncommercial-1.0.0" ] || { echo "wrong license label on $platform" >&2; exit 1; }
+          done
