@@ -37,7 +37,7 @@ smoke:
 rolling-restart:
 	sh scripts/rolling-restart.sh
 
-## PostgreSQL for IDE runs on 127.0.0.1:54329 (set FV_PG_PORT=54329 and FV_PG_PASSWORD accordingly)
+## PostgresSQL for IDE runs on 127.0.0.1:54329 (set FV_PG_PORT=54329 and FV_PG_PASSWORD accordingly)
 run-postgres:
 	@[ -n "$${FV_PG_PASSWORD}" ] || (echo "Set FV_PG_PASSWORD first" && exit 1)
 	docker run -i --rm \
