@@ -37,11 +37,11 @@ IGs and profiles reach every instance within seconds, without restarts.
 
 There are three ways to run the service:
 
-| Option | Use when | You provide |
-|--------|----------|-------------|
-| [A. Docker Compose, published image](#option-a-docker-compose-with-the-published-image) | you want a running service without the source code | Docker |
-| [B. Docker Compose, source checkout](#option-b-docker-compose-from-a-source-checkout) | you want the cluster, observability and pgAdmin profiles, or to build the image yourself | Docker, git |
-| [C. Jar with your own PostgreSQL](#option-c-jar-with-your-own-postgresql) | you already run PostgreSQL, or deploy without containers (VM, systemd) | Java 17+, PostgreSQL |
+| Option                                                                                  | Use when                                                                                 | You provide          |
+|-----------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------|----------------------|
+| [A. Docker Compose, published image](#option-a-docker-compose-with-the-published-image) | you want a running service without the source code                                       | Docker               |
+| [B. Docker Compose, source checkout](#option-b-docker-compose-from-a-source-checkout)   | you want the cluster, observability and pgAdmin profiles, or to build the image yourself | Docker, git          |
+| [C. Jar with your own PostgreSQL](#option-c-jar-with-your-own-postgresql)               | you already run PostgreSQL, or deploy without containers (VM, systemd)                   | Java 17+, PostgreSQL |
 
 Whichever you choose, you need an **administrator API key**: 32-128 characters of `[A-Za-z0-9_-]`. Generate one with
 
@@ -56,11 +56,11 @@ profile registration).
 
 Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux/amd64` and `linux/arm64`:
 
-| Tag | Meaning |
-|-----|---------|
-| `1.2.0` | an exact release (recommended for production: pin it) |
-| `1.2` | the newest patch release of 1.2 |
-| `latest` | the newest release |
+| Tag            | Meaning                                                    |
+|----------------|------------------------------------------------------------|
+| `1.2.0`        | an exact release (recommended for production: pin it)      |
+| `1.2`          | the newest patch release of 1.2                            |
+| `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
 **1. Create a directory and an `.env` file**
@@ -141,14 +141,14 @@ Then [validate a resource](#validate-a-resource).
 
 **Day-to-day**
 
-| Task | Command |
-|------|---------|
-| Logs | `docker compose logs -f validator` |
-| Stop (keep data) | `docker compose down` |
-| Upgrade | set a new `FV_TAG` in `.env`, then `docker compose pull && docker compose up -d --wait` (database migrations run automatically on start; read the [CHANGELOG](CHANGELOG.md) first) |
-| Back up | `docker compose exec postgres pg_dump -U postgres -Fc fhir_validator > fhir_validator.dump` |
-| Restore | `docker compose exec -T postgres pg_restore -U postgres -d fhir_validator --clean --if-exists < fhir_validator.dump` |
-| Delete everything, data included | `docker compose down -v` |
+| Task                             | Command                                                                                                                                                                            |
+|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Logs                             | `docker compose logs -f validator`                                                                                                                                                 |
+| Stop (keep data)                 | `docker compose down`                                                                                                                                                              |
+| Upgrade                          | set a new `FV_TAG` in `.env`, then `docker compose pull && docker compose up -d --wait` (database migrations run automatically on start; read the [CHANGELOG](CHANGELOG.md) first) |
+| Back up                          | `docker compose exec postgres pg_dump -U postgres -Fc fhir_validator > fhir_validator.dump`                                                                                        |
+| Restore                          | `docker compose exec -T postgres pg_restore -U postgres -d fhir_validator --clean --if-exists < fhir_validator.dump`                                                               |
+| Delete everything, data included | `docker compose down -v`                                                                                                                                                           |
 
 ### Option B: Docker Compose from a source checkout
 
@@ -163,14 +163,14 @@ curl -fsS http://127.0.0.1:8880/health/readiness
 `make up` uses the published image named by `FV_TAG` when it is available; `docker compose build` builds it from the
 checkout instead.
 
-| Command | Starts | Endpoint |
-|---------|--------|----------|
-| `make up` | PostgreSQL, one validator | http://127.0.0.1:8880 |
-| `make up-cluster` | + a second validator behind nginx (shared database) | http://127.0.0.1:8881 |
-| `make up-obs` | + Prometheus and a PostgreSQL exporter | http://127.0.0.1:9090 |
-| `docker compose --profile admin up -d` | + pgAdmin (credentials from `.env`) | http://127.0.0.1:5050 |
-| `make down` / `make clean` | stop (keep / delete volumes) | |
-| `make smoke` | build, start, validate, graceful stop | |
+| Command                                | Starts                                              | Endpoint              |
+|----------------------------------------|-----------------------------------------------------|-----------------------|
+| `make up`                              | PostgreSQL, one validator                           | http://127.0.0.1:8880 |
+| `make up-cluster`                      | + a second validator behind nginx (shared database) | http://127.0.0.1:8881 |
+| `make up-obs`                          | + Prometheus and a PostgreSQL exporter              | http://127.0.0.1:9090 |
+| `docker compose --profile admin up -d` | + pgAdmin (credentials from `.env`)                 | http://127.0.0.1:5050 |
+| `make down` / `make clean`             | stop (keep / delete volumes)                        |                       |
+| `make smoke`                           | build, start, validate, graceful stop               |                       |
 
 All ports bind to `127.0.0.1`. PostgreSQL is not published; to reach it from the host, add a git-ignored
 `compose.override.yaml` with `services: {postgres: {ports: ["127.0.0.1:54329:5432"]}}`.
@@ -357,12 +357,12 @@ bundled compose database runs on a private compose network. When the database is
 
 ### Health and metrics
 
-| Endpoint | Meaning |
-|----------|---------|
-| `GET /health/liveness` | the process is alive (use for liveness probes) |
-| `GET /health/readiness` | 200 when the database is reachable, every FHIR version has a usable validator, and the instance is not draining |
-| `GET /health` | detailed report |
-| `GET /metrics` | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, ...) |
+| Endpoint                | Meaning                                                                                                                  |
+|-------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
+| `GET /health/readiness` | 200 when the database is reachable, every FHIR version has a usable validator, and the instance is not draining          |
+| `GET /health`           | detailed report                                                                                                          |
+| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, ...) |
 
 On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
 `FV_SHUTDOWN_GRACE_MS`), then exits.
@@ -374,16 +374,16 @@ startup with a message naming the variable. The full list, with defaults and bou
 [`specs/001-service-hardening/contracts/configuration.md`](specs/001-service-hardening/contracts/configuration.md)
 and [`.env.example`](.env.example). The most important ones:
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `FV_PG_HOST`, `FV_PG_PORT`, `FV_PG_DATABASE`, `FV_PG_USER`, `FV_PG_PASSWORD` | `localhost`, `5432`, `fhir_validator`, `postgres`, *(required)* | database |
-| `FV_ADMIN_API_KEY` | *(unset: admin operations refused)* | bootstrap administrator key |
-| `FV_AUTH_ANONYMOUS_VALIDATE` | `true` | `false` requires a key for validation and reads too |
-| `FV_HTTP_PORT` | `8880` | HTTP port |
-| `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING` | cores / 4 × workers | parallel validations / admission limit |
-| `FV_ADMIN_MAX_PENDING` | 4 | administrative operations in progress; beyond it 503 `overloaded` |
-| `FV_PACKAGE_SOURCES` | `packages.fhir.org,packages2.fhir.org` | registries and approved download hosts |
-| `FV_CORS_ALLOWED_ORIGINS` | *(none)* | browser origins allowed to call the API |
+| Variable                                                                     | Default                                                         | Purpose                                                           |
+|------------------------------------------------------------------------------|-----------------------------------------------------------------|-------------------------------------------------------------------|
+| `FV_PG_HOST`, `FV_PG_PORT`, `FV_PG_DATABASE`, `FV_PG_USER`, `FV_PG_PASSWORD` | `localhost`, `5432`, `fhir_validator`, `postgres`, *(required)* | database                                                          |
+| `FV_ADMIN_API_KEY`                                                           | *(unset: admin operations refused)*                             | bootstrap administrator key                                       |
+| `FV_AUTH_ANONYMOUS_VALIDATE`                                                 | `true`                                                          | `false` requires a key for validation and reads too               |
+| `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
+| `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
+| `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
+| `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |
+| `FV_CORS_ALLOWED_ORIGINS`                                                    | *(none)*                                                        | browser origins allowed to call the API                           |
 
 ## Development
 
