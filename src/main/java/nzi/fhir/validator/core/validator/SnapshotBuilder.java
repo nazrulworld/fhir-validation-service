@@ -2,7 +2,6 @@ package nzi.fhir.validator.core.validator;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
-import ca.uhn.fhir.context.support.IValidationSupport;
 import ca.uhn.fhir.validation.FhirValidator;
 import io.vertx.core.Future;
 import nzi.fhir.validator.core.concurrency.AsyncLimiter;
@@ -153,20 +152,16 @@ public class SnapshotBuilder {
     static ValidatorSnapshot assemble(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                                       List<NpmPackage> npmPackages) {
         FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
-        List<IValidationSupport> reusable = List.of(
-                new DefaultProfileValidationSupport(ctx),
-                new CustomNpmPackageValidationSupport(ctx, npmPackages));
         ValidationSupportChain chain = new ValidationSupportChain(
-                reusable.get(0),
-                reusable.get(1),
+                new DefaultProfileValidationSupport(ctx),
+                new CustomNpmPackageValidationSupport(ctx, npmPackages),
                 new InMemoryTerminologyServerValidationSupport(ctx),
                 new CommonCodeSystemsTerminologyService(ctx),
                 new SnapshotGeneratingValidationSupport(ctx));
         // FR-002 / research R1: no IValidatorResourceFetcher is set, so the validator can never fetch a profile,
         // reference or other conformance resource over the network. Do not add one.
-        FhirInstanceValidator instanceValidator = new FhirInstanceValidator(chain);
         FhirValidator validator = ctx.newValidator();
-        validator.registerValidatorModule(instanceValidator);
-        return new ValidatorSnapshot(version, revision, resolvedPackages, ctx, validator, instanceValidator, chain, reusable);
+        validator.registerValidatorModule(new FhirInstanceValidator(chain));
+        return new ValidatorSnapshot(version, revision, resolvedPackages, ctx, validator, chain);
     }
 }

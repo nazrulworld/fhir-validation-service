@@ -97,6 +97,28 @@ class ObservabilityIT extends BaseTestContainer {
     }
 
     @Test
+    void unresolvedRequestedProfileIsCountedAsUnknownProfile(VertxTestContext ctx) {
+        // Spec 003 (T026, Principle VII): a 400 unknown-profile is recorded with its own outcome label, end to end.
+        app.client().post(app.port(), "localhost", "/R4/validate")
+                .addQueryParam("profile", "http://example.org/StructureDefinition/typo")
+                .putHeader("Content-Type", "application/json")
+                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"))
+                .compose(r -> {
+                    assertEquals(400, r.statusCode());
+                    assertTrue(r.bodyAsJsonObject().getString("type").endsWith("/unknown-profile"));
+                    return app.client().get(app.port(), "localhost", "/metrics").send();
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode());
+                    assertTrue(java.util.regex.Pattern
+                                    .compile("fv_validations_total\\{outcome=\"unknown_profile\",version=\"R4\",?\\} 1\\.0")
+                                    .matcher(r.bodyAsString()).find(),
+                            "missing fv_validations_total{outcome=\"unknown_profile\",version=\"R4\"}");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     void requestLogLinesCarryTheCorrelationId(VertxTestContext ctx) {
         logs = LogCapture.start();
         String requestId = "obs-test-0001-request";

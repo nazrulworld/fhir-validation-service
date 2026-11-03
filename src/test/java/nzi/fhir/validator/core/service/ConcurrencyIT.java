@@ -18,7 +18,6 @@ import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.core.validator.ValidatorSnapshot;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
-import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -82,8 +81,7 @@ class ConcurrencyIT {
         FhirValidator validator = ctx.newValidator();
         validator.registerValidatorModule(module);
         ValidationSupportChain chain = new ValidationSupportChain(new ca.uhn.fhir.context.support.DefaultProfileValidationSupport(ctx));
-        return new ValidatorSnapshot(SupportedFhirVersion.R4, 1, List.of(), ctx, validator, new FhirInstanceValidator(chain),
-                chain, List.of());
+        return new ValidatorSnapshot(SupportedFhirVersion.R4, 1, List.of(), ctx, validator, chain);
     }
 
     // Held in fields: Vert.x closes a worker executor automatically once it becomes unreachable, and the test
