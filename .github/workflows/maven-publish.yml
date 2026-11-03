@@ -35,6 +35,8 @@ jobs:
             compose.yaml
             .env.example
             docs/upgrade-1.0.md
+            docs/upgrade-2.0.md
+            scripts/export-custom-profiles.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

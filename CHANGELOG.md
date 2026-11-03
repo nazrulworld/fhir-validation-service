@@ -4,9 +4,9 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.0] - 2026-11-03
 
-Planned as **2.0.0**, a breaking release. Profiles now come only from included IG packages, the same model as the HL7
+A breaking release. Profiles now come only from included IG packages, the same model as the HL7
 validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
 
 ### Upgrade: do this first
@@ -17,6 +17,8 @@ validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
 - **Back up the database.** Restoring it is the only way back to 1.x; there is no down-migration.
 - **Stop every 1.x instance before starting 2.0.0.** A mixed 1.x/2.0 fleet is not supported, and
   `scripts/rolling-restart.sh` refuses to cross a major version.
+- **Pin your image tag.** The `latest` tag now points to 2.0.0. A 1.x deployment on `latest` (the default `FV_TAG`)
+  upgrades on its next pull, so set `FV_TAG` to your current 1.x release until you have exported and backed up.
 - Full procedure: [docs/upgrade-2.0.md](docs/upgrade-2.0.md). `scripts/upgrade-rehearsal-2.0.sh` rehearses it.
 
 ### Breaking
