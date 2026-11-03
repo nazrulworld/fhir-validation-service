@@ -1,5 +1,8 @@
 # Upgrading to 1.0.0
 
+> Custom profiles mentioned below were removed in 2.0.0. To upgrade 1.x to 2.0.0, see
+> [upgrade-2.0.md](upgrade-2.0.md).
+
 1.0.0 removes the PostgreSQL server that earlier images bundled inside the application container. Data now lives in
 a separate PostgreSQL service (the `postgres` service of `compose.yaml`, or your own database). This guide moves
 the data of a 0.1.x installation (uploaded IG packages, custom profiles, included-IG configuration) into it.

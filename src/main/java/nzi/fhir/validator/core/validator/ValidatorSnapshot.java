@@ -18,13 +18,17 @@ import org.hl7.fhir.instance.model.api.IAnyResource;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
+import ca.uhn.fhir.util.FhirTerser;
+
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * An immutable validator for one FHIR version, built from exactly one resolved IG package set. Thread-safe; shared
- * by all requests until a newer configuration replaces it.
+ * An immutable validator for one FHIR version, built from exactly one resolved IG package set, for its whole life:
+ * nothing is added to it after it is built, so the only profiles it knows are those of the core specification and its
+ * packages (spec 003). Thread-safe; shared by all requests until a newer configuration replaces it.
  */
 public final class ValidatorSnapshot {
 
@@ -42,7 +46,6 @@ public final class ValidatorSnapshot {
     private final FhirValidator validator;
     private final FhirInstanceValidator instanceValidator;
     private final ValidationSupportChain chain;
-    private final ProfileStore profileStore;
     private final List<IValidationSupport> reusableSupports;
     private volatile long packageArchiveBytes;
 
@@ -52,7 +55,7 @@ public final class ValidatorSnapshot {
      */
     public ValidatorSnapshot(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                              FhirContext fhirContext, FhirValidator validator, FhirInstanceValidator instanceValidator,
-                             ValidationSupportChain chain, ProfileStore profileStore, List<IValidationSupport> reusableSupports) {
+                             ValidationSupportChain chain, List<IValidationSupport> reusableSupports) {
         this.version = version;
         this.revision = revision;
         this.resolvedPackages = List.copyOf(resolvedPackages);
@@ -60,7 +63,6 @@ public final class ValidatorSnapshot {
         this.validator = validator;
         this.instanceValidator = instanceValidator;
         this.chain = chain;
-        this.profileStore = profileStore;
         this.reusableSupports = List.copyOf(reusableSupports);
     }
 
@@ -82,9 +84,13 @@ public final class ValidatorSnapshot {
      * <p>
      * The body is first parsed leniently, only to reject input that is not FHIR at all; the validator then checks
      * the raw text, so invalid values (e.g. unknown codes) are reported as validation issues rather than parse
-     * failures. Requested profiles are passed as validation options; the resource is never modified.
+     * failures. Requested profiles must resolve, by exact canonical ({@code url} or {@code url|version}), from this
+     * snapshot's definitions (core and included IGs); nothing is ever fetched (spec 003, FR-001 to FR-003). They are
+     * passed as validation options; the resource is never modified.
      *
      * @throws DataFormatException if the body is not parseable FHIR in the given format
+     * @throws ProblemException    400 {@code unknown-profile} if any requested profile does not resolve; nothing is
+     *                             validated then (FR-006)
      */
     public Outcome validate(String body, SupportedContentType contentType, List<String> profiles) {
         return validate(body, contentType, profiles, Integer.MAX_VALUE);
@@ -106,25 +112,56 @@ public final class ValidatorSnapshot {
             }
         }
         ValidationOptions options = new ValidationOptions();
+        // Requested first (request order), then resolvable meta.profile entries; each once, never an unresolved one.
         Set<String> applied = new LinkedHashSet<>();
-        if (resource instanceof IAnyResource anyResource) {
-            anyResource.getMeta().getProfile().forEach(p -> applied.add(p.getValueAsString()));
-        }
+        List<String> unresolved = new ArrayList<>();
         if (profiles != null) {
             for (String profile : profiles) {
-                options.addProfile(profile.trim());
-                applied.add(profile.trim());
+                String requested = profile.trim();
+                if (requested.isEmpty() || applied.contains(requested)) {
+                    continue;
+                }
+                if (resolves(requested)) {
+                    applied.add(requested);
+                } else if (!unresolved.contains(requested)) {
+                    unresolved.add(requested);
+                }
             }
+        }
+        if (!unresolved.isEmpty()) {
+            throw ProblemException.unknownProfiles(version, unresolved);
+        }
+        applied.forEach(options::addProfile);
+        if (resource instanceof IAnyResource anyResource) {
+            // Unknown declared profiles are still reported by the validator as errors (Q2: A); they are just not listed.
+            anyResource.getMeta().getProfile().stream()
+                    .map(p -> p.getValueAsString())
+                    .filter(p -> p != null && !applied.contains(p) && resolves(p))
+                    .forEach(applied::add);
         }
         return new Outcome(version, validator.validateWithResult(body, options), List.copyOf(applied), fhirContext);
     }
 
     /**
-     * Drops cached conformance resources after a profile change.
+     * Whether {@code canonical} names a StructureDefinition of this snapshot exactly: its {@code url}, or
+     * {@code url|version}. HAPI also indexes definitions by their last URL segments, so partial values such as a bare
+     * id must be rejected here (research R3). In-memory lookup only.
      */
-    public void invalidateCaches() {
-        chain.invalidateCaches();
-        instanceValidator.invalidateCaches();
+    boolean resolves(String canonical) {
+        IBaseResource sd = chain.fetchStructureDefinition(canonical);
+        if (sd == null) {
+            return false;
+        }
+        FhirTerser terser = fhirContext.newTerser();
+        String url = terser.getSinglePrimitiveValueOrNull(sd, "url");
+        if (url == null) {
+            return false;
+        }
+        if (canonical.equals(url)) {
+            return true;
+        }
+        String sdVersion = terser.getSinglePrimitiveValueOrNull(sd, "version");
+        return sdVersion != null && canonical.equals(url + "|" + sdVersion);
     }
 
     public SupportedFhirVersion version() {
@@ -141,9 +178,5 @@ public final class ValidatorSnapshot {
 
     public FhirContext fhirContext() {
         return fhirContext;
-    }
-
-    public ProfileStore profileStore() {
-        return profileStore;
     }
 }

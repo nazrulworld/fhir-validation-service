@@ -9,11 +9,9 @@ import io.micrometer.prometheus.PrometheusMeterRegistry;
 import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCache;
-import nzi.fhir.validator.core.validator.ProfileStore;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 
 import java.time.Duration;
-import java.util.Map;
 
 /**
  * The service's own Prometheus meters (FR-031), exposed at {@code /metrics} together with Vert.x's HTTP and pool
@@ -24,6 +22,8 @@ public class ServiceMetrics {
     public static final String OUTCOME_INVALID = "invalid";
     public static final String OUTCOME_UNPARSEABLE = "unparseable";
     public static final String OUTCOME_ERROR = "error";
+    /** A requested profile is not defined by the version's core definitions or included IGs (400). */
+    public static final String OUTCOME_UNKNOWN_PROFILE = "unknown_profile";
 
     private final PrometheusMeterRegistry registry;
 
@@ -45,7 +45,7 @@ public class ServiceMetrics {
 
     /** Gauges and function counters over live service state. */
     public void bind(AdmissionController admission, AdmissionController adminAdmission, ValidatorRegistry validators,
-                     PackageCache packageCache, Map<SupportedFhirVersion, ProfileStore> profileStores) {
+                     PackageCache packageCache) {
         Gauge.builder("fv.validation.pending", admission, AdmissionController::pending)
                 .description("Validations running or queued").register(registry);
         Gauge.builder("fv.validation.max.pending", admission, AdmissionController::maxPending)
@@ -71,11 +71,6 @@ public class ServiceMetrics {
                     .tag("version", version.name()).baseUnit("bytes")
                     .description("Archive size of the IG packages in the active validator; a rebuild briefly holds two snapshots")
                     .register(registry);
-            ProfileStore store = profileStores.get(version);
-            if (store != null) {
-                Gauge.builder("fv.profile.count", store, ProfileStore::size)
-                        .tag("version", version.name()).description("Custom profiles loaded").register(registry);
-            }
         }
     }
 

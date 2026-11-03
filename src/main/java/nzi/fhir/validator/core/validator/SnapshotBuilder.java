@@ -12,7 +12,6 @@ import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCache;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
 import nzi.fhir.validator.core.service.CustomNpmPackageValidationSupport;
-import nzi.fhir.validator.core.service.CustomProfileValidationSupport;
 import nzi.fhir.validator.core.service.FhirContextLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,8 +30,9 @@ import java.util.List;
  * decompression, parsing and validator construction run on the {@code fv-packages} pool.
  * <p>
  * Full builds can take minutes, so at most {@code maxConcurrentBuilds} run at once (one less than the pool size):
- * the remaining worker stays free for profile parsing and refresh, re-assembly after profile changes, upload parsing
- * and DNS resolution, so profile changes keep propagating while validators rebuild (FR-008, SC-002).
+ * the remaining worker stays free for short package work such as upload parsing and DNS resolution (FR-008).
+ * Snapshots are immutable: the only way to change what a version validates against is a new build from a different
+ * resolved package set (spec 003).
  */
 public class SnapshotBuilder {
     private static final Logger logger = LogManager.getLogger(SnapshotBuilder.class);
@@ -72,13 +72,11 @@ public class SnapshotBuilder {
         return Math.max(1, packageWorkers - 1);
     }
 
-    public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
-                                           ProfileStore profileStore) {
-        return builds.run(() -> buildNow(version, revision, resolvedPackages, profileStore));
+    public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages) {
+        return builds.run(() -> buildNow(version, revision, resolvedPackages));
     }
 
-    private Future<ValidatorSnapshot> buildNow(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
-                                               ProfileStore profileStore) {
+    private Future<ValidatorSnapshot> buildNow(SupportedFhirVersion version, long revision, List<String> resolvedPackages) {
         List<Future<Loaded>> loaded = new ArrayList<>();
         for (String idAndVersion : resolvedPackages) {
             loaded.add(load(idAndVersion));
@@ -101,8 +99,7 @@ public class SnapshotBuilder {
             // process with an OutOfMemoryError.
             long reserved = heap.reserve(expandedBytes);
             try {
-                ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages, profileStore);
-                completeProfiles(snapshot);
+                ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages);
                 snapshot.setPackageArchiveBytes(archiveBytes);
                 // Warm caches so the first real request does not pay HAPI's lazy initialisation.
                 snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
@@ -140,17 +137,6 @@ public class SnapshotBuilder {
                 });
     }
 
-    /**
-     * Profiles stored before their base IG package was available still lack a snapshot: generate it against this
-     * snapshot's packages before the snapshot is published (see {@link SnapshotPregenerator}).
-     */
-    private static void completeProfiles(ValidatorSnapshot snapshot) {
-        int completed = snapshot.profileStore().ensureSnapshots(snapshot.reusableSupports());
-        if (completed > 0) {
-            logger.info("Generated snapshots for {} stored profile(s) of {}", completed, snapshot.version());
-        }
-    }
-
     /** Test hook: runs on the package worker at the start of every full build (e.g. to simulate a slow one). */
     public void setBuildHook(Runnable hook) {
         this.buildHook = hook;
@@ -160,45 +146,27 @@ public class SnapshotBuilder {
         return cache;
     }
 
+    /**
+     * The only source of profiles is the chain built here: core definitions first, then the included IG packages and
+     * their resolved dependencies (spec 003, FR-001). Must run on a worker thread.
+     */
     static ValidatorSnapshot assemble(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
-                                      List<NpmPackage> npmPackages, ProfileStore profileStore) {
+                                      List<NpmPackage> npmPackages) {
         FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
         List<IValidationSupport> reusable = List.of(
                 new DefaultProfileValidationSupport(ctx),
                 new CustomNpmPackageValidationSupport(ctx, npmPackages));
-        return assembleWith(version, revision, resolvedPackages, reusable, profileStore);
-    }
-
-    private static ValidatorSnapshot assembleWith(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
-                                                  List<IValidationSupport> reusable, ProfileStore profileStore) {
-        FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
         ValidationSupportChain chain = new ValidationSupportChain(
                 reusable.get(0),
-                new CustomProfileValidationSupport(ctx, profileStore),
                 reusable.get(1),
                 new InMemoryTerminologyServerValidationSupport(ctx),
                 new CommonCodeSystemsTerminologyService(ctx),
                 new SnapshotGeneratingValidationSupport(ctx));
+        // FR-002 / research R1: no IValidatorResourceFetcher is set, so the validator can never fetch a profile,
+        // reference or other conformance resource over the network. Do not add one.
         FhirInstanceValidator instanceValidator = new FhirInstanceValidator(chain);
         FhirValidator validator = ctx.newValidator();
         validator.registerValidatorModule(instanceValidator);
-        return new ValidatorSnapshot(version, revision, resolvedPackages, ctx, validator, instanceValidator, chain,
-                profileStore, reusable);
-    }
-
-    /**
-     * A fresh validator over the same packages, used after profile changes: HAPI caches conformance resources (and
-     * "not found" answers) inside the chain and validator, so new or updated profiles need fresh instances. Cheap:
-     * the parsed core definitions and IG packages are shared, nothing is re-read or re-parsed.
-     */
-    public Future<ValidatorSnapshot> reassemble(ValidatorSnapshot current) {
-        return executors.packages().executeBlocking(() -> {
-            ValidatorSnapshot snapshot = assembleWith(current.version(), current.revision(), current.resolvedPackages(),
-                    current.reusableSupports(), current.profileStore());
-            completeProfiles(snapshot);
-            snapshot.setPackageArchiveBytes(current.packageArchiveBytes());
-            snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
-            return snapshot;
-        }, false);
+        return new ValidatorSnapshot(version, revision, resolvedPackages, ctx, validator, instanceValidator, chain, reusable);
     }
 }

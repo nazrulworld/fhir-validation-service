@@ -109,6 +109,20 @@ class FhirValidationServiceTest extends BaseTestContainer {
     }
 
     @Test
+    @DisplayName("An unresolved requested profile is counted as unknown_profile, not as a server error")
+    void unknownProfileMetricOutcome(VertxTestContext ctx) {
+        String unknown = "http://example.org/fhir/StructureDefinition/metric-unknown";
+        service.validate(SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of(unknown))
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    assertEquals("unknown-profile", assertInstanceOf(nzi.fhir.validator.web.ProblemException.class, err).type());
+                    String scrape = core.services().metrics().scrape();
+                    assertTrue(scrape.lines().anyMatch(l -> l.startsWith("fv_validations_total")
+                            && l.contains("outcome=\"unknown_profile\"")), scrape);
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     @DisplayName("XML content is parsed as XML")
     void xmlContent(VertxTestContext ctx) {
         service.validate(SupportedFhirVersion.R4, VALID_PATIENT_XML, SupportedContentType.FHIR_XML, List.of())

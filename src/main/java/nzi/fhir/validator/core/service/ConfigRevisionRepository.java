@@ -16,14 +16,13 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
 
 /**
  * Validator configuration rows ({@code fhir_validator_logs}): one per FHIR version, with a revision that increases
- * on every IG or profile change. Writes notify other instances through {@code pg_notify}, which PostgreSQL delivers
+ * on every IG change. Writes notify other instances through {@code pg_notify}, which PostgreSQL delivers
  * only when the surrounding transaction commits.
  */
 public final class ConfigRevisionRepository {
     public static final String CHANNEL = "fv_config_changed";
     public static final String VALIDATOR_ID = "standard_validator";
     public static final String KIND_IG = "IG";
-    public static final String KIND_PROFILE = "PROFILE";
 
     private static final String TABLE = DB_POSTGRES_SCHEMA_NAME + ".fhir_validator_logs";
 
@@ -69,19 +68,6 @@ public final class ConfigRevisionRepository {
                 .execute(Tuple.of(included.toArray(new String[0]), resolved.toArray(new String[0]), VALIDATOR_ID, version.name()))
                 .map(rows -> rows.iterator().next().getLong(0))
                 .compose(revision -> notify(tx, version, revision, KIND_IG, key).map(revision));
-    }
-
-    /**
-     * Bumps the revision after a profile change; notifies on commit.
-     */
-    public static Future<Long> bump(SqlClient tx, SupportedFhirVersion version, String kind, String key) {
-        return tx.preparedQuery("UPDATE " + TABLE + " SET revision = revision + 1, updated_at = now() "
-                        + "WHERE validator_id = $1 AND fhir_version = $2 RETURNING revision")
-                .execute(Tuple.of(VALIDATOR_ID, version.name()))
-                .compose(rows -> rows.size() == 0
-                        ? Future.failedFuture(new IllegalStateException("No configuration row for " + version))
-                        : Future.succeededFuture(rows.iterator().next().getLong(0)))
-                .compose(revision -> notify(tx, version, revision, kind, key).map(revision));
     }
 
     private static Future<Void> notify(SqlClient tx, SupportedFhirVersion version, long revision, String kind, String key) {

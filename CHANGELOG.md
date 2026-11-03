@@ -6,6 +6,55 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Planned as **2.0.0**, a breaking release. Profiles now come only from included IG packages, the same model as the HL7
+validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
+
+### Upgrade: do this first
+
+- **Export custom profiles before upgrading.** Migration V6 drops `fhir_profiles` unconditionally on the first 2.0.0
+  start. Run `scripts/export-custom-profiles.sh --check`, then export, against the 1.x database. It writes uploadable IG
+  packages.
+- **Back up the database.** Restoring it is the only way back to 1.x; there is no down-migration.
+- **Stop every 1.x instance before starting 2.0.0.** A mixed 1.x/2.0 fleet is not supported, and
+  `scripts/rolling-restart.sh` refuses to cross a major version.
+- Full procedure: [docs/upgrade-2.0.md](docs/upgrade-2.0.md). `scripts/upgrade-rehearsal-2.0.sh` rehearses it.
+
+### Breaking
+
+- `POST /{version}/register-profile` is removed and answers 404. Package profiles as an IG, then upload
+  (`/igs/upload`) and include (`/{version}/include-ig`) it.
+- `POST /{version}/validate?profile=…`: a requested profile that the core specification and the included IGs (with
+  their dependencies) do not define answers **400 `unknown-profile`**, with `unresolvedProfiles`, and nothing is
+  validated. This applies even when other requested profiles resolve. The answer is always problem JSON, whatever
+  `Accept` asks for.
+- `?profile=` values must be exact canonicals (`url` or `url|version`). Bare ids and partial URLs no longer resolve.
+- `?profile=` accepts at most 10 distinct profiles of at most 1024 characters each. Beyond that it answers
+  **400 `invalid-request`**, without echoing the URLs.
+- Migration V6 drops `fhir_validator_schema.fhir_profiles` and the never-used `fhir_validator_logs.included_profiles`
+  column. It runs unconditionally: the risk is accepted, and the export step above is the safeguard.
+
+### Fixed
+
+- An unknown requested profile was silently dropped when another requested profile resolved, so a resource could be
+  reported as valid without ever being checked against a profile the client asked for.
+- `appliedProfiles` listed profiles that were never resolved or applied. It now lists only applied profiles: the
+  requested ones first, then resolvable `meta.profile` entries, each once.
+
+### Removed
+
+- The `fv_profile_count` metric, the PROFILE configuration change kind, and the readiness reason "profile changes
+  could not be applied".
+
+### Added
+
+- `fv_validations_total` outcome `unknown_profile`.
+- `scripts/export-custom-profiles.sh`, `scripts/upgrade-rehearsal-2.0.sh` and `docs/upgrade-2.0.md`.
+
+### Unchanged
+
+- An unknown `meta.profile` inside the resource is still reported as an ERROR issue (200, `valid: false`).
+- Validation never downloads profiles or other conformance resources.
+
 ## [1.2.0] - 2026-10-28
 
 The first release under an explicit license, PolyForm Noncommercial 1.0.0: free for noncommercial use, commercial use

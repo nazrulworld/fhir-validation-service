@@ -63,13 +63,13 @@ class ValidatorSnapshotSwapIT extends BaseTestContainer {
                 .map(o -> {
                     boolean constraint = o.result().getMessages().stream().anyMatch(m ->
                             m.getSeverity().ordinal() >= ResultSeverityEnum.ERROR.ordinal() && m.getMessage().contains("birthDate"));
-                    boolean unknown = o.result().getMessages().stream().anyMatch(m ->
-                            "Validation_VAL_Profile_Unknown".equals(m.getMessageId()) && m.getMessage().contains(profile));
-                    if (constraint == unknown) {
-                        return "MIXED:" + o.result().getMessages();
-                    }
-                    return constraint ? "OLD" : "NEW";
-                });
+                    return constraint ? "OLD" : "MIXED:" + o.result().getMessages();
+                })
+                // Since 2.0.0 an unresolved requested profile rejects the request instead of adding a message.
+                .recover(err -> err instanceof nzi.fhir.validator.web.ProblemException p
+                        && nzi.fhir.validator.web.ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())
+                        ? Future.succeededFuture("NEW")
+                        : Future.failedFuture(err));
     }
 
     @Test

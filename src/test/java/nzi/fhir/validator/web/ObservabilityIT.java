@@ -83,13 +83,15 @@ class ObservabilityIT extends BaseTestContainer {
                             "fv_validation_seconds_count\\{version=\"R4\",?\\} 3\\.0", "fv_validation_pending \\d",
                             "fv_admin_pending \\d", "fv_admin_max_pending 4\\.0",
                             "fv_config_revision\\{version=\"R4\",?\\} \\d", "fv_package_cache_size_bytes \\d",
-                            "fv_profile_count\\{version=\"STU3\",?\\} \\d", "fv_validator_ready\\{version=\"R5\",?\\} 1\\.0",
+                            "fv_validator_ready\\{version=\"R5\",?\\} 1\\.0",
                             "fv_snapshot_packages\\{version=\"R4\",?\\} 0\\.0", "fv_snapshot_package_size_bytes\\{version=\"R4\",?\\} 0\\.0",
                             // SC-011: request rate (Vert.x HTTP server metrics) and cache effectiveness.
                             "vertx_http_server_requests_total\\{[^}]*\\} [1-9]", "fv_package_cache_hits_total \\d",
                             "fv_package_cache_misses_total \\d")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
+                    // Custom profile registration is gone in 2.0.0 (spec 003, SC-008).
+                    assertFalse(body.contains("fv_profile_count"), "fv_profile_count must no longer be exposed");
                     ctx.completeNow();
                 })));
     }

@@ -15,7 +15,6 @@ import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
-import nzi.fhir.validator.core.validator.ProfileStore;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.core.validator.ValidatorSnapshot;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
@@ -70,7 +69,7 @@ class ConcurrencyIT {
     }
 
     private static ValidatorRegistry registryServing(ValidatorSnapshot snapshot) {
-        return new ValidatorRegistry(null, null, Map.of()) {
+        return new ValidatorRegistry(null, null) {
             @Override
             public ValidatorSnapshot current(SupportedFhirVersion version) {
                 return snapshot;
@@ -84,7 +83,7 @@ class ConcurrencyIT {
         validator.registerValidatorModule(module);
         ValidationSupportChain chain = new ValidationSupportChain(new ca.uhn.fhir.context.support.DefaultProfileValidationSupport(ctx));
         return new ValidatorSnapshot(SupportedFhirVersion.R4, 1, List.of(), ctx, validator, new FhirInstanceValidator(chain),
-                chain, new ProfileStore(SupportedFhirVersion.R4, ctx), List.of());
+                chain, List.of());
     }
 
     // Held in fields: Vert.x closes a worker executor automatically once it becomes unreachable, and the test

@@ -1,6 +1,5 @@
 package nzi.fhir.validator.core.validator;
 
-import ca.uhn.fhir.context.support.IValidationSupport;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
@@ -20,7 +19,7 @@ import java.util.Map;
  * PostgreSQL holds the configuration, this class holds the snapshot built from it.
  * <p>
  * Per version it tracks the active snapshot, the highest database revision fully applied
- * ({@code appliedRevision}, advanced by profile refreshes and snapshot swaps) and the latest revision seen. A
+ * ({@code appliedRevision}, advanced by snapshot swaps) and the latest revision seen. A
  * rebuild happens only when the resolved package set changes. If a newer configuration cannot be applied, the
  * version becomes STALE: it answers 503 instead of serving outdated results (FR-002), and the build is retried with
  * backoff until it succeeds.
@@ -49,7 +48,6 @@ public class ValidatorRegistry {
 
     private final Vertx vertx;
     private final SnapshotBuilder builder;
-    private final Map<SupportedFhirVersion, ProfileStore> profileStores;
     private final Map<SupportedFhirVersion, Slot> slots = new EnumMap<>(SupportedFhirVersion.class);
     private volatile java.util.function.Consumer<SupportedFhirVersion> buildFailureListener = v -> { };
 
@@ -57,10 +55,9 @@ public class ValidatorRegistry {
         this.buildFailureListener = listener;
     }
 
-    public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder, Map<SupportedFhirVersion, ProfileStore> profileStores) {
+    public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder) {
         this.vertx = vertx;
         this.builder = builder;
-        this.profileStores = profileStores;
         for (SupportedFhirVersion v : SupportedFhirVersion.enabled()) {
             slots.put(v, new Slot());
         }
@@ -159,7 +156,7 @@ public class ValidatorRegistry {
             resolved = slot.wantedResolved;
             slot.dirty = false;
         }
-        builder.build(version, revision, resolved, profileStores.get(version)).onComplete(ar -> {
+        builder.build(version, revision, resolved).onComplete(ar -> {
             List<Promise<Void>> done;
             boolean again;
             synchronized (slot) {
@@ -238,29 +235,6 @@ public class ValidatorRegistry {
     }
 
     /**
-     * After a profile change: replaces the active snapshot with a re-assembled one (same packages, fresh HAPI
-     * caches) so new and updated profiles take effect. Skipped if a rebuild replaced the snapshot meanwhile.
-     */
-    public Future<Void> refreshProfiles(SupportedFhirVersion version) {
-        Slot slot = slot(version);
-        ValidatorSnapshot current;
-        synchronized (slot) {
-            current = slot.snapshot;
-        }
-        if (current == null) {
-            return Future.succeededFuture();
-        }
-        return builder.reassemble(current).map(fresh -> {
-            synchronized (slot) {
-                if (slot.snapshot == current) {
-                    slot.snapshot = fresh;
-                }
-            }
-            return null;
-        });
-    }
-
-    /**
      * @return empty when every enabled version can serve requests (a snapshot exists and is not STALE)
      */
     public List<String> notReadyReasons() {
@@ -297,17 +271,6 @@ public class ValidatorRegistry {
             }
         });
         return details;
-    }
-
-    /**
-     * The core and IG package supports of the active snapshot (empty when there is none): where custom profiles look
-     * up base definitions when their snapshots are generated.
-     */
-    public List<IValidationSupport> activeSupports(SupportedFhirVersion version) {
-        Slot slot = slot(version);
-        synchronized (slot) {
-            return slot.snapshot == null ? List.of() : slot.snapshot.reusableSupports();
-        }
     }
 
     /** Package count and archive bytes of the active snapshot (0 when there is none). */

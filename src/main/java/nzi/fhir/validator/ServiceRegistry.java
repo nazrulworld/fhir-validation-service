@@ -7,7 +7,6 @@ import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.core.config.ApplicationConfig;
 import nzi.fhir.validator.core.config.PgConfig;
-import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import nzi.fhir.validator.core.metrics.ServiceMetrics;
 import nzi.fhir.validator.core.npm.PackageArchiveGuard;
@@ -16,27 +15,21 @@ import nzi.fhir.validator.core.npm.SafePackageFetcher;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.security.ApiKeyRepository;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
-import nzi.fhir.validator.core.service.FhirContextLoader;
 import nzi.fhir.validator.core.service.FhirValidationService;
 import nzi.fhir.validator.core.service.HealthService;
 import nzi.fhir.validator.core.service.IgPackageService;
-import nzi.fhir.validator.core.service.ProfileService;
 import nzi.fhir.validator.core.validator.ConfigSync;
 import nzi.fhir.validator.core.validator.HeapBudget;
-import nzi.fhir.validator.core.validator.ProfileStore;
 import nzi.fhir.validator.core.validator.SnapshotBuilder;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
-import nzi.fhir.validator.web.endpoint.ProfileApi;
 import nzi.fhir.validator.web.endpoint.ValidationApi;
 
-import java.util.EnumMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Process-wide services, built once by {@link Bootstrap} and shared by every HTTP verticle instance. Constructing it
- * performs no I/O; {@link ConfigSync#start()} loads profiles and builds the validators.
+ * performs no I/O; {@link ConfigSync#start()} builds the validators.
  */
 public final class ServiceRegistry {
     private final ApplicationConfig config;
@@ -47,9 +40,7 @@ public final class ServiceRegistry {
     private final ValidatorRegistry validatorRegistry;
     private final ConfigSync configSync;
     private final FhirValidationService validationService;
-    private final Map<SupportedFhirVersion, ProfileService> profileServices;
     private final ValidationApi validationApi;
-    private final ProfileApi profileApi;
     private final ApiKeyRepository apiKeys;
     private final ApiKeyAuthHandler auth;
     private final SafePackageFetcher fetcher;
@@ -63,8 +54,7 @@ public final class ServiceRegistry {
 
     private ServiceRegistry(ApplicationConfig config, Pool pool, Executors executors, HealthService healthService,
                             IgPackageService igPackageService, ValidatorRegistry validatorRegistry, ConfigSync configSync,
-                            FhirValidationService validationService, Map<SupportedFhirVersion, ProfileService> profileServices,
-                            SafePackageFetcher fetcher) {
+                            FhirValidationService validationService, SafePackageFetcher fetcher) {
         this.config = config;
         this.pool = pool;
         this.executors = executors;
@@ -73,14 +63,12 @@ public final class ServiceRegistry {
         this.validatorRegistry = validatorRegistry;
         this.configSync = configSync;
         this.validationService = validationService;
-        this.profileServices = profileServices;
         this.fetcher = fetcher;
         this.adminAdmission = new AdmissionController(config.adminMaxPending(),
                 "Too many administrative operations in progress; retry shortly");
         this.apiKeys = new ApiKeyRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
         this.validationApi = new ValidationApi(validationService, igPackageService);
-        this.profileApi = new ProfileApi(profileServices);
     }
 
     public static ServiceRegistry create(Vertx vertx, ApplicationConfig config, Pool pool, Executors executors,
@@ -94,17 +82,11 @@ public final class ServiceRegistry {
         PostgresPackageCacheManager packages = new PostgresPackageCacheManager(pool, executors.packages(),
                 PackageArchiveGuard.from(config), fetcher, config.packageRegistryUrls(), config.packageRegistryEnabled());
         IgPackageService igPackageService = IgPackageService.create(vertx, pool, packages);
-        Map<SupportedFhirVersion, ProfileStore> stores = new EnumMap<>(SupportedFhirVersion.class);
-        for (SupportedFhirVersion v : SupportedFhirVersion.enabled()) {
-            stores.put(v, new ProfileStore(v, FhirContextLoader.getInstance().getContext(v)));
-        }
         HeapBudget heap = HeapBudget.ofRuntime();
         SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()),
                 config.packageWorkers(), heap);
-        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, stores);
-        stores.forEach((v, store) -> store.setSnapshotSources(() -> registry.activeSupports(v)));
-        ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), executors, registry, stores,
-                config.syncPollIntervalMs());
+        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder);
+        ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), registry, config.syncPollIntervalMs());
         igPackageService.setApplyLocally(sync::syncNow);
         igPackageService.setAdmitBuild(expandedBytes -> executors.packages().executeBlocking(() -> {
             heap.admitInclude(expandedBytes);
@@ -112,17 +94,13 @@ public final class ServiceRegistry {
         }, false));
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
-        Map<SupportedFhirVersion, ProfileService> profileServices = new EnumMap<>(SupportedFhirVersion.class);
-        stores.forEach((v, store) -> profileServices.put(v,
-                new ProfileService(vertx, pool, executors, store, sync::syncNow, localApplyWaitMs)));
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
         PackageCache packageCache = builder.cache();
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
                 new FhirValidationService(registry, executors, new AdmissionController(config.validationMaxPending()),
-                        config.validationMaxBundleEntries()), profileServices,
-                fetcher);
+                        config.validationMaxBundleEntries()), fetcher);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
-        metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache, stores);
+        metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache);
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
@@ -177,16 +155,8 @@ public final class ServiceRegistry {
         return validationService;
     }
 
-    public Map<SupportedFhirVersion, ProfileService> profileServices() {
-        return profileServices;
-    }
-
     public ValidationApi validationApi() {
         return validationApi;
-    }
-
-    public ProfileApi profileApi() {
-        return profileApi;
     }
 
     public ApiKeyRepository apiKeys() {

@@ -32,6 +32,25 @@ public class ProblemException extends RuntimeException {
                 "FHIR version '" + version + "' is not supported. Supported versions: STU3, R4, R4B, R5");
     }
 
+    /**
+     * Requested profiles that none of the version's definitions (core, included IGs and their dependencies) define.
+     * The URLs are client input, so echoing them is safe; nothing internal is exposed.
+     */
+    public static ProblemException unknownProfiles(nzi.fhir.validator.core.enums.SupportedFhirVersion version,
+                                                   java.util.List<String> unresolved) {
+        return new ProblemException(400, TYPE_UNKNOWN_PROFILE, "One or more requested profiles are not available for FHIR "
+                + version + "; include the IG that defines them")
+                .withExtension("unresolvedProfiles", new io.vertx.core.json.JsonArray(java.util.List.copyOf(unresolved)));
+    }
+
+    /** The {@code profile} list exceeds the fixed limits (FR-006a); the URLs are deliberately not echoed. */
+    public static ProblemException profileLimits() {
+        return new ProblemException(400, "invalid-request",
+                "At most 10 profiles may be requested, each at most 1024 characters");
+    }
+
+    public static final String TYPE_UNKNOWN_PROFILE = "unknown-profile";
+
     public ProblemException withExtension(String name, Object value) {
         extensions.put(name, value);
         return this;

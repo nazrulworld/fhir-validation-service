@@ -6,7 +6,7 @@ import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 
 /**
- * Bounds administrative operations (upload, register, include-ig, register-profile) per instance with their own
+ * Bounds administrative operations (upload, register, include-ig) per instance with their own
  * admission limit, {@code FV_ADMIN_MAX_PENDING}, independent of validation (FR-010). A request holds its slot until
  * its response ends; beyond the limit it is refused at once with 503 {@code overloaded}. Mounted after authorisation,
  * so unauthenticated calls never take a slot. Background configuration syncs don't pass through the router and are

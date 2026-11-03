@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       upgrade-rehearsal:
-        description: Run the 0.1.2 -> 1.0.0 upgrade rehearsal (docs/upgrade-1.0.md)
+        description: Run the upgrade rehearsals (0.1.2 -> 1.0.0 and 1.2.0 -> 2.0.0; docs/upgrade-1.0.md, docs/upgrade-2.0.md)
         type: boolean
         default: false
 
@@ -84,3 +84,9 @@ jobs:
           fetch-depth: 0
       - name: Rehearse the documented upgrade
         run: sh scripts/upgrade-rehearsal.sh
+      - name: PostgreSQL client tools (export script and 2.0 rehearsal)
+        run: sudo apt-get update -q && sudo apt-get install -y -q postgresql-client
+      - name: Test the custom profile export script
+        run: sh scripts/test/export-custom-profiles.test.sh
+      - name: Rehearse the 2.0.0 upgrade (export, backup, full stop, rollback)
+        run: sh scripts/upgrade-rehearsal-2.0.sh

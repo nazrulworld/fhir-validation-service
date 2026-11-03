@@ -6,7 +6,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.pubsub.PgSubscriber;
 import io.vertx.sqlclient.Pool;
-import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.service.ConfigRevisionRepository;
 import org.apache.logging.log4j.LogManager;
@@ -16,7 +15,6 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * Keeps this instance's validators in line with the shared configuration (research R4): a {@code LISTEN} on
@@ -38,42 +36,33 @@ public class ConfigSync {
     private final Vertx vertx;
     private final Pool pool;
     private final PgConnectOptions connectOptions;
-    private final Executors executors;
     private final ValidatorRegistry registry;
-    private final Map<SupportedFhirVersion, ProfileStore> profileStores;
     private final long pollIntervalMs;
     private final Map<SupportedFhirVersion, VersionState> states = new EnumMap<>(SupportedFhirVersion.class);
     private PgSubscriber subscriber;
     private long pollTimer = -1;
     private volatile boolean notificationsEnabled = true;
-    private volatile Function<SupportedFhirVersion, Future<Integer>> profileRefreshOverride;
 
-    public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, Executors executors,
-                      ValidatorRegistry registry, Map<SupportedFhirVersion, ProfileStore> profileStores,
+    public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, ValidatorRegistry registry,
                       long pollIntervalMs) {
         this.vertx = vertx;
         this.pool = pool;
         this.connectOptions = connectOptions;
-        this.executors = executors;
         this.registry = registry;
-        this.profileStores = profileStores;
         this.pollIntervalMs = pollIntervalMs;
-        profileStores.keySet().forEach(v -> states.put(v, new VersionState()));
+        SupportedFhirVersion.enabled().forEach(v -> states.put(v, new VersionState()));
     }
 
     /**
-     * Loads profiles, builds every validator from the current configuration (completes when all are built or
-     * failed), then starts listening and polling.
+     * Builds every validator from the current configuration (completes when all are built or failed), then starts
+     * listening and polling.
      */
     public Future<Void> start() {
-        List<Future<Integer>> loads = new ArrayList<>();
-        profileStores.values().forEach(store -> loads.add(store.loadAll(pool, executors)));
-        Future<Void> initial = Future.all(loads)
-                .compose(v -> ConfigRevisionRepository.current(pool))
+        Future<Void> initial = ConfigRevisionRepository.current(pool)
                 .compose(rows -> {
                     List<Future<Void>> builds = new ArrayList<>();
                     rows.forEach((version, row) -> {
-                        if (profileStores.containsKey(version)) {
+                        if (states.containsKey(version)) {
                             builds.add(registry.apply(version, row.revision(), row.resolved())
                                     .recover(err -> Future.succeededFuture()));
                         }
@@ -136,8 +125,8 @@ public class ConfigSync {
 
     /**
      * One sync run for {@code version}, completing when the latest committed configuration is applied locally. It
-     * runs after any sync of the version already in flight: a refresh only reports rows it has not loaded yet, so
-     * without the queue a caller could return while another sync was still applying the very change it waits for.
+     * runs after any sync of the version already in flight, so a caller never returns while another sync is still
+     * applying the very change it waits for.
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
         return enqueue(version, () -> { });
@@ -155,29 +144,13 @@ public class ConfigSync {
         }
     }
 
-    /** Refresh changed profiles, then apply the revision (which rebuilds only if the resolved package set changed). */
+    /** Apply the latest revision (which rebuilds only if the resolved package set changed). */
     private Future<Void> runSync(SupportedFhirVersion version) {
-        ProfileStore store = profileStores.get(version);
-        Function<SupportedFhirVersion, Future<Integer>> override = profileRefreshOverride;
-        Future<Integer> refreshed = override != null ? override.apply(version) : store.refreshChanged(pool, executors);
-        return refreshed
-                .compose(changed -> changed > 0 ? registry.refreshProfiles(version) : Future.<Void>succeededFuture())
-                .recover(err -> {
-                    // A newer committed configuration exists but its profiles cannot be applied: stop serving this
-                    // version rather than answer from the outdated one (FR-002). The poll retries.
-                    registry.markStale(version, "profile changes could not be applied");
-                    return Future.failedFuture(err);
-                })
-                .compose(v -> ConfigRevisionRepository.current(pool))
+        return ConfigRevisionRepository.current(pool)
                 .compose(rows -> {
                     ConfigRevisionRepository.ConfigRow row = rows.get(version);
                     return row == null ? Future.succeededFuture() : registry.apply(version, row.revision(), row.resolved());
                 });
-    }
-
-    /** Test hook: replaces the profile refresh (e.g. with a failing one); {@code null} restores it. */
-    public void setProfileRefreshOverride(Function<SupportedFhirVersion, Future<Integer>> override) {
-        this.profileRefreshOverride = override;
     }
 
     /** Test hook: ignore notifications so only the poll fallback propagates changes. */

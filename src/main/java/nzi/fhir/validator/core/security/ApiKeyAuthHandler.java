@@ -57,11 +57,11 @@ public class ApiKeyAuthHandler {
     }
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
-            java.util.regex.Pattern.compile("^/(igs/(upload|register)|[^/]+/(include-ig|register-profile))/?$");
+            java.util.regex.Pattern.compile("^/(igs/(upload|register)|[^/]+/include-ig)/?$");
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
 
-    /** Whether the request is an administrative operation: one that changes IGs, profiles or validator configuration. */
+    /** Whether the request is an administrative operation: one that changes IGs or validator configuration. */
     public static boolean isAdministrative(RoutingContext ctx) {
         return ctx.request().method() == io.vertx.core.http.HttpMethod.POST && ADMIN_PATHS.matcher(ctx.normalizedPath()).matches();
     }

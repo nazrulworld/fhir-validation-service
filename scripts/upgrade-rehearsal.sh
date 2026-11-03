@@ -1,11 +1,18 @@
 #!/bin/sh
 # Rehearses docs/upgrade-1.0.md against a throwaway 0.1.2 installation:
 #   old image + volume -> register an IG and a profile -> record profile validation results -> dump -> restore into
-#   the 1.0.0 stack -> compare counts and profile validation results (the profile is in effect after the upgrade).
+#   the published 1.x stack ($NEW_TAG, 1.2.0 by default) -> compare counts and profile validation results (the profile
+#   is in effect after the upgrade).
 # Usage: sh scripts/upgrade-rehearsal.sh   (repository root; needs docker, curl, jq; ~10 minutes)
+# Covers 0.1.x -> 1.x only. The new side is the published 1.x image, never the current checkout: 2.0.0 drops
+# fhir_profiles and rejects the registered profile. Upgrades to 2.0.0 follow docs/upgrade-2.0.md and
+# scripts/upgrade-rehearsal-2.0.sh (custom profile registration was removed in 2.0.0).
 set -eu
 
 OLD_IMAGE="${OLD_IMAGE:-ghcr.io/nazrulworld/fhir-validation-service:0.1.2}"
+# The 1.x release the guide upgrades to (compose.yaml's FV_TAG); pulled, never built from this checkout.
+NEW_TAG="${NEW_TAG:-1.2.0}"
+export FV_TAG="$NEW_TAG"
 PROJECT=fvrehearsal
 OLD_VOLUME="${PROJECT}_oldpgdata"
 OLD_PORT=18990
@@ -15,7 +22,7 @@ DK_PROFILE="http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
 DK_RULE="Patient.identifier: minimum required = 1"
 COUNT_SQL="SELECT 'igs', count(*) FROM fhir_validator_schema.fhir_implementation_guides UNION ALL SELECT 'profiles', count(*) FROM fhir_validator_schema.fhir_profiles UNION ALL SELECT 'configs', count(*) FROM fhir_validator_schema.fhir_validator_logs ORDER BY 1"
 
-# The 1.0.0 stack reads its settings from $WORK/.env only: compose.yaml's `env_file: .env` would otherwise need a .env
+# The 1.x stack reads its settings from $WORK/.env only: compose.yaml's `env_file: .env` would otherwise need a .env
 # in the repository root (absent in CI) or load the developer's own. Explicit -f files also skip compose.override.yaml.
 printf 'services:\n  validator:\n    env_file: !override\n      - %s/.env\n' "$WORK" > "$WORK/compose.rehearsal.yaml"
 DC="docker compose -p $PROJECT --env-file $WORK/.env -f compose.yaml -f $WORK/compose.rehearsal.yaml"
@@ -100,7 +107,7 @@ old_db "gosu postgres pg_dump -Fc -d fhir_validator" > "$WORK/fhir_validator.dum
 [ -s "$WORK/fhir_validator.dump" ] || fail "empty dump"
 cat "$WORK/before.txt"
 
-echo "==> restore into 1.0.0 (guide steps 3-4)"
+echo "==> restore into $NEW_TAG (guide steps 3-4)"
 cp .env.example "$WORK/.env"
 sed -i.bak "s/^PG_PASSWORD=.*/PG_PASSWORD=rehearsal$(openssl rand -hex 8)/; s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=rehearsal$(openssl rand -hex 20)/; s/^FV_HTTP_PORT=.*/FV_HTTP_PORT=18991/" "$WORK/.env"
 $DC up -d --wait postgres > /dev/null
@@ -108,8 +115,9 @@ $DC exec -T postgres pg_restore -U postgres -d fhir_validator --no-owner --clean
 $DC exec -T postgres psql -U postgres -At -d fhir_validator -c "$COUNT_SQL" > "$WORK/after.txt"
 diff "$WORK/before.txt" "$WORK/after.txt" || fail "row counts differ after restore"
 
-echo "==> start 1.0.0 (guide step 5)"
-$DC up -d --build --wait --wait-timeout 300 > /dev/null || fail "1.0.0 did not become ready"
+echo "==> start $NEW_TAG (guide step 5)"
+$DC pull -q validator > /dev/null || fail "cannot pull the $NEW_TAG image"
+$DC up -d --no-build --wait --wait-timeout 300 > /dev/null || fail "$NEW_TAG did not become ready"
 packages=$(curl -fs "http://127.0.0.1:18991/health/readiness" | jq -r '.versions.R4.packages | join(",")')
 echo "    R4 packages after upgrade: $packages"
 echo "$packages" | grep -q "example.rehearsal#1.0.0" || fail "included IG not active after upgrade"
@@ -118,8 +126,8 @@ jq -e --arg p "$DK_PROFILE" '.appliedProfiles | index($p)' "$WORK/new.complete.j
   || fail "appliedProfiles lacks $DK_PROFILE after upgrade"
 for variant in complete no-identifier; do
   diff "$WORK/old.$variant.errors" "$WORK/new.$variant.errors" \
-    || fail "error-level issues of the $variant dk Patient differ between 0.1.2 and 1.0.0"
+    || fail "error-level issues of the $variant dk Patient differ between 0.1.2 and $NEW_TAG"
 done
-echo "    1.0.0: dk profile in effect, same error-level issues as 0.1.2"
+echo "    $NEW_TAG: dk profile in effect, same error-level issues as 0.1.2"
 
 echo "REHEARSAL OK"
