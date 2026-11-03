@@ -274,7 +274,7 @@ confirm they fail before implementing.
 - [X] T060 Run `grep -rn -i 'register-profile\|custom profile\|fhir_profiles\|fv.profile.count' README.md CHANGELOG.md docs/ .env.example src/main/resources/openapi.yaml` and confirm that every hit describes the removal or the upgrade, not current behaviour (SC-008).
 - [X] T061 Run a performance comparison for the PR (Principle VI, SC-006): p95 latency and steady-state heap for warm dk Patient validation with one `?profile=`, comparing 1.2.0 and this branch on the same host, using `scripts/smoke.sh` timing or the existing load-test procedure from feature 001. **Pass** if p95 is within +5% of 1.2.0 **and** under 200 ms, **and** heap is no higher than 1.2.0's. Record the numbers and the verdict in the PR description. A failure blocks merge.
 - [ ] T062 Set the version to `2.0.0` (drop `-SNAPSHOT`) in `pom.xml` at release time.
-- [ ] T063 Run `mvn verify` and the quickstart checks in `specs/003-ig-only-profile-resolution/quickstart.md` (sections 1–3). Confirm there are no new blocked-thread warnings, that RouterBuilder mounts every operation in `openapi.yaml`, and that every operation has a handler.
+- [X] T063 Run `mvn verify` and the quickstart checks in `specs/003-ig-only-profile-resolution/quickstart.md` (sections 1–3). Confirm there are no new blocked-thread warnings, that RouterBuilder mounts every operation in `openapi.yaml`, and that every operation has a handler.
 
 ---
 

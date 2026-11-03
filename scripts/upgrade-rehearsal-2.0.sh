@@ -51,8 +51,10 @@ validate_custom() {
     errors "$WORK/$name.$variant.json" > "$WORK/$name.$variant.errors"
   done
   grep -qF "$RULE" "$WORK/$name.no-identifier.errors" || fail "custom profile not in effect on $name (no '$RULE')"
-  jq -e --arg p "$CUSTOM" '.appliedProfiles == [$p]' "$WORK/$name.complete.json" > /dev/null \
-    || fail "appliedProfiles on $name is not [$CUSTOM]: $(jq -c .appliedProfiles "$WORK/$name.complete.json")"
+  # The fixture also declares dk-core-patient in meta.profile, which resolves from the included dk-core and is listed
+  # too (1.2.0 lists it first, 2.0 lists requested profiles first), so check membership, not the whole list.
+  jq -e --arg p "$CUSTOM" '.appliedProfiles | index($p) != null' "$WORK/$name.complete.json" > /dev/null \
+    || fail "appliedProfiles on $name lacks $CUSTOM: $(jq -c .appliedProfiles "$WORK/$name.complete.json")"
 }
 
 admin() { curl -fs -H "Authorization: Bearer $ADMIN_KEY" "$@"; }

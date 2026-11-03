@@ -44,6 +44,8 @@ target_version=$(sed -n 's:^    <version>\(.*\)</version>:\1:p' pom.xml | head -
 running=$(docker compose ps -q validator 2> /dev/null | head -n 1)
 if [ -n "$running" ] && [ -n "$target_version" ]; then
   running_version=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$running" 2> /dev/null || true)
+  # Only released images carry a numeric version; local builds are labelled "dev" and are not compared.
+  case "$running_version" in [0-9]*) ;; *) running_version="" ;; esac
   if [ -n "$running_version" ] && [ "${running_version%%.*}" != "${target_version%%.*}" ]; then
     echo "ROLLING RESTART REFUSED: running $running_version, target $target_version." >&2
     echo "Rolling restart across major versions is not supported; see docs/upgrade-2.0.md" >&2
