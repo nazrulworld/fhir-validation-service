@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: ci-gate-reference-checks
+expected_outcome: |
+  Produces a CI step with an explicit version, a pinned IG, reference checking with a file resolution
+  context, and the internal terminology server configured to pass SSRF rules, and lists silent-pass risks.

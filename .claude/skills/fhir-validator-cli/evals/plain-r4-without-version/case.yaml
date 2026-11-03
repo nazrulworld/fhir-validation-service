@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: plain-r4-without-version
+expected_outcome: |
+  Explains that the run most likely used R5 definitions, because a core package given with -ig does
+  not set the final version and a plain instance has no version marker, and recommends -version 4.0.1.

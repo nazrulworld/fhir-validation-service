@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: server-startup-profile-ignored
+expected_outcome: |
+  Explains that /validateResource takes instance options from the request query only, shows the
+  profile and level query parameters, flags the unauthenticated /stop endpoint, and warns that the
+  client labels every file as JSON.
