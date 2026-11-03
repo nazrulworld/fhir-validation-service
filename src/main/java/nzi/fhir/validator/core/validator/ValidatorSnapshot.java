@@ -1,7 +1,6 @@
 package nzi.fhir.validator.core.validator;
 
 import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.context.support.IValidationSupport;
 import ca.uhn.fhir.parser.DataFormatException;
 import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.parser.LenientErrorHandler;
@@ -11,7 +10,6 @@ import ca.uhn.fhir.validation.ValidationResult;
 import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
-import org.hl7.fhir.common.hapi.validation.validator.FhirInstanceValidator;
 import ca.uhn.fhir.util.BundleUtil;
 import nzi.fhir.validator.web.ProblemException;
 import org.hl7.fhir.instance.model.api.IAnyResource;
@@ -44,30 +42,17 @@ public final class ValidatorSnapshot {
     private final List<String> resolvedPackages;
     private final FhirContext fhirContext;
     private final FhirValidator validator;
-    private final FhirInstanceValidator instanceValidator;
     private final ValidationSupportChain chain;
-    private final List<IValidationSupport> reusableSupports;
     private volatile long packageArchiveBytes;
 
-    /**
-     * @param reusableSupports immutable supports (core definitions, IG packages) that a re-assembled snapshot can
-     *                         share instead of loading them again
-     */
     public ValidatorSnapshot(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
-                             FhirContext fhirContext, FhirValidator validator, FhirInstanceValidator instanceValidator,
-                             ValidationSupportChain chain, List<IValidationSupport> reusableSupports) {
+                             FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
         this.version = version;
         this.revision = revision;
         this.resolvedPackages = List.copyOf(resolvedPackages);
         this.fhirContext = fhirContext;
         this.validator = validator;
-        this.instanceValidator = instanceValidator;
         this.chain = chain;
-        this.reusableSupports = List.copyOf(reusableSupports);
-    }
-
-    public List<IValidationSupport> reusableSupports() {
-        return reusableSupports;
     }
 
     /** Total archive size of the packages this snapshot was built from (memory sizing, metrics). */

@@ -122,7 +122,7 @@ public class ValidatorRegistry {
             slot.wantedRevision = revision;
             slot.wantedResolved = newResolved;
             if (slot.snapshot != null && slot.snapshot.resolvedPackages().equals(slot.wantedResolved) && !slot.building) {
-                // Profile-only change (or nothing new): no rebuild needed.
+                // Same resolved package set (nothing new): no rebuild needed.
                 slot.appliedRevision = Math.max(slot.appliedRevision, revision);
                 slot.status = Status.ACTIVE;
                 slot.reason = null;
