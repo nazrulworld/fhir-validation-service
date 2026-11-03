@@ -343,3 +343,7 @@ Task: "T049 [US4] scripts/export-custom-profiles.sh"
 - Added during implementation: `src/test/java/nzi/fhir/validator/core/validator/ValidatorSnapshotProfileResolutionTest.java` checks the resolution rules (exact match, `|version`, duplicate canonicals, unknown `meta.profile`) on an in-memory snapshot, with no database, so they're verified even where Docker isn't available.
 - Commit after each task or logical group, and keep commits per story so they can be reviewed.
 - `checklists/api-and-upgrade.md` items stay reviewer-owned. `/speckit-implement` reads them but doesn't modify them.
+
+## Phase 8: Convergence
+
+- [X] T064 Pin the "new" side of `scripts/upgrade-rehearsal.sh` to a published 1.x image instead of building the current checkout: start it with `FV_TAG=${NEW_TAG:-1.2.0}` and `--no-build` (pull first) rather than `$DC up -d --build`, so the 0.1.2 → 1.x rehearsal no longer runs this branch. Today it builds 2.0, whose V6 migration drops `fhir_profiles`, so after the upgrade its `COUNT_SQL` query fails and `?profile=dk-core-patient` (registered on 0.1.2, not in the `example.rehearsal` IG) answers 400 `unknown-profile`. That breaks the first step of the CI `upgrade-rehearsal` job before the 2.0 export test and rehearsal can run. Update the header comment and the "1.0.0" log lines to say 1.x per SC-007, plan: CI rehearsal job (T054) (contradicts)
