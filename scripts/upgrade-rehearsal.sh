@@ -3,6 +3,8 @@
 #   old image + volume -> register an IG and a profile -> record profile validation results -> dump -> restore into
 #   the 1.0.0 stack -> compare counts and profile validation results (the profile is in effect after the upgrade).
 # Usage: sh scripts/upgrade-rehearsal.sh   (repository root; needs docker, curl, jq; ~10 minutes)
+# Covers 0.1.x -> 1.0.0 only. Upgrades to 2.0.0 follow docs/upgrade-2.0.md and scripts/upgrade-rehearsal-2.0.sh
+# (custom profile registration was removed in 2.0.0).
 set -eu
 
 OLD_IMAGE="${OLD_IMAGE:-ghcr.io/nazrulworld/fhir-validation-service:0.1.2}"

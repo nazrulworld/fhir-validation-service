@@ -2,6 +2,7 @@
 # Rolling restart under load (SC-008, FR-029): two validators behind the `cluster` load balancer, steady k6 load,
 # restart one instance at a time, and fail if 0.1% or more of the requests failed.
 # Usage: sh scripts/rolling-restart.sh   (from the repository root; needs docker compose and jq)
+#   Refuses to run when the running validator image and the version being built differ in major version.
 #   ROLLING_VUS (default 8, keep it at or below the admission limit), ROLLING_DURATION (default 150s, at least 2m)
 set -eu
 
@@ -36,6 +37,19 @@ wait_ready() {
     sleep 2
   done
 }
+
+# A rolling restart must never cross a major version: 2.0.0 drops tables 1.x reads, and a mixed 1.x/2.x fleet on one
+# database is not supported (spec 003, FR-015c). Compare a running validator's image with the version being built.
+target_version=$(sed -n 's:^    <version>\(.*\)</version>:\1:p' pom.xml | head -n 1)
+running=$(docker compose ps -q validator 2> /dev/null | head -n 1)
+if [ -n "$running" ] && [ -n "$target_version" ]; then
+  running_version=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$running" 2> /dev/null || true)
+  if [ -n "$running_version" ] && [ "${running_version%%.*}" != "${target_version%%.*}" ]; then
+    echo "ROLLING RESTART REFUSED: running $running_version, target $target_version." >&2
+    echo "Rolling restart across major versions is not supported; see docs/upgrade-2.0.md" >&2
+    exit 1
+  fi
+fi
 
 echo "==> starting the cluster profile"
 docker compose --profile cluster up -d --build --wait --wait-timeout "$READY_TIMEOUT" || fail "cluster did not become healthy"

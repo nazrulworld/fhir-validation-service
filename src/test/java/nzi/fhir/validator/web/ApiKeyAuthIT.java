@@ -64,11 +64,9 @@ class ApiKeyAuthIT extends BaseTestContainer {
     }
 
     private Future<List<HttpResponse<Buffer>>> callAdminOperations(String key) {
-        JsonObject profile = TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/auth", "gender");
         return Future.all(
                 req("POST", "/igs/register", key).sendJsonObject(new JsonObject().put("name", "x")),
                 req("POST", "/R4/include-ig", key).sendJsonObject(new JsonObject().put("igPackageId", "x")),
-                req("POST", "/R4/register-profile", key).sendJsonObject(profile),
                 req("POST", "/igs/upload", key).sendBuffer(Buffer.buffer("x"))
         ).map(cf -> cf.list());
     }
@@ -100,15 +98,18 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 })
                 .compose(wrongKey -> {
                     ctx.verify(() -> wrongKey.forEach(r -> assertProblem(r, 401, "unauthorized")));
-                    return req("POST", "/R4/register-profile", AppHarness.ADMIN_KEY)
-                            .sendJsonObject(TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/ok", "gender"));
+                    return app.bootstrap().services().igPackageService().registerIg(
+                                    TestPackages.profilePackage("example.auth", "1.0.0",
+                                            TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/ok", "gender")), false)
+                            .compose(pkg -> req("POST", "/R4/include-ig", AppHarness.ADMIN_KEY)
+                                    .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")));
                 })
                 .compose(adminOk -> {
                     ctx.verify(() -> assertEquals(200, adminOk.statusCode(), adminOk.bodyAsString()));
                     return app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE);
                 })
-                .compose(v -> req("POST", "/R4/register-profile", VALIDATE_KEY)
-                        .sendJsonObject(TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/no", "gender")))
+                .compose(v -> req("POST", "/R4/include-ig", VALIDATE_KEY)
+                        .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")))
                 .compose(forbidden -> {
                     ctx.verify(() -> assertProblem(forbidden, 403, "forbidden"));
                     return validate(null);

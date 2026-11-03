@@ -84,6 +84,11 @@ class AdminAdmissionIT extends BaseTestContainer {
                     assertProblem(refused, 503, "overloaded");
                     assertNotNull(refused.getHeader("Retry-After"), "503 overloaded carries Retry-After");
                 });
+                // The removed register-profile operation takes no admin slot: unknown route, not overloaded (spec 003).
+                return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/register-profile")).timeout(10_000)
+                        .sendJsonObject(new JsonObject().put("url", "http://example.org/fhir/StructureDefinition/gone"));
+            }).compose(gone -> {
+                ctx.verify(() -> assertProblem(gone, 404, "not-found"));
                 return validate();
             }).compose(validated -> {
                 ctx.verify(() -> assertEquals(200, validated.statusCode(), "validation is admitted while admin work is full: "

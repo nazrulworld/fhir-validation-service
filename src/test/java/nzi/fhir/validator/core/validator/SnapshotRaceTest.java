@@ -32,8 +32,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * "Multiple matching extensions found for extension ...structuredefinition-fhir-type" (seen in ConfigPropagationIT on
  * CI). Snapshots are now generated up front against private copies ({@link SnapshotPregenerator}).
  * <p>
- * The two race tests reproduced the failure on HAPI 8.12.1 before the fix (most runs failed); like any race test they
- * detect a regression with high probability rather than certainty. The other tests check the mechanism directly.
+ * The race test reproduced the failure on HAPI 8.12.1 before the fix (most runs failed); like any race test it detects
+ * a regression with high probability rather than certainty. The other test checks the mechanism directly. Since 2.0.0
+ * IG packages are the only source of profiles (spec 003), so only the package paths remain.
  */
 class SnapshotRaceTest {
     private static final String PATIENT = "{\"resourceType\":\"Patient\",\"active\":true}";
@@ -51,17 +52,6 @@ class SnapshotRaceTest {
     }
 
     @Test
-    void storedProfileHasASnapshotBeforeValidationCanSeeIt() {
-        String url = "http://example.org/fhir/StructureDefinition/race-stored";
-        ProfileStore store = new ProfileStore(SupportedFhirVersion.R4, R4);
-        store.put(url, R4.newJsonParser().parseResource(differentialProfile(url).encode()));
-
-        assertFalse(SnapshotPregenerator.needsSnapshot(R4, store.get(url)), "the stored profile has a snapshot");
-        assertTrue(enforcesBirthDate(SnapshotBuilder.assemble(SupportedFhirVersion.R4, 1, List.of(), List.of(), store), url),
-                "the generated snapshot carries the profile's constraint");
-    }
-
-    @Test
     void packageProfileHasASnapshotOnceThePackageIsLoaded() {
         String url = "http://example.org/fhir/StructureDefinition/race-package";
         CustomNpmPackageValidationSupport support = new CustomNpmPackageValidationSupport(R4,
@@ -69,25 +59,6 @@ class SnapshotRaceTest {
 
         assertFalse(SnapshotPregenerator.needsSnapshot(R4, support.fetchStructureDefinition(url)),
                 "the package profile has a snapshot");
-    }
-
-    @Test
-    void firstUseOfNewProfilesDoesNotBreakConcurrentValidations() throws Exception {
-        int failures = 0;
-        for (int round = 0; round < ROUNDS; round++) {
-            int r = round;
-            AtomicInteger thread = new AtomicInteger();
-            failures += concurrently(() -> {
-                String url = "http://example.org/fhir/StructureDefinition/race-" + r + "-" + thread.incrementAndGet();
-                ProfileStore store = new ProfileStore(SupportedFhirVersion.R4, R4);
-                store.put(url, R4.newJsonParser().parseResource(differentialProfile(url).encode()));
-                ValidatorSnapshot snapshot = SnapshotBuilder.assemble(SupportedFhirVersion.R4, r, List.of(), List.of(), store);
-                snapshot.validate(PATIENT, SupportedContentType.JSON, List.of());
-                assertTrue(enforcesBirthDate(snapshot, url));
-                return null;
-            });
-        }
-        assertEquals(0, failures, "validations failed while new profiles were first used");
     }
 
     @Test
@@ -100,9 +71,8 @@ class SnapshotRaceTest {
                 int t = thread.incrementAndGet();
                 String url = "http://example.org/fhir/StructureDefinition/race-pkg-" + r + "-" + t;
                 NpmPackage pkg = npmPackage("example.race" + t, r + ".0.0", differentialProfile(url).put("id", "racepkg" + t));
-                ProfileStore store = new ProfileStore(SupportedFhirVersion.R4, R4);
                 ValidatorSnapshot snapshot = SnapshotBuilder.assemble(SupportedFhirVersion.R4, r,
-                        List.of(pkg.name() + "#" + pkg.version()), List.of(pkg), store);
+                        List.of(pkg.name() + "#" + pkg.version()), List.of(pkg));
                 snapshot.validate(PATIENT, SupportedContentType.JSON, List.of());
                 assertTrue(enforcesBirthDate(snapshot, url));
                 return null;

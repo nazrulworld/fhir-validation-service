@@ -78,11 +78,22 @@ public class FhirValidationService {
                     if (m != null) {
                         String outcome = ar.succeeded()
                                 ? (ar.result().valid() ? ServiceMetrics.OUTCOME_VALID : ServiceMetrics.OUTCOME_INVALID)
-                                : (ar.cause() instanceof DataFormatException ? ServiceMetrics.OUTCOME_UNPARSEABLE : ServiceMetrics.OUTCOME_ERROR);
+                                : failureOutcome(ar.cause());
                         m.recordValidation(version, outcome, System.nanoTime() - started);
                     }
                 })
                 .map(Done::value);
+    }
+
+    private static String failureOutcome(Throwable cause) {
+        if (cause instanceof DataFormatException) {
+            return ServiceMetrics.OUTCOME_UNPARSEABLE;
+        }
+        if (cause instanceof nzi.fhir.validator.web.ProblemException p
+                && nzi.fhir.validator.web.ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())) {
+            return ServiceMetrics.OUTCOME_UNKNOWN_PROFILE;
+        }
+        return ServiceMetrics.OUTCOME_ERROR;
     }
 
     public ValidatorRegistry registry() {

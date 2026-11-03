@@ -13,7 +13,7 @@ import nzi.fhir.validator.core.service.DatabaseService;
 import nzi.fhir.validator.core.service.HealthService;
 
 /**
- * The service core (validators, profiles, IG inclusion, configuration sync) without HTTP, wired exactly as in
+ * The service core (validators, IG inclusion, configuration sync) without HTTP, wired exactly as in
  * production. Two harnesses on one database behave like two instances.
  */
 public final class CoreHarness {

@@ -71,6 +71,26 @@ public final class TestPackages {
         return bytes.toByteArray();
     }
 
+    /**
+     * An R4 IG package ({@code .tgz}) holding the given StructureDefinitions, the replacement for registering
+     * loose profiles (removed in 2.0.0).
+     */
+    public static byte[] profilePackage(String name, String version, JsonObject... structureDefinitions) {
+        return npmPackage(name, version, Map.of(), List.of(structureDefinitions));
+    }
+
+    /**
+     * Stores {@code tgz} and includes it for R4; completes once this instance has applied the change (or answered
+     * with a still-applying warning).
+     */
+    public static io.vertx.core.Future<Void> includePackage(nzi.fhir.validator.ServiceRegistry services, byte[] tgz,
+                                                             String name, String version) {
+        return services.igPackageService().registerIg(tgz, false)
+                .compose(pkg -> services.igPackageService()
+                        .include(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4, name, version))
+                .mapEmpty();
+    }
+
     private static void add(TarArchiveOutputStream tar, String path, String content) throws IOException {
         byte[] data = content.getBytes(StandardCharsets.UTF_8);
         TarArchiveEntry entry = new TarArchiveEntry(path);

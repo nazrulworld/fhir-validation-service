@@ -248,6 +248,79 @@ class ValidationApiContractTest extends BaseTestContainer {
                 })));
     }
 
+    private static final String KNOWN = "http://hl7.org/fhir/StructureDefinition/Patient";
+    private static final String TYPO = "http://example.org/StructureDefinition/typo";
+
+    private Future<HttpResponse<Buffer>> validateWithProfiles(String profiles, String accept, String body) {
+        HttpRequest<Buffer> req = post("/R4/validate").addQueryParam("profile", profiles)
+                .putHeader("Content-Type", "application/json");
+        if (accept != null) {
+            req.putHeader("Accept", accept);
+        }
+        return req.sendBuffer(Buffer.buffer(body));
+    }
+
+    @Test
+    void unknownProfileAmongKnownOnesIsRejectedWithItsUrl(VertxTestContext ctx) {
+        validateWithProfiles(KNOWN + "," + TYPO, null, "{\"resourceType\":\"Patient\",\"active\":true}")
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject p = assertProblem(r, 400, "unknown-profile");
+                    assertEquals(new io.vertx.core.json.JsonArray().add(TYPO), p.getJsonArray("unresolvedProfiles"));
+                    assertNull(p.getValue("valid"), "no validation result for an unresolved profile");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void unknownProfileIsProblemJsonEvenWhenOperationOutcomeIsAccepted(VertxTestContext ctx) {
+        validateWithProfiles(TYPO, "application/fhir+xml", "{\"resourceType\":\"Patient\",\"active\":true}")
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertProblem(r, 400, "unknown-profile");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void unparseableBodyIsReportedBeforeAnUnknownProfile(VertxTestContext ctx) {
+        validateWithProfiles(TYPO, null, "{\"resourceType\":\"NotAResource\"}")
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertProblem(r, 400, "invalid-resource");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void moreThanTenProfilesAreRejectedWithoutEchoingThem(VertxTestContext ctx) {
+        String eleven = java.util.stream.IntStream.range(0, 11).mapToObj(i -> TYPO + i)
+                .collect(java.util.stream.Collectors.joining(","));
+        validateWithProfiles(eleven, null, "{\"resourceType\":\"Patient\",\"active\":true}")
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject p = assertProblem(r, 400, "invalid-request");
+                    assertNull(p.getValue("unresolvedProfiles"));
+                    assertFalse(r.bodyAsString().contains(TYPO), "limit errors must not echo the URLs");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void registerProfileOperationIsGone(VertxTestContext ctx) {
+        String json = "{\"resourceType\":\"StructureDefinition\",\"url\":\"" + TYPO + "\"}";
+        post("/R4/register-profile").putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(json))
+                .compose(anonymous -> {
+                    ctx.verify(() -> assertProblem(anonymous, 404, "not-found"));
+                    return AppHarness.asAdmin(post("/R4/register-profile"))
+                            .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(json));
+                })
+                .onComplete(ctx.succeeding(admin -> ctx.verify(() -> {
+                    assertProblem(admin, 404, "not-found");
+                    String openapi = new String(java.util.Objects.requireNonNull(getClass().getResourceAsStream("/openapi.yaml"))
+                            .readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    assertFalse(openapi.contains("profileApiRegisterProfile"));
+                    assertFalse(openapi.contains("register-profile"));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void includeStoredIgSucceeds(VertxTestContext ctx) {
         app.bootstrap().services().igPackageService().registerIg(Fixtures.bytes(Fixtures.DK_CORE_IG))

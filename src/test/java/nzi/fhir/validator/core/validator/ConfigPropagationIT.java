@@ -25,9 +25,10 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * B2/B3 regression: two instances on one database. Changes made through A take effect on B within 10 s without a
- * restart, via notification and via the poll fallback; a configuration B cannot apply makes that version unavailable
- * on B (never outdated results) until it recovers.
+ * B2/B3 regression: two instances on one database. IG changes made through A, including the profiles they define,
+ * take effect on B within 10 s without a restart, via notification and via the poll fallback; a configuration B cannot
+ * apply makes that version unavailable on B (never outdated results) until it recovers. Since 2.0.0 included IGs are the
+ * only source of profiles (spec 003, FR-011, SC-005).
  */
 @ExtendWith(VertxExtension.class)
 @Timeout(value = 180, timeUnit = TimeUnit.SECONDS)
@@ -60,26 +61,30 @@ class ConfigPropagationIT extends BaseTestContainer {
         Future.join(stopA, stopB).onComplete(ar -> vertxB.close().onComplete(v -> ctx.completeNow()));
     }
 
+    /** Whether B applies {@code profileUrl}; an unresolved profile (not propagated yet) counts as "not yet". */
     private Future<Boolean> bEnforces(String profileUrl, String element) {
         return b.services().validationService()
                 .validate(SupportedFhirVersion.R4, TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(profileUrl))
-                .map(o -> TestPackages.hasError(o, element));
+                .map(o -> TestPackages.hasError(o, element))
+                .recover(err -> err instanceof ProblemException p && ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())
+                        ? Future.succeededFuture(false)
+                        : Future.failedFuture(err));
+    }
+
+    private Future<Void> includeThroughA(String name, String url, String element) {
+        return TestPackages.includePackage(a.services(),
+                TestPackages.profilePackage(name, "1.0.0", TestPackages.requiredPatientElements(url, element)), name, "1.0.0");
     }
 
     @Test
-    void profileAndIgChangesReachTheOtherInstance(Vertx vertx, VertxTestContext ctx) {
-        String url = "http://example.org/fhir/StructureDefinition/propagated";
-        a.services().profileServices().get(SupportedFhirVersion.R4)
-                .registerProfile(TestPackages.requiredPatientElements(url, "birthDate"))
-                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "profile reaches B", () -> bEnforces(url, "birthDate")))
-                .compose(ms -> a.services().igPackageService().registerIg(TestPackages.npmPackage("example.prop", "1.0.0", Map.of(),
-                        List.of(TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/from-ig", "gender").put("id", "fromig")))))
-                .compose(p -> a.services().igPackageService().include(SupportedFhirVersion.R4, "example.prop", "1.0.0"))
+    void includedProfileReachesTheOtherInstance(Vertx vertx, VertxTestContext ctx) {
+        String url = "http://example.org/fhir/StructureDefinition/from-ig";
+        includeThroughA("example.prop", url, "gender")
                 .compose(r -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> Future.succeededFuture(
                         b.services().validatorRegistry().current(SupportedFhirVersion.R4).resolvedPackages().contains("example.prop#1.0.0"))))
-                .compose(ms -> bEnforces("http://example.org/fhir/StructureDefinition/from-ig", "gender"))
+                .compose(ms -> bEnforces(url, "gender"))
                 .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
-                    assertTrue(enforced, "B must validate with the IG included through A");
+                    assertTrue(enforced, "B must validate with the profile of the IG included through A");
                     ctx.completeNow();
                 })));
     }
@@ -88,9 +93,8 @@ class ConfigPropagationIT extends BaseTestContainer {
     void pollFallbackPropagatesWithoutNotifications(Vertx vertx, VertxTestContext ctx) {
         b.services().configSync().setNotificationsEnabled(false);
         String url = "http://example.org/fhir/StructureDefinition/polled";
-        a.services().profileServices().get(SupportedFhirVersion.R4)
-                .registerProfile(TestPackages.requiredPatientElements(url, "birthDate"))
-                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "profile reaches B by polling", () -> bEnforces(url, "birthDate")))
+        includeThroughA("example.polled", url, "birthDate")
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "profile reaches B by polling", () -> bEnforces(url, "birthDate")))
                 .onComplete(ctx.succeedingThenComplete());
     }
 
@@ -98,11 +102,8 @@ class ConfigPropagationIT extends BaseTestContainer {
     void unappliableConfigurationMakesVersionUnavailableUntilItRecovers(Vertx vertx, VertxTestContext ctx) {
         var pool = a.services().pool();
         // A committed configuration referencing a package that is not stored: B cannot build it.
-        pool.withTransaction(tx -> tx.preparedQuery("UPDATE fhir_validator_schema.fhir_validator_logs "
-                                + "SET resolved_ig_packages = '{example.ghost#1.0.0}', included_ig_packages = '{example.ghost#1.0.0}' "
-                                + "WHERE fhir_version = 'R4'")
-                        .execute()
-                        .compose(r -> ConfigRevisionRepository.bump(tx, SupportedFhirVersion.R4, ConfigRevisionRepository.KIND_IG, "example.ghost#1.0.0")))
+        pool.withTransaction(tx -> ConfigRevisionRepository.updateIgSet(tx, SupportedFhirVersion.R4,
+                        List.of("example.ghost#1.0.0"), List.of("example.ghost#1.0.0"), "example.ghost#1.0.0"))
                 .compose(rev -> Await.until(vertx, PROPAGATION_MS, "B marks R4 stale",
                         () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.STALE)))
                 .compose(ms -> {
@@ -115,6 +116,7 @@ class ConfigPropagationIT extends BaseTestContainer {
                         String readiness = b.services().healthService().readiness().encode();
                         assertTrue(readiness.contains("example.ghost#1.0.0"), readiness);
                         assertFalse(readiness.contains("Exception") || readiness.contains("java."), readiness);
+                        assertFalse(readiness.contains("profile changes"), "the profile-refresh reason no longer exists");
                         assertNotNull(b.services().validatorRegistry().current(SupportedFhirVersion.R5), "other versions keep serving");
                     });
                     return a.services().igPackageService().registerIg(TestPackages.npmPackage("example.ghost", "1.0.0", Map.of(), List.of()));
@@ -128,120 +130,42 @@ class ConfigPropagationIT extends BaseTestContainer {
     }
 
     /**
-     * FR-002: when B knows of a newer profile change but cannot apply it, B stops serving that version instead of
-     * answering from the outdated configuration, and recovers automatically once the refresh succeeds.
+     * FR-008 (001) / FR-011 (003): slow validator rebuilds of two other versions on B must not stop B from serving R4
+     * validations with its current IG set. (The 1.x variant propagated a loose profile during the rebuilds; loose
+     * profiles no longer exist, and an IG change needs a rebuild of its own.)
      */
     @Test
-    void failedProfileRefreshMakesVersionUnavailableUntilItRecovers(Vertx vertx, VertxTestContext ctx) {
-        String url = "http://example.org/fhir/StructureDefinition/unrefreshable";
-        b.services().configSync().setProfileRefreshOverride(v -> Future.failedFuture(new IllegalStateException("refresh failed")));
-        a.services().profileServices().get(SupportedFhirVersion.R4)
-                .registerProfile(TestPackages.requiredPatientElements(url, "birthDate"))
-                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "B marks R4 stale",
-                        () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.STALE)))
-                .compose(ms -> {
-                    ctx.verify(() -> {
-                        ProblemException e = assertThrows(ProblemException.class,
-                                () -> b.services().validatorRegistry().current(SupportedFhirVersion.R4));
-                        assertEquals(503, e.status());
-                        assertFalse(b.services().validatorRegistry().isReady());
-                        assertNotNull(b.services().validatorRegistry().current(SupportedFhirVersion.R5), "other versions keep serving");
-                    });
-                    b.services().configSync().setProfileRefreshOverride(null);
-                    return Await.until(vertx, PROPAGATION_MS, "B recovers once the refresh succeeds",
-                            () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.ACTIVE));
-                })
-                .compose(ms -> bEnforces(url, "birthDate"))
-                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
-                    assertTrue(enforced, "after recovery B validates with the new profile");
-                    ctx.completeNow();
-                })));
-    }
-
-    /**
-     * FR-001/FR-003: profile change timestamps are transaction start times, so a registration that started earlier
-     * can commit after a later one. Both must still take effect on the other instance.
-     */
-    @Test
-    void overlappingProfileRegistrationsBothReachTheOtherInstance(Vertx vertx, VertxTestContext ctx) {
-        String early = "http://example.org/fhir/StructureDefinition/started-first";
-        String late = "http://example.org/fhir/StructureDefinition/committed-first";
-        var pool = a.services().pool();
-        pool.getConnection().compose(conn -> conn.begin().compose(tx -> conn
-                        // modified_at = now() is this transaction's start time, earlier than the registration below.
-                        .preparedQuery("INSERT INTO fhir_validator_schema.fhir_profiles (url, profile_json, fhir_version, modified_at) "
-                                + "VALUES ($1, $2, '4.0.1', now())")
-                        .execute(io.vertx.sqlclient.Tuple.of(early, TestPackages.requiredPatientElements(early, "birthDate")))
-                        .compose(r -> vertx.timer(200))
-                        .compose(t -> a.services().profileServices().get(SupportedFhirVersion.R4)
-                                .registerProfile(TestPackages.requiredPatientElements(late, "gender")))
-                        .compose(rev -> Await.until(vertx, PROPAGATION_MS, "later-started profile reaches B", () -> bEnforces(late, "gender")))
-                        .compose(ms -> ConfigRevisionRepository.bump(conn, SupportedFhirVersion.R4, ConfigRevisionRepository.KIND_PROFILE, early))
-                        .compose(rev -> tx.commit())
-                        .eventually(() -> conn.close())))
-                .compose(v -> Await.until(vertx, PROPAGATION_MS, "earlier-started profile reaches B", () -> bEnforces(early, "birthDate")))
-                .onComplete(ctx.succeedingThenComplete());
-    }
-
-    /**
-     * FR-008 / SC-002 (T128): slow validator rebuilds of two other versions on B must not occupy every package worker,
-     * so a profile registered through A still reaches B within the propagation window.
-     */
-    @Test
-    void slowRebuildsOfOtherVersionsDoNotDelayProfilePropagation(Vertx vertx, VertxTestContext ctx) {
+    void slowRebuildsOfOtherVersionsDoNotStopValidation(Vertx vertx, VertxTestContext ctx) {
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.atomic.AtomicInteger buildsBlocked = new java.util.concurrent.atomic.AtomicInteger();
         SnapshotBuilder builderB = b.services().snapshotBuilder();
-        builderB.setBuildHook(() -> {
-            buildsBlocked.incrementAndGet();
-            try {
-                release.await(60, TimeUnit.SECONDS); // a long rebuild holding its worker thread
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
         String url = "http://example.org/fhir/StructureDefinition/during-rebuilds";
         ValidatorRegistry registryB = b.services().validatorRegistry();
-        a.services().igPackageService().registerIg(TestPackages.npmPackage("example.slowbuild", "1.0.0", Map.of(), List.of()))
+        includeThroughA("example.before", url, "birthDate")
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "profile reaches B", () -> bEnforces(url, "birthDate")))
+                .compose(ms -> a.services().igPackageService().registerIg(TestPackages.npmPackage("example.slowbuild", "1.0.0", Map.of(), List.of())))
                 .compose(p -> {
+                    builderB.setBuildHook(() -> {
+                        buildsBlocked.incrementAndGet();
+                        try {
+                            release.await(60, TimeUnit.SECONDS); // a long rebuild holding its worker thread
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
                     // Two rebuilds on B (R4B and R5), each blocked inside the package pool.
                     registryB.apply(SupportedFhirVersion.R4B, 1_000, List.of("example.slowbuild#1.0.0"));
                     registryB.apply(SupportedFhirVersion.R5, 1_000, List.of("example.slowbuild#1.0.0"));
                     return Await.until(vertx, PROPAGATION_MS, "a rebuild is running on B",
                             () -> Future.succeededFuture(buildsBlocked.get() >= 1));
                 })
-                .compose(ms -> a.services().profileServices().get(SupportedFhirVersion.R4)
-                        .registerProfile(TestPackages.requiredPatientElements(url, "birthDate")))
-                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "profile reaches B during the rebuilds",
-                        () -> bEnforces(url, "birthDate")))
+                .compose(ms -> bEnforces(url, "birthDate"))
                 .onComplete(ar -> {
                     builderB.setBuildHook(null);
                     release.countDown();
                 })
-                .onComplete(ctx.succeedingThenComplete());
-    }
-
-    /**
-     * A local apply (as after a profile registration) must not complete while a background sync of the same version
-     * is still applying: otherwise the caller returns before its own change took effect on this instance.
-     */
-    @Test
-    void localSyncWaitsForABackgroundSyncInFlight(Vertx vertx, VertxTestContext ctx) {
-        java.util.concurrent.atomic.AtomicBoolean backgroundDone = new java.util.concurrent.atomic.AtomicBoolean();
-        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
-        ConfigSync sync = b.services().configSync();
-        sync.setProfileRefreshOverride(v -> calls.incrementAndGet() == 1
-                ? vertx.timer(500).map(t -> {
-                    backgroundDone.set(true);
-                    return 0;
-                })
-                : Future.succeededFuture(0));
-        sync.sync(SupportedFhirVersion.R4);
-        sync.syncNow(SupportedFhirVersion.R4)
-                .onComplete(ar -> sync.setProfileRefreshOverride(null))
-                .onComplete(ctx.succeeding(v -> ctx.verify(() -> {
-                    assertTrue(backgroundDone.get(), "syncNow completed while the background sync was still running");
-                    assertEquals(2, calls.get(), "both syncs ran, one after the other");
+                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
+                    assertTrue(enforced, "B keeps validating R4 with its current IG set during other rebuilds");
                     ctx.completeNow();
                 })));
     }

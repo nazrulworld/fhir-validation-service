@@ -89,7 +89,9 @@ paths:
       description: >-
         Content negotiation: Accept absent, */* or application/json returns the ValidationResponse JSON shape;
         application/fhir+json, application/fhir+xml and application/xml return a FHIR OperationOutcome.
-        A completed validation answers 200 whether the resource is valid or not.
+        A completed validation answers 200 whether the resource is valid or not. Every 4xx is problem JSON, whatever
+        Accept asks for: invalid-resource (body is not FHIR), invalid-request (e.g. profile limits) and
+        unknown-profile (a requested profile is not available; see UnknownProfileProblem).
       parameters:
         - name: version
           in: path
@@ -99,7 +101,13 @@ paths:
         - name: profile
           in: query
           required: false
-          description: Comma-separated canonical URLs of profiles to validate against (in addition to meta.profile)
+          description: >-
+            Comma-separated canonical URLs of profiles to validate against, in addition to meta.profile. Each URL must
+            be defined by an IG included for this FHIR version (or its dependencies) or by the core specification, and
+            is matched exactly against `url` or `url|version`. Profiles are never downloaded. At most 10 distinct
+            profiles per request, each at most 1024 characters (otherwise 400 invalid-request). If any URL cannot be
+            resolved the request fails with 400 unknown-profile (listing `unresolvedProfiles`) and nothing is
+            validated.
           schema:
             type: string
       requestBody:
@@ -192,57 +200,6 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '413':
-          $ref: '#/components/responses/Problem'
-        '500':
-          $ref: '#/components/responses/Problem'
-        '503':
-          $ref: '#/components/responses/Problem'
-
-  /{version}/register-profile:
-    post:
-      operationId: profileApiRegisterProfile
-      summary: Register a custom profile (StructureDefinition)
-      parameters:
-        - name: version
-          in: path
-          required: true
-          schema:
-            $ref: '#/components/schemas/FhirVersion'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - url
-              properties:
-                url:
-                  type: string
-                  format: uri
-      responses:
-        '200':
-          description: Profile registered
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [success]
-                  profileUrl:
-                    type: string
-                    format: uri
-                  revision:
-                    type: integer
-                    format: int64
-                  warnings:
-                    type: array
-                    description: Curated notes, e.g. that this instance is still applying the committed change
-                    items:
-                      type: string
-        '400':
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
@@ -408,8 +365,8 @@ components:
       type: http
       scheme: bearer
       description: >-
-        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig,
-        register-profile) always require an ADMIN key. Validation and read operations require a VALIDATE or ADMIN key
+        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig) always
+        require an ADMIN key. Validation and read operations require a VALIDATE or ADMIN key
         only when FV_AUTH_ANONYMOUS_VALIDATE=false. Enforced by the service (see contracts/http-api.md).
 
   responses:
@@ -466,6 +423,27 @@ components:
           description: Present only for type invalid-resource
           items:
             $ref: '#/components/schemas/ValidationMessage'
+        unresolvedProfiles:
+          type: array
+          description: Present only for type unknown-profile (see UnknownProfileProblem)
+          items:
+            type: string
+
+    UnknownProfileProblem:
+      description: >-
+        400 from /{version}/validate when a requested profile is not defined by the core specification or an included
+        IG. Nothing was validated.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [unresolvedProfiles]
+          properties:
+            unresolvedProfiles:
+              type: array
+              minItems: 1
+              description: Every requested entry that did not resolve, after trimming and de-duplication, in request order
+              items:
+                type: string
 
     HealthResponse:
       type: object
@@ -514,6 +492,9 @@ components:
           type: string
         appliedProfiles:
           type: array
+          description: >-
+            Profiles that were resolved and applied: the requested profiles in request order, then resolvable
+            meta.profile entries. Each appears once; an unresolved URL is never listed.
           items:
             type: string
 

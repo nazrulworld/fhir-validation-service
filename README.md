@@ -4,9 +4,12 @@
 
 A horizontally scalable FHIR resource validation service built with Vert.x, HAPI FHIR and PostgreSQL.
 
-It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, stored Implementation Guide (IG)
-packages and custom profiles. Any number of identical instances can run against one PostgreSQL database; changes to
-IGs and profiles reach every instance within seconds, without restarts.
+It validates FHIR resources (STU3, R4, R4B, R5) against the base specification and the Implementation Guide (IG)
+packages you include, the same model as the HL7 validator CLI's `-ig` and `-profile`. Any number of identical instances
+can run against one PostgreSQL database; IG changes reach every instance within seconds, without restarts.
+
+> **Upgrading from 1.x?** 2.0.0 removes custom profile registration and deletes stored custom profiles. Read
+> [docs/upgrade-2.0.md](docs/upgrade-2.0.md) **before** upgrading: export first.
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
 - Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
@@ -49,8 +52,8 @@ Whichever you choose, you need an **administrator API key**: 32-128 characters o
 openssl rand -hex 32
 ```
 
-Without `FV_ADMIN_API_KEY` the service still validates, but refuses every administrative call (IG upload, include-ig,
-profile registration).
+Without `FV_ADMIN_API_KEY` the service still validates, but refuses every administrative call (IG upload, register,
+include-ig).
 
 ### Option A: Docker Compose with the published image
 
@@ -299,11 +302,15 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
 ```
 
 - `Accept: application/fhir+json` or `application/fhir+xml` returns a FHIR `OperationOutcome`.
-- `?profile=<canonical>[,<canonical>]` validates against additional profiles.
+- `?profile=<canonical>[,<canonical>]` validates against additional profiles (at most 10, each at most 1024
+  characters). Each must be defined by an IG included for that FHIR version (or its dependencies) or by the core
+  specification, matched exactly by `url` or `url|version`. Profiles are **never downloaded** from their canonical URL.
+  If any of them cannot be resolved, the answer is **400 `unknown-profile`** with `unresolvedProfiles`, and nothing is
+  validated. `appliedProfiles` lists only profiles that were actually applied.
 - A completed validation answers **200**, valid or not. A body that is not FHIR at all answers **400**
   (`invalid-resource`); overload or a validator that is not ready answers **503** with `Retry-After`.
 
-### Manage IGs and profiles (administrator key required)
+### Manage IGs (administrator key required)
 
 Administrative calls need `Authorization: Bearer <FV_ADMIN_API_KEY>`. The change applies globally, to every consumer
 of that FHIR version, on every instance.
@@ -318,10 +325,12 @@ curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us
 # Include it in the R4 validator (resolves dependencies; replaces another version of the same package)
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/include-ig
-
-# Register a custom profile (StructureDefinition)
-curl -H "$AUTH" -H 'Content-Type: application/json' --data @my-profile.json http://127.0.0.1:8880/R4/register-profile
 ```
+
+Only **included** IGs supply profiles; a package that is stored but not included contributes nothing. To use your own
+profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`,
+`fhirVersions` and `dependencies`, plus the `.json` resources under `package/`), then upload and include it like any
+other IG.
 
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.

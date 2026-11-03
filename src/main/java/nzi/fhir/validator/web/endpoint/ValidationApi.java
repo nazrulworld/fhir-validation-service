@@ -17,17 +17,24 @@ import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.core.validator.OutcomeRenderer;
 import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 /**
  * Validation and IG inclusion endpoints.
  * <p>
  * Status mapping for validation (research R12): 200 for a completed validation, valid or not; 400
- * {@code invalid-resource} for a body that is not FHIR; 406/415 for unacceptable media types; 503 when not ready or
- * overloaded; 500 otherwise. Every non-200 answer is a problem document.
+ * {@code invalid-resource} for a body that is not FHIR; 400 {@code invalid-request} for a {@code profile} list over the
+ * limits and 400 {@code unknown-profile} for a requested profile no included IG defines (spec 003); 406/415 for
+ * unacceptable media types; 503 when not ready or overloaded; 500 otherwise. Every non-200 answer is a problem
+ * document, whatever {@code Accept} asked for.
  *
  * @author Md Nazrul Islam
  */
 public class ValidationApi {
+    private static final Logger logger = LogManager.getLogger(ValidationApi.class);
     private final FhirValidationService validationService;
     private final IgPackageService igPackageService;
 
@@ -75,18 +82,32 @@ public class ValidationApi {
                     "Acceptable response types: application/json, application/fhir+json, application/fhir+xml, application/xml");
             return;
         }
+        List<String> profiles;
+        try {
+            profiles = ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate();
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
         if (ctx.body() == null || ctx.body().isEmpty()) {
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
             return;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         Future<String> rendered = validationService
-                .validate(version, ctx.body().asString(), contentType,
-                        ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate(),
+                .validate(version, ctx.body().asString(), contentType, profiles,
                         outcome -> OutcomeRenderer.render(outcome, responseFormat))
-                .recover(err -> err instanceof DataFormatException
-                        ? Future.failedFuture(invalidResource(err.getMessage()))
-                        : Future.failedFuture(err));
+                .recover(err -> {
+                    if (err instanceof DataFormatException) {
+                        return Future.failedFuture(invalidResource(err.getMessage()));
+                    }
+                    if (err instanceof ProblemException p && ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())
+                            && logger.isDebugEnabled()) {
+                        // The request id is added by the log layout (%vcl{requestId}); client input stays at DEBUG.
+                        logger.debug("Unresolved profiles for {}: {}", version, p.extensions().getValue("unresolvedProfiles"));
+                    }
+                    return Future.failedFuture(err);
+                });
         ErrorResponder.respond(ctx, rendered, (rc, body) -> rc.response()
                 .setStatusCode(200)
                 .putHeader("Content-Type", responseFormat.mimeType())

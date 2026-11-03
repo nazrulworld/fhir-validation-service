@@ -32,6 +32,7 @@ public final class ErrorResponder {
     private static final Map<String, String> TITLES = Map.ofEntries(
             Map.entry("invalid-request", "Invalid request"),
             Map.entry("invalid-resource", "Invalid resource"),
+            Map.entry("unknown-profile", "Unknown profile"),
             Map.entry("unsupported-fhir-version", "Unsupported FHIR version"),
             Map.entry("unauthorized", "Unauthorized"),
             Map.entry("forbidden", "Forbidden"),
