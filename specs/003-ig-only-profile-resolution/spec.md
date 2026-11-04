@@ -114,7 +114,8 @@ resource as valid, and that both name the made-up URL.
    as applied.
 3. **Given** profile P is known and URL U is not, **When** a consumer names P and U, **Then** the request
    is rejected as a client error that names U as unresolved, no validation is performed, and no
-   validation result (valid or not) is returned.
+   validation result (valid or not) is returned. The request is counted in the validation metrics under
+   the `unknown_profile` outcome, not as a server error (FR-010a).
 4. **Given** URL U is not known, **When** a consumer names only U, **Then** the outcome is the same as
    scenario 3.
 5. **Given** a resource whose own profile declarations include an unknown profile, **When** it is

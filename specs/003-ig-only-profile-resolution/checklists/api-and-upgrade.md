@@ -69,8 +69,8 @@ reviewed.
   - **Review (satisfied)**: The Context section and report finding #1 describe the case: several profiles requested, one unknown, and the resource comes back valid. The US1 Independent Test reproduces it.
 - [x] CHK024 - Does SC-007 define a "typical set of up to 50 profiles", including whether profiles derived from IG profiles with dependencies are part of it? [Clarity, Spec §SC-007]
   - **Review (satisfied, 2026-11-04 second pass)**: SC-007 now says a typical set may span several FHIR versions and may include profiles based on another IG's profiles, as long as that IG is named as a dependency at export.
-- [ ] CHK025 - Does every functional requirement from FR-001 to FR-018 map to at least one acceptance scenario or success criterion? In particular FR-012 (admin rules) and FR-017 (documentation). [Traceability, Spec §Requirements]
-  - **Review (open, 2026-11-04 second pass)**: Mostly closed: new scenarios cover FR-006a (US1/AC7), FR-012 (US3/AC5), FR-015b (US4/AC4) and FR-015c (US4/AC5), and US3/AC4 and SC-008 cover FR-017. The FR-010a added in the same edit has no scenario or success criterion for the `unknown_profile` outcome. US3/AC4 covers only the removals. Add a clause to US1/AC3, for example "and the request is counted under the `unknown_profile` outcome", or a scenario under US3.
+- [x] CHK025 - Does every functional requirement from FR-001 to FR-018 map to at least one acceptance scenario or success criterion? In particular FR-012 (admin rules) and FR-017 (documentation). [Traceability, Spec §Requirements]
+  - **Review (satisfied, 2026-11-04 third pass)**: US1/AC3 now says the rejected request is counted under the `unknown_profile` outcome (FR-010a). US1/AC4 inherits this ("same as scenario 3"). Every FR now maps to a scenario or success criterion. Earlier note: mostly closed: new scenarios cover FR-006a (US1/AC7), FR-012 (US3/AC5), FR-015b (US4/AC4) and FR-015c (US4/AC5), and US3/AC4 and SC-008 cover FR-017. The FR-010a added in the same edit has no scenario or success criterion for the `unknown_profile` outcome. US3/AC4 covers only the removals. Add a clause to US1/AC3, for example "and the request is counted under the `unknown_profile` outcome", or a scenario under US3.
 
 ## Scenario Coverage
 
@@ -168,4 +168,9 @@ reviewed.
 - **Still open (1)**: CHK025. FR-010a, added in PR #37, has no acceptance scenario or success criterion for
   the `unknown_profile` outcome. One clause in US1/AC3 would close it.
 - **Result**: 39 satisfied, 1 open (was 28 / 12).
+
+## Re-review (2026-11-04, third pass)
+
+- **CHK025 satisfied**: US1/AC3 now gives FR-010a's `unknown_profile` outcome an acceptance scenario.
+- **Result**: 40 of 40 satisfied.
 
