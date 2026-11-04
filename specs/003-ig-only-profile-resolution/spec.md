@@ -63,6 +63,28 @@ requested profiles with the CLI, and removes the custom profile registration mec
   A: No. Every 1.x instance must be stopped before the first 2.0 instance starts, and the rolling-restart
   procedure must not be used for this upgrade.
 
+### Session 2026-11-04
+
+- Q: When the export finds stored profiles whose FHIR version 2.0.0 doesn't support (for example a
+  leftover `6.0.0` row), what does it do with them? → A: It writes them unpackaged, as raw files in a
+  separate `unsupported-<version>` folder, prints a warning with the count, and still succeeds. Stored
+  profiles are always valid JSON, because the column is `JSONB`.
+- Q: What happens if an IG package with the same name and version as a package the export would
+  generate is already stored? → A: The export refuses (exit 1) before writing anything, names the clash,
+  and tells the operator to choose another `--name` or `--package-version`. The upgrade guide mentions
+  this, because uploading a package with an existing name and version replaces the stored one without
+  warning.
+- Q: When a Bundle is validated against a requested profile for its entries' type, does `appliedProfiles`
+  list that profile? → A: Yes. `appliedProfiles` means "resolved and checked in this request", whether
+  against the submitted resource or the Bundle entry the validator picked.
+- Q: Is the order of `appliedProfiles` fixed? → A: Yes. Requested profiles come first, in the order the
+  client named them, then resolvable declared profiles in the order the resource lists them. Each
+  appears once.
+- Q: Must the export produce ready-to-upload IG packages, or only files the operator packages? → A:
+  Ready-to-upload packages: one `.tgz` per supported FHIR version, with a valid `package.json` (the FHIR
+  version, the core dependency and any extra dependencies the operator names), which `POST /igs/upload`
+  accepts unchanged.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A requested profile is either applied or the request fails loudly (Priority: P1)
@@ -168,23 +190,23 @@ include it, and validate against the profile.
 
 An operator running an earlier release with registered custom profiles reads the upgrade notes
 *before* upgrading. The notes say the registration mechanism is gone, that the upgrade permanently
-removes stored custom profiles, and how to export them from the running previous release so they can be
-repackaged as an IG. The operator exports first, then upgrades, then uploads and includes the
-repackaged IG.
+removes stored custom profiles, and how to export them from the running previous release as
+ready-to-upload IG packages. The operator exports first, then upgrades, then uploads and includes the
+exported packages.
 
 **Why this priority**: The change breaks existing workflows. Operators need a safe path, but the path is
 a one-time step around the feature, not its core.
 
 **Independent Test**: Start from a database of the previous release that contains registered profiles.
-Run the documented export step against it, upgrade, confirm the stored profile data is gone, package the
-exported files as an IG, upload and include it, and confirm that a resource validates against those
+Run the documented export step against it, upgrade, confirm the stored profile data is gone, upload and
+include the exported packages unchanged, and confirm that a resource validates against those
 profiles exactly as it did before the upgrade.
 
 **Acceptance Scenarios**:
 
 1. **Given** a previous-release database with registered profiles, **When** the operator runs the
    documented export step *before* upgrading, **Then** every stored profile for every FHIR version is
-   written out in a form that can be packaged as an IG.
+   written out in a ready-to-upload IG package for its FHIR version.
 2. **Given** a previous-release database with registered profiles, **When** the service is upgraded,
    **Then** the stored custom profile data is removed, the service starts and serves validation
    normally, and nothing else (IG packages, included-IG configuration, API keys) is lost.
@@ -222,7 +244,8 @@ profiles exactly as it did before the upgrade.
   The request uses whichever configuration was active when it started, consistently. It is never
   partly old and partly new.
 - **Bundle**: The resource is a Bundle and a requested profile targets the type of its entries. The
-  behaviour matches the reference validator: it moves to the first matching entry.
+  behaviour matches the reference validator: it moves to the first matching entry. The profile is listed
+  in `appliedProfiles`, because it was resolved and checked (FR-007).
 
 ## Requirements *(mandatory)*
 
@@ -256,7 +279,10 @@ profiles exactly as it did before the upgrade.
   (HTTP 400, `invalid-request`) before any lookup or validation. Both limits are fixed, not
   configurable.
 - **FR-007**: The list of applied profiles in a validation response MUST contain only the profiles that
-  were resolved and applied, whether they were requested or declared in the resource. Each appears once.
+  were resolved and applied, whether they were requested or declared in the resource. Each appears once,
+  in a fixed order: requested profiles in the order the client named them, then declared profiles in the
+  order the resource lists them. A requested profile that the validator checks against a Bundle entry rather than the Bundle itself
+  counts as applied.
 - **FR-008**: An unknown profile declared inside the resource MUST keep being reported as an error issue
   in the validation result (the request still completes), and MUST NOT be listed as applied.
 
@@ -280,7 +306,16 @@ profiles exactly as it did before the upgrade.
   custom profiles, and the service MUST start and validate normally afterwards.
 - **FR-014**: The release MUST provide a documented export step that runs against the *previous*
   release's database (before the upgrade) and writes every stored custom profile, for every FHIR
-  version, in a form that can be packaged as an IG.
+  version, as ready-to-upload IG packages: one package per FHIR version, with a valid `package.json`
+  (the FHIR version, the core dependency and any extra dependencies the operator names), which the
+  upload operation accepts unchanged. Profiles stored under a FHIR version this release
+  doesn't support MUST NOT be lost: the export writes them unpackaged, as raw files kept apart from
+  the packages, warns with their count, and still succeeds. A stored profile can't be malformed JSON,
+  because the previous release stored it as `JSONB`, so the export doesn't need to handle that case.
+  If an IG package with the same name and version as a package the export would generate is already
+  stored, the export MUST fail before writing anything. It names the clash and tells the operator to
+  choose another package name or version, because an upload would otherwise replace the stored
+  package without warning.
 - **FR-015**: The upgrade to this release MUST permanently remove the stored custom profile data and the
   storage that existed only for it, through a versioned schema migration. It MUST NOT remove or alter
   IG packages, included-IG configuration, configuration revisions or API keys. The migration runs
@@ -345,7 +380,7 @@ profiles exactly as it did before the upgrade.
   **under 200 ms**. Steady-state heap after warm-up is no higher than 1.2.0's. Removing the custom
   profile store is expected to lower it slightly.
 - **SC-007**: An operator with registered profiles from the previous release can follow the upgrade
-  guide to export them before upgrading, upgrade, repackage them as an IG, include it, and get the same
+  guide to export them before upgrading, upgrade, upload and include the exported packages, and get the same
   validation results as before the upgrade, in under 30 minutes for a typical set of up to 50 profiles.
   The upgrade rehearsal covers this path.
 - **SC-008**: The published API description, documentation, metrics and health report contain 0
