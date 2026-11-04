@@ -13,7 +13,8 @@ validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
 
 - **Export custom profiles before upgrading.** Migration V6 drops `fhir_profiles` unconditionally on the first 2.0.0
   start. Run `scripts/export-custom-profiles.sh --check`, then export, against the 1.x database. It writes uploadable IG
-  packages.
+  packages, and stops without writing anything if one of them is already stored under the same name and version
+  (choose another `--name` or `--package-version`).
 - **Back up the database.** Restoring it is the only way back to 1.x; there is no down-migration.
 - **Stop every 1.x instance before starting 2.0.0.** A mixed 1.x/2.0 fleet is not supported, and
   `scripts/rolling-restart.sh` refuses to cross a major version.
@@ -50,7 +51,13 @@ validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
 ### Added
 
 - `fv_validations_total` outcome `unknown_profile`.
-- `scripts/export-custom-profiles.sh`, `scripts/upgrade-rehearsal-2.0.sh` and `docs/upgrade-2.0.md`.
+- `scripts/export-custom-profiles.sh`, `scripts/upgrade-rehearsal-2.0.sh` and `docs/upgrade-2.0.md`. The export
+  script:
+  - writes one ready-to-upload IG package per FHIR version;
+  - exits 1 without writing anything if a package it would generate is already stored with the same name and version,
+    because uploading it would silently replace that package;
+  - writes profiles stored under a FHIR version 2.0.0 does not support as raw files in `unsupported-<version>/`, with
+    a warning, instead of dropping them.
 
 ### Unchanged
 
