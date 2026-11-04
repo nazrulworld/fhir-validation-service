@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-03
 
-**Status**: Draft
+**Status**: Implemented (released in v2.0.0, 2026-11-04)
 
 **Input**: User description: "@var/specify_instruction.md". In summary: make profile handling behave like
 the official HL7 FHIR Validator CLI used with `-ig` and `-profile`. Requested profiles are resolved only
