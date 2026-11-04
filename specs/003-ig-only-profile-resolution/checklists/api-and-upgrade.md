@@ -16,8 +16,8 @@ reviewed.
   - **Review (satisfied)**: FR-006 now says the response is always problem details, whatever the client asked for, and never an OperationOutcome (clarification Q7).
 - [ ] CHK002 - Is the order of failure checks (request shape, readiness, parse, Bundle size, unresolved profile) stated as a requirement in the spec, or only in the contract? [Gap, Spec §FR-006, Contract http-api §Precedence]
   - **Review (open)**: Mostly in the spec: the Assumptions put `invalid-request` with the request-shape checks and `unknown-profile` after readiness and parse, and an edge case puts readiness before lookup. Where the Bundle-size (413) check falls relative to `unknown-profile` is stated only in the contract's precedence list. Add it to FR-006 or the Assumptions.
-- [ ] CHK003 - Is there a requirement for the order of `appliedProfiles` (requested first, then declared), or does FR-007 only require de-duplication? [Completeness, Spec §FR-007, Data-model §appliedProfiles]
-  - **Review (open)**: FR-007 requires only that each profile appears once. The order (requested profiles in request order, then declared ones) is set in the contract and data-model but not in the spec. The implementation and `ProfileResolutionIT` (b) already depend on this order.
+- [x] CHK003 - Is there a requirement for the order of `appliedProfiles` (requested first, then declared), or does FR-007 only require de-duplication? [Completeness, Spec §FR-007, Data-model §appliedProfiles]
+  - **Review (satisfied, 2026-11-04)**: FR-007 now sets a fixed order: requested profiles in the order the client named them, then declared profiles in the order the resource lists them, each once (clarification 2026-11-04). This matches the contract and data-model.
 - [x] CHK004 - Do the requirements state an upper bound on the number of requested profiles or the length of a profile URL, given that unresolved URLs are echoed back and constitution Principle VI forbids unbounded inputs? [Gap, Spec §FR-006]
   - **Review (satisfied)**: FR-006a: at most 10 distinct profiles, each at most 1024 characters, fixed limits, 400 `invalid-request` before any lookup.
 - [ ] CHK005 - Is it specified whether the removed operation answers "not found" or "gone", and is the choice justified for clients migrating from 1.x? [Completeness, Spec §FR-009, Contract http-api §Removed]
@@ -43,8 +43,8 @@ reviewed.
   - **Review (satisfied)**: SC-006 gives a baseline (1.2.0), a workload (warm dk Patient with one profile, same host) and tolerances (p95 within +5% and under 200 ms, heap no higher).
 - [x] CHK014 - Is "prominently", in the requirement that the export-before-upgrade step be stated prominently, defined, for example as the first section of the guide and the first entry of the changelog? [Ambiguity, Spec §US4-3, Spec §FR-015a]
   - **Review (satisfied)**: FR-015a requires the warning "before any other upgrade step" in both the changelog and the upgrade guide.
-- [ ] CHK015 - Is "a form that can be packaged as an IG" for the export output specific enough? The plan goes further and produces ready-to-upload packages, and the spec should say which one is the requirement. [Clarity, Spec §FR-014, Contract export-script §Output]
-  - **Review (open)**: FR-014 asks only for "a form that can be packaged as an IG". The contract goes further and produces ready-to-upload `.tgz` packages, and SC-007 still talks about "repackage". The spec should say which of the two is the requirement.
+- [x] CHK015 - Is "a form that can be packaged as an IG" for the export output specific enough? The plan goes further and produces ready-to-upload packages, and the spec should say which one is the requirement. [Clarity, Spec §FR-014, Contract export-script §Output]
+  - **Review (satisfied, 2026-11-04)**: FR-014 now requires ready-to-upload IG packages: one per FHIR version, with a valid `package.json`, which upload accepts unchanged. US4 (story, Independent Test, AC1) and SC-007 were updated to match (clarification 2026-11-04).
 
 ## Requirement Consistency
 
@@ -54,8 +54,8 @@ reviewed.
   - **Review (satisfied)**: They agree: FR-007 lists only resolved profiles and FR-008 excludes unknown declared ones. Key Entities says a declared profile "is resolved the same way", which is the FR-003 exact-match rule.
 - [x] CHK018 - Is the "Wrong resource type" edge case (a resolved profile, with the mismatch reported as an issue) consistent with FR-005 and FR-006, and is it reflected in a functional requirement? [Consistency, Spec §Edge Cases, Spec §FR-005]
   - **Review (satisfied)**: This follows from FR-001, FR-003 and FR-006. Resolution is by URL only, so a profile for another type resolves, FR-005 validates against it, and the mismatch is an issue. The edge case says so explicitly.
-- [ ] CHK019 - Is the Bundle edge case ("moves to the first matching entry") consistent with the per-profile pass in FR-005 and with what `appliedProfiles` reports for a Bundle? [Consistency, Spec §Edge Cases, Spec §FR-007]
-  - **Review (open)**: The spec doesn't say whether `appliedProfiles` lists a profile that was applied to a Bundle entry rather than to the submitted resource. FR-005 says the *resource* is validated against each profile. `ProfileResolutionIT` (k) expects `[P]`, but no requirement states it.
+- [x] CHK019 - Is the Bundle edge case ("moves to the first matching entry") consistent with the per-profile pass in FR-005 and with what `appliedProfiles` reports for a Bundle? [Consistency, Spec §Edge Cases, Spec §FR-007]
+  - **Review (satisfied, 2026-11-04)**: FR-007 and the Bundle edge case now say that a requested profile the validator checks against a Bundle entry counts as applied and is listed (clarification 2026-11-04). This matches `ProfileResolutionIT` (k).
 - [x] CHK020 - Do the release-version statements agree everywhere: 2.0.0 in the spec assumptions, the plan, FR-016 ("new major version") and the instruction's earlier "minor or major"? [Consistency, Spec §FR-016, Plan §Summary]
   - **Review (satisfied)**: 2.0.0 is used everywhere: FR-016 (new major version), the Assumptions, the plan Summary and Principle IV. The instruction's earlier "minor or major" is input to the spec, not part of it.
 - [x] CHK021 - Is the instance-level rule "uses whichever configuration was active when it started" consistent with the pre-check and the validation running against the same snapshot? [Consistency, Spec §Edge Cases, Research §R2]
@@ -85,10 +85,10 @@ reviewed.
 
 ## Edge Case Coverage
 
-- [ ] CHK030 - Do the export requirements cover stored profiles in unusual states: a `fhir_version` value no longer supported (a leftover from the R6 and STU3 bugs fixed in 1.0), JSON that doesn't parse, and a base definition from an IG that isn't included? [Edge Case, Spec §FR-014, Contract export-script]
-  - **Review (open)**: The export contract maps only `3.0.2`/`4.0.1`/`4.3.0`/`5.0.0`. It doesn't define what happens to rows with any other `fhir_version` or with `profile_json` that won't parse. A base definition from an IG that isn't included is only partly handled, through `--dependency`.
-- [ ] CHK031 - Is the behaviour defined when the generated export package's name and version collide with a package that is already stored? [Edge Case, Gap, Contract export-script §Output]
-  - **Review (open)**: It isn't defined what happens when `local.custom.profiles.<rel>#<ver>` is already stored at upload time. `--name` and `--package-version` let operators avoid a clash, but no rule or guidance says so.
+- [x] CHK030 - Do the export requirements cover stored profiles in unusual states: a `fhir_version` value no longer supported (a leftover from the R6 and STU3 bugs fixed in 1.0), JSON that doesn't parse, and a base definition from an IG that isn't included? [Edge Case, Spec §FR-014, Contract export-script]
+  - **Review (satisfied, 2026-11-04)**: FR-014 now covers it. Unsupported `fhir_version` rows go unpackaged to a separate `unsupported-<version>` folder with a warning, and the export still succeeds. JSON that doesn't parse can't be stored, because the column is `JSONB`. A base definition from another IG is handled by the extra dependencies the operator names in `package.json`, and the upgrade guide explains when to use them (clarification 2026-11-04).
+- [x] CHK031 - Is the behaviour defined when the generated export package's name and version collide with a package that is already stored? [Edge Case, Gap, Contract export-script §Output]
+  - **Review (satisfied, 2026-11-04)**: FR-014 now requires the export to fail, before writing anything, when a package it would generate is already stored. It names the clash and tells the operator to choose another name or version (clarification 2026-11-04). Implemented and tested in PR #35.
 - [x] CHK032 - Is the behaviour defined for an export run against a database with no custom profiles, and is it stated that the upgrade then needs no export? [Edge Case, Spec §FR-015a, Contract export-script §Exit codes]
   - **Review (satisfied)**: The contract's exit code 0 covers the case: no custom profiles found, nothing written, and a line says so. FR-015a makes the export step mandatory only for operators who have registered profiles, and requires a way to check whether they do (`--check`).
 
@@ -150,4 +150,14 @@ reviewed.
   - CHK039 (1.2.0 image as a dependency)
 - **These need a decision first**: CHK030 (export edge cases: unsupported `fhir_version`, JSON that
   doesn't parse) and CHK031 (package name collision).
+
+## Re-review (2026-11-04)
+
+- **Scope**: items affected by the spec clarification session of 2026-11-04 (PR #34), the only spec change since
+  the first review. The other open items were checked again: the spec hasn't changed in their areas, so they stay
+  open.
+- **Newly satisfied (5)**: CHK003, CHK015, CHK019, CHK030, CHK031.
+- **Result**: 28 satisfied, 12 open (was 23 / 17).
+- **Still open, wording only, no decision needed**: CHK002, CHK005, CHK006, CHK007, CHK012, CHK024, CHK025,
+  CHK026, CHK029, CHK036, CHK037, CHK039.
 
