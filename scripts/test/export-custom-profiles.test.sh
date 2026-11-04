@@ -69,6 +69,35 @@ if "$SCRIPT" --out "$WORK/out" > /dev/null 2>&1; then fail "second export into t
 code=0; "$SCRIPT" --out "$WORK/out" > /dev/null 2>&1 || code=$?
 [ "$code" = 1 ] || fail "existing output should exit 1, got $code"
 
+# a generated package that is already stored: refuse before writing anything (FR-014, clarification Q2)
+psql -X -q -v ON_ERROR_STOP=1 > /dev/null <<SQL
+INSERT INTO fhir_validator_schema.fhir_implementation_guides (ig_package_id, ig_package_version, ig_package_meta, content_raw)
+VALUES ('local.custom.profiles.r4', '1.0.0', '{}', '\x00');
+SQL
+code=0; err=$("$SCRIPT" --out "$WORK/clash" 2>&1 > /dev/null) || code=$?
+[ "$code" = 1 ] || fail "an already stored package should exit 1, got $code"
+case "$err" in *"local.custom.profiles.r4#1.0.0"*) ;; *) fail "clash message should name the package: $err" ;; esac
+case "$err" in *"--package-version"*) ;; *) fail "clash message should suggest --name or --package-version: $err" ;; esac
+[ -z "$(ls "$WORK/clash" 2>/dev/null)" ] || fail "nothing must be written when a package is already stored"
+"$SCRIPT" --out "$WORK/clash-ok" --package-version 1.0.1 > /dev/null || fail "a different --package-version should succeed"
+[ -f "$WORK/clash-ok/local.custom.profiles.r4-1.0.1.tgz" ] || fail "missing r4 archive with --package-version 1.0.1"
+psql -X -q -c "DELETE FROM fhir_validator_schema.fhir_implementation_guides" > /dev/null
+
+# profiles stored under an unsupported FHIR version: kept as raw files, not packaged, warned about (FR-014, Q1)
+psql -X -q -v ON_ERROR_STOP=1 > /dev/null <<SQL
+INSERT INTO fhir_validator_schema.fhir_profiles (url, profile_json, fhir_version, modified_at) VALUES
+ ('http://ex.org/r6', '$(sd http://ex.org/r6 6.0.0)', '6.0.0', now());
+SQL
+code=0; err=$("$SCRIPT" --out "$WORK/unsupported" 2>&1 > /dev/null) || code=$?
+[ "$code" = 0 ] || fail "unsupported FHIR versions must not fail the export, got $code: $err"
+stored=$(psql -X -At -c "SELECT profile_json::text FROM fhir_validator_schema.fhir_profiles WHERE url = 'http://ex.org/r6'")
+[ "$(cat "$WORK/unsupported/unsupported-6.0.0/StructureDefinition-1.json")" = "$stored" ] \
+  || fail "unsupported-6.0.0/StructureDefinition-1.json is not the stored document"
+! ls "$WORK/unsupported"/*6.0.0*.tgz > /dev/null 2>&1 || fail "no package may be generated for 6.0.0"
+[ -f "$WORK/unsupported/local.custom.profiles.r4-1.0.0.tgz" ] || fail "supported versions must still be packaged"
+case "$err" in *"1 profile(s)"*"6.0.0"*) ;; *) fail "expected a warning with the count: $err" ;; esac
+psql -X -q -c "DELETE FROM fhir_validator_schema.fhir_profiles WHERE fhir_version = '6.0.0'" > /dev/null
+
 # empty table: nothing written, exit 0
 psql -X -q -c "DELETE FROM fhir_validator_schema.fhir_profiles" > /dev/null
 out=$("$SCRIPT" --out "$WORK/empty")

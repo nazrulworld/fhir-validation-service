@@ -12,7 +12,7 @@
 #   scripts/export-custom-profiles.sh --check
 #   scripts/export-custom-profiles.sh [--out DIR] [--name NAME] [--package-version VER] [--dependency NAME#VERSION]...
 #
-# Exit codes: 0 success (including "no custom profiles"), 1 bad arguments or existing output,
+# Exit codes: 0 success (including "no custom profiles"), 1 bad arguments, existing output or a stored package clash,
 #             2 database error (partial output removed), 3 fhir_profiles does not exist (already upgraded).
 #
 # Contract: specs/003-ig-only-profile-resolution/contracts/export-script.md
@@ -93,6 +93,25 @@ fi
 if [ "$total" = 0 ]; then
   echo "No custom profiles found; nothing to export. You can upgrade without exporting."
   exit 0
+fi
+
+# Refuse before writing anything if a package this export would generate is already stored: uploading it would
+# replace that package without warning (FR-014).
+pairs=""
+for fv in $(q "SELECT DISTINCT fhir_version FROM $SCHEMA.fhir_profiles ORDER BY 1") ; do
+  case "$fv" in
+    3.0.2) rel=stu3 ;; 4.0.1) rel=r4 ;; 4.3.0) rel=r4b ;; 5.0.0) rel=r5 ;;
+    *) continue ;;
+  esac
+  pairs="$pairs${pairs:+, }('$NAME.$rel', '$PKG_VERSION')"
+done
+if [ -n "$pairs" ]; then
+  clashes=$(q "SELECT ig_package_id || '#' || ig_package_version FROM $SCHEMA.fhir_implementation_guides
+               WHERE (ig_package_id, ig_package_version) IN ($pairs) ORDER BY 1") || die 2 "database query failed"
+  for c in $clashes; do
+    echo "export-custom-profiles: Package $c is already stored; uploading the export would replace it." >&2
+  done
+  [ -z "$clashes" ] || die 1 "Choose another --name or --package-version"
 fi
 
 mkdir -p "$OUT" || die 1 "cannot create output directory $OUT"

@@ -62,12 +62,20 @@ Each `StructureDefinition-<n>.json` holds `profile_json::text` exactly as stored
 It also writes `DIR/MANIFEST.txt` with the lines `<archive> <url>`, so the operator can compare the
 contents with the `--check` counts.
 
+Profiles stored under any other `fhir_version` (one 2.0.0 doesn't support, such as a leftover `6.0.0`) are not
+packaged. They are written as raw `DIR/unsupported-<version>/StructureDefinition-<n>.json` files, in `url` order,
+with `profile_json::text` exactly as stored. A warning on stderr gives their count, and the export still exits 0.
+
+Before anything is written, the script checks `fhir_implementation_guides` for every package it would generate
+(`<name>.<rel>#<VER>`). If one is already stored, it names it on stderr and exits 1 without writing anything, because
+uploading the export would replace that package without warning. Choose another `--name` or `--package-version`.
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success. This includes "no custom profiles found", in which case nothing is written and a line says so |
-| 1 | Bad arguments, or the output already exists |
+| 1 | Bad arguments, the output already exists, or a package the export would generate is already stored |
 | 2 | Database connection or query failed. Any partial output is removed |
 | 3 | The table `fhir_profiles` doesn't exist: the database was already upgraded, so it's too late to export |
 
