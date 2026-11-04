@@ -58,6 +58,9 @@ URL. Check that the manifest has as many lines as `--check` reported.
   version (default `1.0.0`).
 - Profiles stored under a FHIR version 2.0.0 does not support are written unpackaged to `unsupported-<version>/`, and
   a warning is printed.
+- If a package the export would generate (for example `local.custom.profiles.r4#1.0.0`) is already stored, the export
+  stops with exit code 1 and writes nothing. Uploading a package with an existing name and version replaces the stored
+  one without warning, so choose another `--name` or `--package-version` and run the export again.
 - Exit code 3 means `fhir_profiles` no longer exists: the database was already upgraded. Restore the backup (step 8)
   to get the profiles back.
 

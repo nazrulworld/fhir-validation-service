@@ -353,3 +353,31 @@ Task: "T049 [US4] scripts/export-custom-profiles.sh"
 - [X] T065 Remove the leftovers of snapshot reassembly from `src/main/java/nzi/fhir/validator/core/validator/ValidatorSnapshot.java`: the `reusableSupports` field, constructor parameter and `reusableSupports()` accessor (nothing calls it, and its Javadoc still mentions "a re-assembled snapshot"), and the never-read `instanceValidator` field. Update the call in `src/main/java/nzi/fhir/validator/core/validator/SnapshotBuilder.java` `assembleWith` and any test that builds a `ValidatorSnapshot` directly (for example `ConcurrencyIT`, `ValidatorSnapshotProfileResolutionTest`) per FR-010, T033/T034 (partial)
 - [X] T066 Reword the "Profile-only change (or nothing new): no rebuild needed." comment in `ValidatorRegistry.apply` in `src/main/java/nzi/fhir/validator/core/validator/ValidatorRegistry.java` to "Same resolved package set (nothing new): no rebuild needed.", because the PROFILE change kind no longer exists, per FR-010, T035 (partial)
 - [X] T067 Extend `src/test/java/nzi/fhir/validator/web/ObservabilityIT.java`: send one `POST /R4/validate?profile=http://example.org/StructureDefinition/typo` with a valid Patient, expect 400 `unknown-profile`, then scrape `/metrics` and assert that a `fv_validations_total{outcome="unknown_profile",version="R4"}` series exists, per T026, plan: Principle VII (partial)
+
+## Phase 10: Convergence
+
+- [X] T068 Add a test case to `scripts/test/export-custom-profiles.test.sh`, written before T069: insert a row for `local.custom.profiles.r4#1.0.0` into `fhir_validator_schema.fhir_implementation_guides`, run the export into a fresh `--out`, and assert:
+  - exit code 1, with a message naming `local.custom.profiles.r4#1.0.0` and suggesting `--name` or `--package-version`;
+  - nothing written (no `.tgz`, no `MANIFEST.txt`);
+  - a rerun with `--package-version 1.0.1` succeeds.
+
+  Run it before T069 and confirm it fails; per FR-014 (clarification 2026-11-04 Q2), Constitution V (missing)
+- [X] T069 In `scripts/export-custom-profiles.sh`, after the `total = 0` check and before creating `--out`:
+  - for every supported FHIR version that has profiles, build the `<name>.<rel>#<package-version>` it would generate;
+  - query `$SCHEMA.fhir_implementation_guides` (`ig_package_id`, `ig_package_version`) for those pairs;
+  - if any is already stored, exit 1 with "Package <name>#<version> is already stored; uploading the export would replace it. Choose another --name or --package-version", writing nothing;
+  - a failed query exits 2.
+
+  Per FR-014 (clarification 2026-11-04 Q2) (missing)
+- [X] T070 Add a test case to `scripts/test/export-custom-profiles.test.sh` for profiles stored under an unsupported FHIR version. Insert one row with `fhir_version = '6.0.0'` next to the supported rows, then assert:
+  - the export exits 0;
+  - it writes `unsupported-6.0.0/StructureDefinition-1.json`, with text equal to the stored `profile_json`;
+  - no `.tgz` is generated for 6.0.0;
+  - stderr warns with the count.
+
+  Per FR-014 (clarification 2026-11-04 Q1) (partial)
+- [X] T071 Document the export's clash check and its unsupported-version output:
+  - in `docs/upgrade-2.0.md` (export step), add a bullet for the clash check (exit 1, choose another `--name` or `--package-version`, because uploading a package with an existing name and version replaces it without warning);
+  - in `specs/003-ig-only-profile-resolution/contracts/export-script.md`, add both behaviours under Output and Exit codes (code 1 also covers "a generated package is already stored").
+
+  Per FR-014 (clarification 2026-11-04 Q1, Q2), plan: contracts (partial)
