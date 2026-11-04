@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - 2026-11-03
+## [2.0.0] - 2026-11-04
 
 A breaking release. Profiles now come only from included IG packages, the same model as the HL7
 validator CLI's `-ig` and `-profile`. Custom profile registration is removed.
