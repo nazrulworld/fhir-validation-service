@@ -122,6 +122,9 @@ resource as valid, and that both name the made-up URL.
    today, and the profile is not listed as applied.
 6. **Given** any validation request, **When** the response lists the applied profiles, **Then** every
    listed profile was actually resolved and applied, and no unresolved URL appears in that list.
+7. **Given** a request that names more than 10 distinct profiles, or one profile URL longer than 1024
+   characters, **When** it is sent, **Then** it is rejected as an invalid request before any profile is
+   looked up, and the rejected URLs are not echoed back (FR-006a).
 
 ---
 
@@ -151,8 +154,8 @@ on the web but in no stored package. Observe network traffic throughout.
    **When** a consumer names it, **Then** it is reported as unresolved, and the service makes no
    outbound request for it.
 4. **Given** a newly included package defines profile P, **When** the inclusion has taken effect,
-   **Then** P can be named on every instance of the service, within the propagation window already
-   guaranteed for IG changes.
+   **Then** P can be named on every instance of the service within 10 seconds, the propagation window
+   already guaranteed for IG changes (`001-service-hardening` SC-002).
 5. **Given** a package is replaced by another version of itself, **When** the change has taken effect,
    **Then** profiles resolve from the new version only.
 
@@ -183,6 +186,10 @@ include it, and validate against the profile.
 4. **Given** the service's metrics, health report and documentation, **When** an operator reviews them,
    **Then** nothing refers to custom profile registration, counts of registered profiles, or profile
    changes as a separate kind of configuration change.
+5. **Given** the remaining administrative operations (uploading or registering a package, including an
+   IG), **When** they are called without an administrator key, or while the instance's admission limit
+   is full, **Then** they are refused exactly as before the upgrade, and the removed operation takes no
+   admission slot (FR-012).
 
 ---
 
@@ -213,6 +220,13 @@ profiles exactly as it did before the upgrade.
 3. **Given** the changelog and upgrade guide, **When** an operator reads them before upgrading, **Then**
    the export-before-upgrade step is stated prominently as mandatory for anyone with registered
    profiles, together with how to check whether any exist.
+4. **Given** an upgraded database and the full backup taken before the upgrade, **When** the operator
+   needs to go back to 1.x, **Then** restoring that backup into a database and starting 1.2.0 on it
+   gives the pre-upgrade profiles and results, and the upgrade guide says this is the only supported
+   way back (FR-015b).
+5. **Given** a fleet of 1.x instances on one database, **When** the operator follows the upgrade guide,
+   **Then** every 1.x instance is stopped before the first 2.0 instance starts, and the guide says that
+   the rolling-restart procedure must not be used for this upgrade (FR-015c).
 
 ---
 
@@ -273,7 +287,13 @@ profiles exactly as it did before the upgrade.
   MUST NOT perform any validation, and MUST NOT return a validation result. The unresolved URLs are
   data the client supplied, so they may be echoed back. Internal causes stay in the log. The response
   is always in the standard problem-details format, whatever response format the client asked for:
-  an OperationOutcome is never returned for this error.
+  an OperationOutcome is never returned for this error. The unresolved URLs MUST appear only as JSON
+  string values in that response, never in a header or unescaped, and MUST be logged at DEBUG level
+  only, never higher; their length is already bounded by FR-006a. A request's checks run in this order,
+  and the first failure wins: the request shape (FHIR version, content type, accepted response
+  format, the FR-006a profile limits, an empty body), then validator readiness and overload, then
+  parsing the body as FHIR, then the Bundle entry limit, then unresolved requested profiles, and only
+  then validation.
 - **FR-006a**: A validation request MUST name at most **10** distinct profiles, and each profile URL MUST
   be at most **1024** characters. A request over either limit MUST be rejected as a client error
   (HTTP 400, `invalid-request`) before any lookup or validation. Both limits are fixed, not
@@ -281,8 +301,8 @@ profiles exactly as it did before the upgrade.
 - **FR-007**: The list of applied profiles in a validation response MUST contain only the profiles that
   were resolved and applied, whether they were requested or declared in the resource. Each appears once,
   in a fixed order: requested profiles in the order the client named them, then declared profiles in the
-  order the resource lists them. A requested profile that the validator checks against a Bundle entry rather than the Bundle itself
-  counts as applied.
+  order the resource lists them. A requested profile that the validator checks against a Bundle entry
+  rather than the Bundle itself counts as applied.
 - **FR-008**: An unknown profile declared inside the resource MUST keep being reported as an error issue
   in the validation result (the request still completes), and MUST NOT be listed as applied.
 
@@ -290,13 +310,19 @@ profiles exactly as it did before the upgrade.
 
 - **FR-009**: The profile registration operation MUST be removed from the service and from the published
   API description for every FHIR version. Calls to its former address MUST be answered as an unknown
-  route.
+  route (404), not as 410 Gone: the service keeps no record of removed routes, every other unknown
+  address already answers 404, and clients migrating from 1.x learn about the removal from the
+  changelog and upgrade guide (FR-016), not from the status code.
 - **FR-010**: Everything that exists only to support registered custom profiles MUST be removed: storing
   them, keeping them in memory, serving them to the validator, propagating them between instances,
   treating them as their own kind of configuration change, and counting them in metrics.
+- **FR-010a**: Observability MUST follow the removal. The metric counting registered profiles MUST be
+  removed. The readiness reason for profile changes that couldn't be applied MUST be removed. A request
+  rejected for an unresolved requested profile MUST be counted in the validation metrics under its own
+  outcome, `unknown_profile`, not as a server error.
 - **FR-011**: Removing profile registration MUST NOT weaken the guarantees for IG changes. Including,
   replacing or removing an IG MUST still take effect on every instance within the existing propagation
-  window, and validation MUST still never wait on the database or the network.
+  window of 10 seconds (`001-service-hardening` SC-002), and validation MUST still never wait on the database or the network.
 - **FR-012**: The administrative-operation rules (administrator key, per-instance admission limits) MUST
   continue to cover every remaining administrative operation, and MUST NOT refer to the removed one.
 
@@ -315,7 +341,8 @@ profiles exactly as it did before the upgrade.
   If an IG package with the same name and version as a package the export would generate is already
   stored, the export MUST fail before writing anything. It names the clash and tells the operator to
   choose another package name or version, because an upload would otherwise replace the stored
-  package without warning.
+  package without warning. The export MUST take database credentials only from the environment or the
+  standard PostgreSQL password file, never as a command-line argument.
 - **FR-015**: The upgrade to this release MUST permanently remove the stored custom profile data and the
   storage that existed only for it, through a versioned schema migration. It MUST NOT remove or alter
   IG packages, included-IG configuration, configuration revisions or API keys. The migration runs
@@ -333,7 +360,9 @@ profiles exactly as it did before the upgrade.
 - **FR-016**: The release MUST be marked as a breaking change, under a new major version, with a
   changelog entry and upgrade guidance that cover: the removed operation, the "package it as an IG,
   upload it, include it" replacement, the changed handling of unresolved requested profiles, the
-  corrected applied-profiles list, and the export step.
+  corrected applied-profiles list, the export step, and the observability changes from FR-010a (the
+  removed profile-count metric, the new `unknown_profile` outcome and the removed readiness reason), so
+  operators can update their dashboards and alerts.
 - **FR-017**: User-facing documentation (README, upgrade guide, configuration examples) and helper
   scripts MUST no longer describe or use profile registration, and MUST describe profiles as coming from
   included IGs.
@@ -373,8 +402,9 @@ profiles exactly as it did before the upgrade.
 - **SC-003**: 100% of validation responses list only profiles that were actually applied.
 - **SC-004**: Validating the same resource with the same requested profiles against the same included
   package set gives identical results online and offline, and on every instance.
-- **SC-005**: A profile from a newly included IG is usable on every instance within the propagation
-  window already guaranteed for IG changes. This feature causes no regression.
+- **SC-005**: A profile from a newly included IG is usable on every instance within 10 seconds, the
+  propagation window already guaranteed for IG changes (`001-service-hardening` SC-002). This feature
+  causes no regression.
 - **SC-006**: For warm single-resource validation of the dk Patient fixture with one requested profile,
   p95 latency on this release is within **+5%** of 1.2.0 on the same host and workload, and stays
   **under 200 ms**. Steady-state heap after warm-up is no higher than 1.2.0's. Removing the custom
@@ -382,7 +412,9 @@ profiles exactly as it did before the upgrade.
 - **SC-007**: An operator with registered profiles from the previous release can follow the upgrade
   guide to export them before upgrading, upgrade, upload and include the exported packages, and get the same
   validation results as before the upgrade, in under 30 minutes for a typical set of up to 50 profiles.
-  The upgrade rehearsal covers this path.
+  A typical set may span several FHIR versions and may include profiles based on another IG's
+  profiles, provided the operator names that IG as a dependency when exporting. The upgrade rehearsal
+  covers this path.
 - **SC-008**: The published API description, documentation, metrics and health report contain 0
   references to custom profile registration.
 
@@ -415,4 +447,9 @@ profiles exactly as it did before the upgrade.
   constitution needs a wording amendment (PATCH), recorded in the plan.
 - **Unchanged guarantees:** cross-instance propagation, administrator authentication, admission limits,
   error format and the supported FHIR versions (STU3, R4, R4B, R5) are unchanged.
+- **R4 stands for every version and format:** the scenarios use R4 and JSON as examples. Every
+  profile-resolution rule applies the same way to STU3, R4, R4B and R5, and to XML request bodies.
+- **Upgrade rehearsal depends on the published 1.2.0 image:** the 2.0 upgrade rehearsal starts from
+  the released 1.2.0 container image (`ghcr.io/nazrulworld/fhir-validation-service:1.2.0`), so that
+  image must stay available in the registry.
 - **The audit trail stays deferred**, as decided in `001-service-hardening`.
