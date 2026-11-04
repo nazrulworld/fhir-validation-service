@@ -14,18 +14,18 @@ reviewed.
 
 - [x] CHK001 - Does the spec define the response for an unresolved requested profile when the client asked for a FHIR `OperationOutcome` (`Accept: application/fhir+json` or `+xml`)? Only the contract says "problem JSON regardless of Accept". [Gap, Spec §FR-006, Contract http-api §New 400 case]
   - **Review (satisfied)**: FR-006 now says the response is always problem details, whatever the client asked for, and never an OperationOutcome (clarification Q7).
-- [ ] CHK002 - Is the order of failure checks (request shape, readiness, parse, Bundle size, unresolved profile) stated as a requirement in the spec, or only in the contract? [Gap, Spec §FR-006, Contract http-api §Precedence]
-  - **Review (open)**: Mostly in the spec: the Assumptions put `invalid-request` with the request-shape checks and `unknown-profile` after readiness and parse, and an edge case puts readiness before lookup. Where the Bundle-size (413) check falls relative to `unknown-profile` is stated only in the contract's precedence list. Add it to FR-006 or the Assumptions.
+- [x] CHK002 - Is the order of failure checks (request shape, readiness, parse, Bundle size, unresolved profile) stated as a requirement in the spec, or only in the contract? [Gap, Spec §FR-006, Contract http-api §Precedence]
+  - **Review (satisfied, 2026-11-04 second pass)**: FR-006 now gives the full order of checks, where the first failure wins: request shape (including the FR-006a limits and an empty body), readiness and overload, parsing, the Bundle entry limit, unresolved profiles, then validation.
 - [x] CHK003 - Is there a requirement for the order of `appliedProfiles` (requested first, then declared), or does FR-007 only require de-duplication? [Completeness, Spec §FR-007, Data-model §appliedProfiles]
   - **Review (satisfied, 2026-11-04)**: FR-007 now sets a fixed order: requested profiles in the order the client named them, then declared profiles in the order the resource lists them, each once (clarification 2026-11-04). This matches the contract and data-model.
 - [x] CHK004 - Do the requirements state an upper bound on the number of requested profiles or the length of a profile URL, given that unresolved URLs are echoed back and constitution Principle VI forbids unbounded inputs? [Gap, Spec §FR-006]
   - **Review (satisfied)**: FR-006a: at most 10 distinct profiles, each at most 1024 characters, fixed limits, 400 `invalid-request` before any lookup.
-- [ ] CHK005 - Is it specified whether the removed operation answers "not found" or "gone", and is the choice justified for clients migrating from 1.x? [Completeness, Spec §FR-009, Contract http-api §Removed]
-  - **Review (open)**: FR-009 and US3/AC1 choose "unknown route", and the contract makes that 404 `not-found`. No document explains why 404 was chosen over 410 Gone for clients moving from 1.x. Add one sentence of reasoning.
-- [ ] CHK006 - Are requirements defined for the observability side effects: the removed profile-count metric, the new `unknown_profile` outcome label, and the removed "profile changes could not be applied" readiness reason? [Gap, Spec §FR-010, Plan §Constitution VII]
-  - **Review (open)**: FR-010 and US3/AC4 cover removing the profile-count metric and the profile wording in the health report. The new `unknown_profile` outcome label appears only in the plan (Principle VII) and the contract, with no FR.
-- [ ] CHK007 - Do the requirements state that the upgrade guide and changelog must tell operators about the removed metric and health reason, so dashboards and alerts can be updated? [Gap, Spec §FR-016]
-  - **Review (open)**: FR-016 lists what the changelog and upgrade guide must cover, but not the removed `fv_profile_count` metric, the new `unknown_profile` label or the removed readiness reason. The shipped docs/upgrade-2.0.md and CHANGELOG do cover them, so only the requirement is missing.
+- [x] CHK005 - Is it specified whether the removed operation answers "not found" or "gone", and is the choice justified for clients migrating from 1.x? [Completeness, Spec §FR-009, Contract http-api §Removed]
+  - **Review (satisfied, 2026-11-04 second pass)**: FR-009 now says 404 rather than 410 Gone and explains why. The service keeps no record of removed routes, other unknown addresses already answer 404, and migrating clients learn of the removal from the changelog and upgrade guide.
+- [x] CHK006 - Are requirements defined for the observability side effects: the removed profile-count metric, the new `unknown_profile` outcome label, and the removed "profile changes could not be applied" readiness reason? [Gap, Spec §FR-010, Plan §Constitution VII]
+  - **Review (satisfied, 2026-11-04 second pass)**: The new FR-010a covers all three changes: the profile-count metric is removed, the profile readiness reason is removed, and an unresolved profile is counted as `unknown_profile`, not as a server error.
+- [x] CHK007 - Do the requirements state that the upgrade guide and changelog must tell operators about the removed metric and health reason, so dashboards and alerts can be updated? [Gap, Spec §FR-016]
+  - **Review (satisfied, 2026-11-04 second pass)**: FR-016 now requires the changelog and upgrade guide to cover the FR-010a changes, so operators can update dashboards and alerts.
 - [x] CHK008 - Is the constitution wording amendment (Principle II no longer naming profiles or profile stores) captured as a deliverable, or is it only an assumption? [Completeness, Spec §Assumptions, Plan §Constitution II]
   - **Review (satisfied)**: The spec lists it as an assumption. The plan's Constitution Check (II) turns it into a PATCH deliverable (1.0.2), and T058 delivered it.
 
@@ -37,8 +37,8 @@ reviewed.
   - **Review (satisfied)**: The spec requires a deterministic choice and leaves the rule to planning. The data-model ("Duplicate canonical across packages") and research R3 state it as core first, then the last package in the sorted resolved list, so it can be reviewed.
 - [x] CHK011 - Is "handled the way the reference validator handles it", for a requested URL that names a non-profile definition (an extension or a logical model), specific enough to test? [Ambiguity, Spec §Edge Cases]
   - **Review (satisfied)**: The edge case now says such a URL counts as resolved and is validated, and the validator's issues are returned in a completed validation. It is never skipped and never unresolved, which can be tested (`ProfileResolutionIT` (j)).
-- [ ] CHK012 - Is "the propagation window already guaranteed for IG changes" tied to a concrete value or a cited requirement from `001-service-hardening`? [Clarity, Spec §US2-4, Spec §SC-005]
-  - **Review (open)**: Neither the spec nor the plan gives a value or a citation. The guarantee comes from 001-service-hardening FR ("within 10 seconds", SC-002). Cite 001 SC-002 in US2/AC4, SC-005 and FR-011.
+- [x] CHK012 - Is "the propagation window already guaranteed for IG changes" tied to a concrete value or a cited requirement from `001-service-hardening`? [Clarity, Spec §US2-4, Spec §SC-005]
+  - **Review (satisfied, 2026-11-04 second pass)**: US2/AC4, FR-011 and SC-005 now say "within 10 seconds" and cite `001-service-hardening` SC-002.
 - [x] CHK013 - Is "typical validation latency and memory use don't get worse" quantified with a baseline, a workload and a tolerance? [Measurability, Spec §SC-006]
   - **Review (satisfied)**: SC-006 gives a baseline (1.2.0), a workload (warm dk Patient with one profile, same host) and tolerances (p95 within +5% and under 200 ms, heap no higher).
 - [x] CHK014 - Is "prominently", in the requirement that the export-before-upgrade step be stated prominently, defined, for example as the first section of the guide and the first entry of the changelog? [Ambiguity, Spec §US4-3, Spec §FR-015a]
@@ -67,21 +67,21 @@ reviewed.
   - **Review (satisfied)**: SC-002 says to verify "with outbound traffic blocked or monitored during the test run". The plan and T020 use a monitored local HTTP server and expect 0 hits.
 - [x] CHK023 - Is SC-001's "today at least one such case returns valid" baseline documented with the exact case, so the improvement can be checked? [Measurability, Spec §SC-001]
   - **Review (satisfied)**: The Context section and report finding #1 describe the case: several profiles requested, one unknown, and the resource comes back valid. The US1 Independent Test reproduces it.
-- [ ] CHK024 - Does SC-007 define a "typical set of up to 50 profiles", including whether profiles derived from IG profiles with dependencies are part of it? [Clarity, Spec §SC-007]
-  - **Review (open)**: SC-007 doesn't define a "typical set", for example whether it includes profiles based on IG profiles that need `--dependency`.
+- [x] CHK024 - Does SC-007 define a "typical set of up to 50 profiles", including whether profiles derived from IG profiles with dependencies are part of it? [Clarity, Spec §SC-007]
+  - **Review (satisfied, 2026-11-04 second pass)**: SC-007 now says a typical set may span several FHIR versions and may include profiles based on another IG's profiles, as long as that IG is named as a dependency at export.
 - [ ] CHK025 - Does every functional requirement from FR-001 to FR-018 map to at least one acceptance scenario or success criterion? In particular FR-012 (admin rules) and FR-017 (documentation). [Traceability, Spec §Requirements]
-  - **Review (open)**: Some FRs have no acceptance scenario or success criterion: FR-012 (admin key and admission rules), FR-015b (backup and rollback only by restore), FR-015c (stop every 1.x instance, no rolling restart) and FR-006a (only an edge case). FR-017 is covered by US3/AC4 and SC-008.
+  - **Review (open, 2026-11-04 second pass)**: Mostly closed: new scenarios cover FR-006a (US1/AC7), FR-012 (US3/AC5), FR-015b (US4/AC4) and FR-015c (US4/AC5), and US3/AC4 and SC-008 cover FR-017. The FR-010a added in the same edit has no scenario or success criterion for the `unknown_profile` outcome. US3/AC4 covers only the removals. Add a clause to US1/AC3, for example "and the request is counted under the `unknown_profile` outcome", or a scenario under US3.
 
 ## Scenario Coverage
 
-- [ ] CHK026 - Do the acceptance scenarios cover FHIR versions other than R4 (STU3, R4B, R5), or is it stated that R4 stands for all of them? [Coverage, Spec §US1, Spec §US2]
-  - **Review (open)**: Every scenario uses R4. The FRs are written per FHIR version, and the Assumptions keep STU3/R4/R4B/R5, but nothing says R4 stands for all of them. Add one sentence.
+- [x] CHK026 - Do the acceptance scenarios cover FHIR versions other than R4 (STU3, R4B, R5), or is it stated that R4 stands for all of them? [Coverage, Spec §US1, Spec §US2]
+  - **Review (satisfied, 2026-11-04 second pass)**: A new Assumptions bullet says the scenarios use R4 as an example, and every profile-resolution rule applies the same way to STU3, R4, R4B and R5.
 - [x] CHK027 - Are requirements defined for a request that combines an unresolved requested profile with an unknown `meta.profile`, so it's clear which wins? [Coverage, Spec §FR-006, Spec §FR-008]
   - **Review (satisfied)**: FR-006 forbids any validation when a requested profile is unresolved, and an unknown `meta.profile` is reported only by validation, so the 400 `unknown-profile` comes first.
 - [x] CHK028 - Are requirements defined for removing or replacing an included IG whose profiles clients are still requesting, so it's clear that later requests get the unresolved error? [Coverage, Spec §US2-5]
   - **Review (satisfied)**: US2/AC5 covers replacement, and FR-004 with FR-011 covers removal ("Including, replacing or removing an IG"), so later requests get FR-006.
-- [ ] CHK029 - Are XML request bodies covered by the profile-resolution requirements in the same way as JSON? [Coverage, Gap]
-  - **Review (open)**: None of the profile-resolution FRs or scenarios mention the request format. XML is handled by the same code path, but the spec should say that the rules apply equally to JSON and XML bodies.
+- [x] CHK029 - Are XML request bodies covered by the profile-resolution requirements in the same way as JSON? [Coverage, Gap]
+  - **Review (satisfied, 2026-11-04 second pass)**: The same Assumptions bullet says the rules apply the same way to XML request bodies as to JSON.
 
 ## Edge Case Coverage
 
@@ -100,17 +100,17 @@ reviewed.
   - **Review (satisfied)**: FR-015 and clarification Q4: no safety gate. The risk is accepted explicitly, and the FR-015a warning is the only safeguard.
 - [x] CHK035 - Are requirements defined for a rolling upgrade with mixed 1.x and 2.0 instances? The data model says it's unsupported after V6, but the spec doesn't say so. [Gap, Spec §FR-011, Data-model §Change notifications]
   - **Review (satisfied)**: FR-015c and clarification Q8: a mixed 1.x/2.0 fleet is unsupported, every 1.x instance must stop first, and the rolling-restart procedure must not be used.
-- [ ] CHK036 - Are the security requirements for echoing client-supplied URLs in error responses and logs stated: a length limit, no reflection beyond JSON string values, and the log level? [Gap, Security, Spec §FR-006]
-  - **Review (open)**: FR-006a limits the length and FR-006 allows echoing client data while keeping internal causes in the log. The log level (DEBUG, plan Principle VII) and the rule that URLs are echoed only as JSON string values aren't stated in the spec.
-- [ ] CHK037 - Is the export script's credential handling (environment or `.pgpass` only, nothing on the command line) a requirement in the spec, or only in the contract? [Completeness, Security, Contract export-script §Connection]
-  - **Review (open)**: Only the export contract ("Passwords are never accepted as arguments") and the plan's Security row state this. FR-014 has no credential-handling requirement.
+- [x] CHK036 - Are the security requirements for echoing client-supplied URLs in error responses and logs stated: a length limit, no reflection beyond JSON string values, and the log level? [Gap, Security, Spec §FR-006]
+  - **Review (satisfied, 2026-11-04 second pass)**: FR-006 now says unresolved URLs appear only as JSON string values in the response, never in a header or unescaped, and are logged at DEBUG only. FR-006a bounds their length.
+- [x] CHK037 - Is the export script's credential handling (environment or `.pgpass` only, nothing on the command line) a requirement in the spec, or only in the contract? [Completeness, Security, Contract export-script §Connection]
+  - **Review (satisfied, 2026-11-04 second pass)**: FR-014 now requires the export to take credentials only from the environment or the PostgreSQL password file, never as a command-line argument.
 
 ## Dependencies and Assumptions
 
 - [x] CHK038 - Is the assumption that validation never reaches the network checked against every configuration path, not just the default validator wiring? For example, a future terminology server or a resource fetcher. [Assumption, Spec §FR-002, Research §R1]
   - **Review (satisfied)**: FR-002 applies to every path, not just the default wiring. Research R1 lists every support in the chain, all in-memory. There is no configurable terminology server or resource fetcher in `src/main`, and the T020 no-network test fails if one is added.
-- [ ] CHK039 - Is the dependency on a published 1.2.0 container image, which the upgrade rehearsal needs, documented as an assumption? [Dependency, Gap, Plan §Phase 4]
-  - **Review (open)**: The 1.2.0 image (`ghcr.io/nazrulworld/fhir-validation-service:1.2.0`) is named only inside task T050 and the rehearsal script. It isn't recorded as a dependency or assumption in the spec or the plan.
+- [x] CHK039 - Is the dependency on a published 1.2.0 container image, which the upgrade rehearsal needs, documented as an assumption? [Dependency, Gap, Plan §Phase 4]
+  - **Review (satisfied, 2026-11-04 second pass)**: A new Assumptions bullet records that the 2.0 upgrade rehearsal depends on the published 1.2.0 image (`ghcr.io/nazrulworld/fhir-validation-service:1.2.0`) staying in the registry.
 - [x] CHK040 - Is the decision to leave CLI-parity items #4–#8 out of scope recorded with enough reasoning that reviewers won't treat their absence as a defect? [Assumption, Spec §Assumptions]
   - **Review (satisfied)**: The Assumptions list findings #4–#8 as out of scope, keep the existing behaviour, and send any change to a separate feature, so their absence isn't a defect.
 
@@ -160,4 +160,12 @@ reviewed.
 - **Result**: 28 satisfied, 12 open (was 23 / 17).
 - **Still open, wording only, no decision needed**: CHK002, CHK005, CHK006, CHK007, CHK012, CHK024, CHK025,
   CHK026, CHK029, CHK036, CHK037, CHK039.
+
+## Re-review (2026-11-04, second pass)
+
+- **Scope**: the 12 items that were still open, judged against the spec wording added in PR #37.
+- **Newly satisfied (11)**: CHK002, CHK005, CHK006, CHK007, CHK012, CHK024, CHK026, CHK029, CHK036, CHK037, CHK039.
+- **Still open (1)**: CHK025. FR-010a, added in PR #37, has no acceptance scenario or success criterion for
+  the `unknown_profile` outcome. One clause in US1/AC3 would close it.
+- **Result**: 39 satisfied, 1 open (was 28 / 12).
 
