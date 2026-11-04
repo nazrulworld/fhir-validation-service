@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-27
 
-**Status**: Draft
+**Status**: Implemented (released in v1.2.0, 2026-10-28)
 
 **Input**: User description: "I want to implement PolyForm Noncommercial 1.0.0 LICENSE for this project"
 

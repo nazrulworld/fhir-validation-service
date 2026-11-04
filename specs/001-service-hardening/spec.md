@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-25
 
-**Status**: Draft
+**Status**: Implemented (released in v1.0.0, 2026-10-26; convergence follow-ups in v1.1.0, 2026-10-27)
 
 **Input**: User description: "analysie exiting code. Find potential bugs, flows, perforance issues. Find potential features"
 
