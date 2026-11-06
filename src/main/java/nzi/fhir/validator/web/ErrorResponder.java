@@ -39,6 +39,8 @@ public final class ErrorResponder {
             Map.entry("not-found", "Not found"),
             Map.entry("method-not-allowed", "Method not allowed"),
             Map.entry("package-not-found", "Package not found"),
+            Map.entry("dependency-not-found", "Dependency not found"),
+            Map.entry("insufficient-capacity", "Insufficient capacity"),
             Map.entry("package-source-not-allowed", "Package source not allowed"),
             Map.entry("package-too-large", "Package too large"),
             Map.entry("package-unsafe", "Unsafe package"),

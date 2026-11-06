@@ -30,7 +30,7 @@ public final class OutcomeRenderer {
                 .put("location", msg.getLocationString())
                 .put("message", msg.getMessage())));
         return new ValidationResponse(outcome.result().isSuccessful(), messages, outcome.version().name(),
-                outcome.appliedProfiles()).toJson();
+                outcome.appliedProfiles(), outcome.igPackage()).toJson();
     }
 
     private static String operationOutcome(ValidatorSnapshot.Outcome outcome, boolean xml) {

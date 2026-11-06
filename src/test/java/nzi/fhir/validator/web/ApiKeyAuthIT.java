@@ -54,8 +54,11 @@ class ApiKeyAuthIT extends BaseTestContainer {
     }
 
     private HttpRequest<Buffer> req(String method, String path, String key) {
-        HttpRequest<Buffer> r = method.equals("GET") ? app.client().get(app.port(), "localhost", path)
-                : app.client().post(app.port(), "localhost", path);
+        HttpRequest<Buffer> r = switch (method) {
+            case "GET" -> app.client().get(app.port(), "localhost", path);
+            case "DELETE" -> app.client().delete(app.port(), "localhost", path);
+            default -> app.client().post(app.port(), "localhost", path);
+        };
         r.timeout(5_000);
         if (key != null) {
             r.putHeader("Authorization", "Bearer " + key);
@@ -67,7 +70,9 @@ class ApiKeyAuthIT extends BaseTestContainer {
         return Future.all(
                 req("POST", "/igs/register", key).sendJsonObject(new JsonObject().put("name", "x")),
                 req("POST", "/R4/include-ig", key).sendJsonObject(new JsonObject().put("igPackageId", "x")),
-                req("POST", "/igs/upload", key).sendBuffer(Buffer.buffer("x"))
+                req("POST", "/igs/upload", key).sendBuffer(Buffer.buffer("x")),
+                // Spec 004: excluding an IG is administrative too (every method on the path, not only POST).
+                req("DELETE", "/R4/include-ig?ig=x%231.0.0", key).send()
         ).map(cf -> cf.list());
     }
 
@@ -112,6 +117,14 @@ class ApiKeyAuthIT extends BaseTestContainer {
                         .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")))
                 .compose(forbidden -> {
                     ctx.verify(() -> assertProblem(forbidden, 403, "forbidden"));
+                    return req("DELETE", "/R4/include-ig?ig=example.auth%231.0.0", VALIDATE_KEY).send();
+                })
+                .compose(forbiddenExclude -> {
+                    ctx.verify(() -> assertProblem(forbiddenExclude, 403, "forbidden"));
+                    return req("DELETE", "/R4/include-ig?ig=example.auth%231.0.0", AppHarness.ADMIN_KEY).send();
+                })
+                .compose(adminExclude -> {
+                    ctx.verify(() -> assertEquals(200, adminExclude.statusCode(), adminExclude.bodyAsString()));
                     return validate(null);
                 })
                 .compose(anonymous -> {

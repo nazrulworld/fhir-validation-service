@@ -49,11 +49,13 @@ public class IgPackageApi {
                 .handler(this::handleRegisterIg);
     }
 
-    private static JsonObject registered(NpmPackage npmPackage) {
+    private static JsonObject registered(NpmPackage npmPackage, boolean downloaded, java.util.List<String> warnings) {
         return new JsonObject()
                 .put("status", "success")
                 .put("name", npmPackage.name())
-                .put("version", npmPackage.version());
+                .put("version", npmPackage.version())
+                .put("downloaded", downloaded)
+                .put("warnings", new io.vertx.core.json.JsonArray(java.util.List.copyOf(warnings)));
     }
 
     private void handleRegisterIg(RoutingContext ctx) {
@@ -83,11 +85,8 @@ public class IgPackageApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "version must be 1-64 characters without whitespace"));
             return;
         }
-        Future<JsonObject> result = igPackageService.registerIg(name, version, body.getBoolean("includeDependency", true))
-                .compose(npmPackage -> npmPackage == null
-                        ? Future.failedFuture(new ProblemException(404, "package-not-found",
-                        "IG package " + name + "#" + version + " was not found in the configured package registries"))
-                        : Future.succeededFuture(registered(npmPackage)));
+        Future<JsonObject> result = igPackageService.register(name, version, body.getBoolean("includeDependency", true))
+                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings()));
         ErrorResponder.respond(ctx, result);
     }
 
@@ -98,7 +97,7 @@ public class IgPackageApi {
         }
         FileUpload upload = ctx.fileUploads().get(0);
         Future<JsonObject> result = igPackageService.registerUploadedFile(upload.uploadedFileName())
-                .map(IgPackageApi::registered);
+                .map(pkg -> registered(pkg, false, java.util.List.of()));
         ErrorResponder.respond(ctx, result);
     }
 
@@ -108,7 +107,7 @@ public class IgPackageApi {
     private void handleDownloadIg(RoutingContext ctx, String downloadUrl) {
         Future<JsonObject> result = fetcher.fetch(downloadUrl)
                 .compose(body -> igPackageService.registerIg(body.getBytes(), false, "URL"))
-                .map(IgPackageApi::registered);
+                .map(pkg -> registered(pkg, true, java.util.List.of()));
         ErrorResponder.respond(ctx, result);
     }
 }

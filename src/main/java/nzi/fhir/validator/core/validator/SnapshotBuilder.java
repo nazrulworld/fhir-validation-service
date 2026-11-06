@@ -41,8 +41,15 @@ public class SnapshotBuilder {
      * A resolved package is no longer stored.
      */
     public static class MissingPackageException extends RuntimeException {
+        private final String idAndVersion;
+
         public MissingPackageException(String idAndVersion) {
             super("Package " + idAndVersion + " is not stored", null, false, false);
+            this.idAndVersion = idAndVersion;
+        }
+
+        public String idAndVersion() {
+            return idAndVersion;
         }
     }
 
@@ -72,10 +79,23 @@ public class SnapshotBuilder {
     }
 
     public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages) {
-        return builds.run(() -> buildNow(version, revision, resolvedPackages));
+        return build(SnapshotKey.base(version), revision, new ResolvedContext(resolvedPackages, java.util.Map.of()),
+                HeapBudget.Evictor.NONE);
     }
 
-    private Future<ValidatorSnapshot> buildNow(SupportedFhirVersion version, long revision, List<String> resolvedPackages) {
+    /**
+     * Builds the validator context {@code key} from exactly {@code resolved.packages()} (spec 004: one IG and its
+     * dependencies, or nothing for the base context).
+     *
+     * @param evictor frees memory by dropping on-demand contexts when the build does not fit (research R7)
+     */
+    public Future<ValidatorSnapshot> build(SnapshotKey key, long revision, ResolvedContext resolved, HeapBudget.Evictor evictor) {
+        return builds.run(() -> buildNow(key, revision, resolved, evictor));
+    }
+
+    private Future<ValidatorSnapshot> buildNow(SnapshotKey key, long revision, ResolvedContext resolved, HeapBudget.Evictor evictor) {
+        SupportedFhirVersion version = key.fhirVersion();
+        List<String> resolvedPackages = resolved.packages();
         List<Future<Loaded>> loaded = new ArrayList<>();
         for (String idAndVersion : resolvedPackages) {
             loaded.add(load(idAndVersion));
@@ -96,13 +116,13 @@ public class SnapshotBuilder {
             }
             // A build that cannot fit fails like any other (version STALE, reason in /health) instead of ending the
             // process with an OutOfMemoryError.
-            long reserved = heap.reserve(expandedBytes);
+            long reserved = heap.reserve(expandedBytes, evictor);
             try {
-                ValidatorSnapshot snapshot = assemble(version, revision, resolvedPackages, npmPackages);
+                ValidatorSnapshot snapshot = assemble(key, revision, resolvedPackages, resolved.hashes(), npmPackages);
                 snapshot.setPackageArchiveBytes(archiveBytes);
                 // Warm caches so the first real request does not pay HAPI's lazy initialisation.
                 snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
-                logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", version, revision,
+                logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", key, revision,
                         npmPackages.size(), System.currentTimeMillis() - started);
                 return snapshot;
             } finally {
@@ -151,6 +171,12 @@ public class SnapshotBuilder {
      */
     static ValidatorSnapshot assemble(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                                       List<NpmPackage> npmPackages) {
+        return assemble(SnapshotKey.base(version), revision, resolvedPackages, java.util.Map.of(), npmPackages);
+    }
+
+    static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
+                                      java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages) {
+        SupportedFhirVersion version = key.fhirVersion();
         FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
         ValidationSupportChain chain = new ValidationSupportChain(
                 new DefaultProfileValidationSupport(ctx),
@@ -162,6 +188,6 @@ public class SnapshotBuilder {
         // reference or other conformance resource over the network. Do not add one.
         FhirValidator validator = ctx.newValidator();
         validator.registerValidatorModule(new FhirInstanceValidator(chain));
-        return new ValidatorSnapshot(version, revision, resolvedPackages, ctx, validator, chain);
+        return new ValidatorSnapshot(key, revision, resolvedPackages, hashes, ctx, validator, chain);
     }
 }

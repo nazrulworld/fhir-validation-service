@@ -9,6 +9,7 @@ import io.micrometer.prometheus.PrometheusMeterRegistry;
 import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCache;
+import nzi.fhir.validator.core.validator.SnapshotKey;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 
 import java.time.Duration;
@@ -24,6 +25,8 @@ public class ServiceMetrics {
     public static final String OUTCOME_ERROR = "error";
     /** A requested profile is not defined by the version's core definitions or included IGs (400). */
     public static final String OUTCOME_UNKNOWN_PROFILE = "unknown_profile";
+    /** The request's {@code ig} package is not stored (404, spec 004 FR-003). */
+    public static final String OUTCOME_PACKAGE_NOT_FOUND = "package_not_found";
 
     private final PrometheusMeterRegistry registry;
 
@@ -69,9 +72,44 @@ public class ServiceMetrics {
                     .tag("version", version.name()).description("IG packages in the active validator").register(registry);
             Gauge.builder("fv.snapshot.package.size", validators, v -> v.snapshotPackageBytes(version))
                     .tag("version", version.name()).baseUnit("bytes")
-                    .description("Archive size of the IG packages in the active validator; a rebuild briefly holds two snapshots")
+                    .description("Archive size of the IG packages in the base and pinned validators; a rebuild briefly holds two snapshots")
                     .register(registry);
+            for (ValidatorRegistry.Kind kind : ValidatorRegistry.Kind.values()) {
+                Gauge.builder("fv.validator.contexts", validators, v -> v.contextCount(version, kind))
+                        .tag("fhir_version", version.name()).tag("kind", kindLabel(kind))
+                        .description("Validator contexts on this instance (spec 004)").register(registry);
+            }
         }
+        validators.setEvents(new ValidatorRegistry.Events() {
+            @Override
+            public void build(SnapshotKey key, ValidatorRegistry.Kind kind, String outcome) {
+                Counter.builder("fv.validator.context.builds").tag("fhir_version", key.fhirVersion().name())
+                        .tag("kind", kindLabel(kind)).tag("outcome", outcome)
+                        .description("Validator context builds by outcome").register(registry).increment();
+            }
+
+            @Override
+            public void eviction(SnapshotKey key, String reason) {
+                Counter.builder("fv.validator.context.evictions").tag("fhir_version", key.fhirVersion().name())
+                        .tag("reason", reason).description("On-demand validator contexts dropped, by reason")
+                        .register(registry).increment();
+            }
+
+            @Override
+            public void lookup(SnapshotKey key, String result) {
+                Counter.builder("fv.validator.context.lookups").tag("fhir_version", key.fhirVersion().name())
+                        .tag("result", result).description("Validator context lookups: hit, joined a build, or built")
+                        .register(registry).increment();
+            }
+        });
+    }
+
+    private static String kindLabel(ValidatorRegistry.Kind kind) {
+        return switch (kind) {
+            case BASE -> "base";
+            case PINNED -> "pinned";
+            case ON_DEMAND -> "on-demand";
+        };
     }
 
     public void recordValidation(SupportedFhirVersion version, String outcome, long nanos) {

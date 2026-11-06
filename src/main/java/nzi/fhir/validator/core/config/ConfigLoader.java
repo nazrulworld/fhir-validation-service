@@ -56,6 +56,8 @@ public final class ConfigLoader {
             new Entry("FV_PACKAGE_MAX_EXPANDED_MB", "packages.maxExpandedMb", Kind.LONG, 1, 16_384),
             new Entry("FV_PACKAGE_MAX_ENTRIES", "packages.maxEntries", Kind.INT, 1, 1_000_000),
             new Entry("FV_PACKAGE_MAX_RATIO", "packages.maxRatio", Kind.INT, 1, 10_000),
+            new Entry("FV_IG_MAX_ON_DEMAND", "ig.maxOnDemand", Kind.INT, 1, 64),
+            new Entry("FV_IG_BUILD_WAIT_MS", "ig.buildWaitMs", Kind.LONG, 1_000, 120_000),
             new Entry("FV_CONFIG_POLL_INTERVAL_MS", "sync.pollIntervalMs", Kind.LONG, 1_000, 60_000),
             new Entry("FV_AUTH_ANONYMOUS_VALIDATE", "auth.anonymousValidate", Kind.BOOL, NO_MIN, NO_MAX),
             new Entry("FV_ADMIN_API_KEY", "auth.bootstrapAdminKey", Kind.STRING, NO_MIN, NO_MAX),
@@ -193,6 +195,11 @@ public final class ConfigLoader {
         }
         if (validation.getValue("maxPending") == null) {
             validation.put("maxPending", 4 * validation.getInteger("workers"));
+        }
+        JsonObject ig = section(c, "ig");
+        if (ig.getValue("buildWaitMs") == null) {
+            // Same rule as the include's local-apply wait: a first ?ig= request never outlives the request timeout.
+            ig.put("buildWaitMs", Math.max(1_000L, Math.min(10_000L, http.getLong("requestTimeoutMs") / 2)));
         }
     }
 

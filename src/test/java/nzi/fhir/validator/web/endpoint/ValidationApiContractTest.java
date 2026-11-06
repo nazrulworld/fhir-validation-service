@@ -92,6 +92,26 @@ class ValidationApiContractTest extends BaseTestContainer {
     }
 
     @Test
+    void responseNamesTheValidationContext(VertxTestContext ctx) {
+        // Spec 004 FR-008: without ig the base context is used; an unknown ig is 404 package-not-found.
+        validate("R4", "application/fhir+json", null, PATIENT)
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertLegacyJson(r);
+                        assertEquals("base", r.getHeader("X-Validation-Context"));
+                        JsonObject body = r.bodyAsJsonObject();
+                        assertTrue(body.containsKey("igPackage") && body.getValue("igPackage") == null, body.encode());
+                    });
+                    return post("/R4/validate").addQueryParam("ig", "not.stored#1.0.0")
+                            .putHeader("Content-Type", "application/fhir+json").sendBuffer(Buffer.buffer(PATIENT));
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertProblem(r, 404, "package-not-found");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
     void absentAcceptDefaultsToJson(VertxTestContext ctx) {
         validate("R4", "application/fhir+json", null, PATIENT)
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
@@ -351,6 +371,49 @@ class ValidationApiContractTest extends BaseTestContainer {
         AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject().put("igVersion", "3.1.1"))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 400, "invalid-request");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 004 contracts §2, §3: IncludeResponse carries the context key; DELETE answers ExcludeResponse or 404. */
+    @Test
+    void includeAndExcludeResponseShapes(VertxTestContext ctx) {
+        app.bootstrap().services().igPackageService()
+                .registerIg(nzi.fhir.validator.testsupport.TestPackages.npmPackage("contract.ig", "1.0.0", java.util.Map.of(),
+                        java.util.List.of()), false)
+                .compose(p -> AppHarness.asAdmin(post("/R4/include-ig"))
+                        .sendJsonObject(new JsonObject().put("igPackageId", "contract.ig").put("igPackageVersion", "1.0.0")))
+                .compose(included -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, included.statusCode(), included.bodyAsString());
+                        JsonObject body = included.bodyAsJsonObject();
+                        assertEquals("contract.ig#1.0.0", body.getJsonObject("key").getString("igPackage"));
+                        assertEquals("R4", body.getJsonObject("key").getString("fhirVersion"));
+                        for (String field : java.util.List.of("status", "fhirVersion", "revision", "included", "resolved", "warnings")) {
+                            assertTrue(body.containsKey(field), field);
+                        }
+                    });
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000))
+                            .addQueryParam("ig", "contract.ig#1.0.0").send();
+                })
+                .compose(excluded -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, excluded.statusCode(), excluded.bodyAsString());
+                        JsonObject body = excluded.bodyAsJsonObject();
+                        assertEquals("contract.ig#1.0.0", body.getString("excluded"));
+                        for (String field : java.util.List.of("status", "fhirVersion", "revision", "included", "warnings")) {
+                            assertTrue(body.containsKey(field), field);
+                        }
+                    });
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000))
+                            .addQueryParam("ig", "contract.ig#1.0.0").send();
+                })
+                .compose(again -> {
+                    ctx.verify(() -> assertProblem(again, 404, "package-not-found"));
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000)).send();
+                })
+                .onComplete(ctx.succeeding(missingIg -> ctx.verify(() -> {
+                    assertEquals(400, missingIg.statusCode(), "ig is required on DELETE: " + missingIg.bodyAsString());
                     ctx.completeNow();
                 })));
     }

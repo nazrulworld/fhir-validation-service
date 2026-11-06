@@ -70,8 +70,8 @@ class ConcurrencyIT {
     private static ValidatorRegistry registryServing(ValidatorSnapshot snapshot) {
         return new ValidatorRegistry(null, null) {
             @Override
-            public ValidatorSnapshot current(SupportedFhirVersion version) {
-                return snapshot;
+            public io.vertx.core.Future<ValidatorSnapshot> snapshot(nzi.fhir.validator.core.validator.SnapshotKey key) {
+                return io.vertx.core.Future.succeededFuture(snapshot);
             }
         };
     }

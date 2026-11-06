@@ -59,6 +59,20 @@ public class PackageCache {
         }
     }
 
+    /** Drops a cached package, e.g. because its stored content was replaced (spec 004 FR-025). */
+    public synchronized void invalidate(String idAndVersion) {
+        Entry e = entries.remove(idAndVersion);
+        if (e != null) {
+            weight -= e.weight();
+        }
+    }
+
+    /** Drops every cached package. */
+    public synchronized void invalidateAll() {
+        entries.clear();
+        weight = 0;
+    }
+
     /** Archive size of a cached package, or 0 if it is not cached. */
     public synchronized long archiveBytes(String idAndVersion) {
         Entry e = entries.get(idAndVersion);

@@ -69,6 +69,15 @@ class MigrationUpgradeIT extends BaseTestContainer {
         assertEquals(List.of(), column(c, "SELECT column_name FROM information_schema.columns "
                 + "WHERE table_schema='" + S + "' AND table_name='fhir_validator_logs' AND column_name='included_profiles'"),
                 "V6 drops fhir_validator_logs.included_profiles");
+        assertEquals(List.of(), column(c, "SELECT column_name FROM information_schema.columns "
+                + "WHERE table_schema='" + S + "' AND table_name='fhir_validator_logs' AND column_name='resolved_ig_packages'"),
+                "V7 drops fhir_validator_logs.resolved_ig_packages (resolved per IG at apply time, spec 004)");
+        assertEquals(List.of("1|1"), column(c, "SELECT id || '|' || revision FROM " + S + ".fhir_package_catalog"),
+                "V7 seeds the single package catalog revision row");
+        try (Statement st = c.createStatement()) {
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S
+                    + ".fhir_package_catalog (id, revision) VALUES (2, 1)"), "the catalog revision is a single row");
+        }
     }
 
     private static void assertApiKeysTable(Connection c) throws SQLException {
@@ -117,7 +126,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("3.4.0"), column(c, "SELECT ig_package_version FROM " + S + ".fhir_implementation_guides WHERE ig_package_id='hl7.fhir.dk.core'"));
             assertEquals(List.of("{hl7.fhir.dk.core#3.4.0}"),
-                    column(c, "SELECT resolved_ig_packages::text FROM " + S + ".fhir_validator_logs WHERE fhir_version='R4'"));
+                    column(c, "SELECT included_ig_packages::text FROM " + S + ".fhir_validator_logs WHERE fhir_version='R4'"));
             assertEquals(List.of("hl7.fhir.dk.core"), column(c, "SELECT ig_package_meta->>'name' FROM " + S
                     + ".fhir_implementation_guides WHERE ig_package_id='hl7.fhir.dk.core'"));
             assertLatestSchema(c);
@@ -151,12 +160,42 @@ class MigrationUpgradeIT extends BaseTestContainer {
             before = column(c, counts);
         }
 
-        DatabaseService.flyway(db).migrate();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("6")).load().migrate();
 
         try (Connection c = jdbc(db)) {
             assertEquals(before, column(c, counts), "IG, configuration and API key counts are unchanged");
             assertEquals(List.of("7|{hl7.fhir.dk.core#3.4.0}"), column(c, "SELECT revision || '|' || resolved_ig_packages::text FROM "
                     + S + ".fhir_validator_logs WHERE fhir_version = 'R4'"));
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db)) {
+            assertLatestSchema(c);
+        }
+    }
+
+    /**
+     * 2.0.0 (V6) to 3.0.0 (V7): every included IG stays in {@code included_ig_packages} (each becomes its own pinned
+     * context), the revision is unchanged, and only the combined resolved set is dropped (spec 004 FR-035).
+     */
+    @Test
+    void v7KeepsIncludedIgsAndRevisionAndDropsCombinedResolvedSet() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("6")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".fhir_implementation_guides (ig_package_id, ig_package_version, ig_package_meta, content_raw) "
+                    + "VALUES ('a.ig', '1.0.0', '{}', '\\x01'), ('b.ig', '1.0.0', '{}', '\\x02')");
+            st.execute("UPDATE " + S + ".fhir_validator_logs SET included_ig_packages = '{a.ig#1.0.0,b.ig#1.0.0}', "
+                    + "resolved_ig_packages = '{a.ig#1.0.0,b.ig#1.0.0}', revision = 5 WHERE fhir_version = 'R4'");
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('ops', '\\x09', 'ADMIN')");
+        }
+
+        DatabaseService.flyway(db).migrate();
+
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("5|{a.ig#1.0.0,b.ig#1.0.0}"), column(c, "SELECT revision || '|' || included_ig_packages::text FROM "
+                    + S + ".fhir_validator_logs WHERE fhir_version = 'R4'"));
+            assertEquals(List.of("2"), column(c, "SELECT count(*)::text FROM " + S + ".fhir_implementation_guides"));
+            assertEquals(List.of("ops"), column(c, "SELECT name FROM " + S + ".api_keys"));
             assertLatestSchema(c);
         }
     }

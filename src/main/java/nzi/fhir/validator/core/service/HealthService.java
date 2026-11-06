@@ -35,6 +35,7 @@ public class HealthService {
     private volatile String lastDbError = "not checked yet";
     private volatile Supplier<List<String>> validatorReadiness = () -> List.of("validators not initialised");
     private volatile Supplier<JsonObject> validatorDetails = JsonObject::new;
+    private volatile java.util.function.LongSupplier catalogRevision = () -> 0L;
     private long timerId = -1;
 
     public HealthService(Vertx vertx, Pool pgPool) {
@@ -70,6 +71,11 @@ public class HealthService {
     public void setValidatorReadiness(Supplier<List<String>> notReadyReasons, Supplier<JsonObject> details) {
         this.validatorReadiness = notReadyReasons;
         this.validatorDetails = details;
+    }
+
+    /** The package catalog revision this instance has loaded, shown in the report (spec 004 FR-032). */
+    public void setCatalogRevision(java.util.function.LongSupplier catalogRevision) {
+        this.catalogRevision = catalogRevision;
     }
 
     public void setDraining(boolean value) {
@@ -111,6 +117,7 @@ public class HealthService {
         JsonObject result = new JsonObject()
                 .put("status", reasons.isEmpty() ? STATUS_UP : STATUS_DOWN)
                 .put("timestamp", System.currentTimeMillis())
+                .put("catalogRevision", catalogRevision.getAsLong())
                 .put("versions", validatorDetails.get());
         if (!reasons.isEmpty()) {
             result.put("reasons", new JsonArray(reasons));

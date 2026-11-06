@@ -4,6 +4,69 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] - 3.0.0
+
+A breaking release. Each validation request now chooses the one IG package it is validated against
+(`?ig=name#version`), the same model as the HL7 validator CLI's `-ig`, and several versions of one IG can be offered
+side by side. Requests that name no IG are validated against the core specification only.
+
+### Upgrade: do this first
+
+- **Clients that relied on included IGs must name the IG.** Without `ig`, 2.x validated against every IG included for
+  the FHIR version; 3.0.0 uses the core specification only. Add `?ig=name%23version` to keep the previous results.
+- **Back up the database.** Restoring it is the only way back to 2.x; there is no down-migration.
+- **Stop every 2.x instance before starting 3.0.0.** Migration V7 drops a column 2.x reads, so a mixed fleet is not
+  supported, and `scripts/rolling-restart.sh` refuses to cross a major version.
+- Full procedure: [docs/upgrade-3.0.md](docs/upgrade-3.0.md). `scripts/upgrade-rehearsal-3.0.sh` rehearses it.
+
+### Breaking
+
+- `POST /{version}/validate` without `ig` validates against the core specification only (the base context). `?profile=`
+  resolves only from the chosen IG, its dependencies and the core specification; a profile of another IG, even an
+  included one, answers 400 `unknown-profile`.
+- `POST /{version}/include-ig` adds a pinned context for the IG version and no longer replaces other versions of the
+  same package. `IncludeResponse` gains `key {fhirVersion, igPackage}`; `resolved` lists only that IG's packages.
+- `POST /igs/register` with `latest` (or no version) asks the package registries for the newest release and downloads
+  it when it is new, instead of returning the highest stored version.
+- `/health` details: per FHIR version, `base` plus a `contexts` list (`key`, `kind`, `state`, `packages`,
+  `packageBytes`, `lastUsed`, `reason`), and a top-level `catalogRevision`.
+- Migration V7 drops `fhir_validator_logs.resolved_ig_packages` (each instance resolves every included IG from the
+  stored packages) and adds the single-row `fhir_package_catalog` revision table. Included IGs are kept, each as its
+  own pinned context.
+
+### Added
+
+- `?ig=` on validate: `name#version`, `name#latest` or `name` (highest stored version). Any stored package that
+  supports the FHIR version can be named; one that is not included is built on first use, from stored packages only,
+  with one shared build for concurrent requests and a bounded wait.
+- `X-Validation-Context` header on every 200 (`name#version` or `base`) and `igPackage` in the JSON response.
+- `DELETE /{version}/include-ig?ig=name#version` (ADMIN key) stops pre-building one IG version; the package stays
+  nameable in `ig`.
+- Problem types `dependency-not-found` (424) and `insufficient-capacity` (503, `Retry-After: 30`); `package-not-found`
+  (404) on validate.
+- Settings `FV_IG_MAX_ON_DEMAND` (default 4) and `FV_IG_BUILD_WAIT_MS` (default `min(10000, requestTimeout/2)`).
+  On-demand contexts are evicted least recently used first, by count and under memory pressure; pinned contexts never
+  are.
+- `IgRegistrationResponse.downloaded` and `.warnings`; a warning when registration falls back to the highest stored
+  version because no registry could be consulted or none lists the package.
+- Metrics `fv_validator_contexts`, `fv_validator_context_builds_total`, `fv_validator_context_evictions_total`,
+  `fv_validator_context_lookups_total`, and the `fv_validations_total` outcome `package_not_found`.
+- `docs/upgrade-3.0.md`, `scripts/upgrade-rehearsal-3.0.sh`, `scripts/bench-validate.sh`.
+
+### Fixed
+
+- Replacing a stored package (same `name#version`, new content) left validators and the parsed-package cache on the
+  old content. Every context built from it is now invalidated on every instance.
+- `POST /igs/register` with `latest` never noticed a newer release once any version was stored.
+- Every method on an administrative path now requires the ADMIN key (previously only POST was classified as
+  administrative).
+
+### Unchanged
+
+- Validation never contacts a package registry or downloads profiles; include and exclude never download.
+- The spec 001 guarantees for configuration changes: one transaction, propagation to every instance within the
+  window, 413 `package-too-large` before commit, and the local-apply wait with a warning.
+
 ## [2.0.0] - 2026-11-04
 
 A breaking release. Profiles now come only from included IG packages, the same model as the HL7

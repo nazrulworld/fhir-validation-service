@@ -29,7 +29,14 @@ import java.util.TreeSet;
  */
 public final class DependencyResolver {
 
-    public record Resolution(List<String> resolved, List<String> warnings) {
+    /**
+     * @param missing packages that were required but are not stored ({@code name#version}, or {@code name} when no
+     *                version of it is stored), sorted; they are skipped from {@code resolved}
+     */
+    public record Resolution(List<String> resolved, List<String> warnings, List<String> missing) {
+        public Resolution(List<String> resolved, List<String> warnings) {
+            this(resolved, warnings, List.of());
+        }
     }
 
     /**
@@ -69,6 +76,7 @@ public final class DependencyResolver {
 
     public static Resolution resolve(Collection<String> roots, Catalog catalog) {
         Set<String> warnings = new TreeSet<>();
+        Set<String> missing = new TreeSet<>();
         List<String> sortedRoots = roots.stream().distinct().sorted().toList();
 
         // Phase 1: every concrete version reachable from the roots.
@@ -88,6 +96,8 @@ public final class DependencyResolver {
             Optional<String> version = concrete(spec[0], spec[1], catalog);
             if (version.isEmpty()) {
                 warnings.add(missingMessage(spec[0], spec[1], item[1]));
+                missing.add(spec[1] == null || spec[1].isBlank() || spec[1].equals("latest") || spec[1].equals("current")
+                        ? spec[0] : spec[0] + "#" + spec[1]);
                 continue;
             }
             String key = spec[0] + "#" + version.get();
@@ -132,7 +142,7 @@ public final class DependencyResolver {
                 }
             }
         }
-        return new Resolution(List.copyOf(resolved), List.copyOf(warnings));
+        return new Resolution(List.copyOf(resolved), List.copyOf(warnings), List.copyOf(missing));
     }
 
     private static Optional<String> concrete(String name, String requested, Catalog catalog) {

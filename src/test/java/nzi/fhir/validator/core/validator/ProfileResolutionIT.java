@@ -27,9 +27,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Profiles are resolved only from the version's core definitions and included IGs, matched by exact canonical, never
- * fetched; an unresolved requested profile rejects the request (spec 003: US1, US2, FR-001 to FR-008, SC-001 to
- * SC-004).
+ * Profiles are resolved only from the chosen validation context, matched by exact canonical, never fetched; an
+ * unresolved requested profile rejects the request (spec 003: US1, US2, FR-001 to FR-008, SC-001 to SC-004). Since
+ * spec 004 (US1-8, US1-9, FR-007) the context is the request's {@code ig} package, its dependencies and the core
+ * specification, or the core specification alone without {@code ig}.
  */
 @ExtendWith(VertxExtension.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -43,6 +44,7 @@ class ProfileResolutionIT extends BaseTestContainer {
     private static final String OBS = BASE + "res-obs";
     private static final String EXT = BASE + "res-ext";
     private static final String UNKNOWN = BASE + "does-not-exist";
+    private static final String MAIN = "res.main#1.0.0";
 
     private CoreHarness core;
 
@@ -67,9 +69,20 @@ class ProfileResolutionIT extends BaseTestContainer {
         (core == null ? Future.<Void>succeededFuture() : core.stop()).onComplete(ar -> ctx.completeNow());
     }
 
+    /** Validates against the main test IG ({@value #MAIN}). */
     private Future<ValidatorSnapshot.Outcome> validate(String body, String... profiles) {
-        return core.services().validationService()
-                .validate(SupportedFhirVersion.R4, body, SupportedContentType.JSON, List.of(profiles));
+        return validateIn(MAIN, body, profiles);
+    }
+
+    /** @param ig the request's ig value, or {@code null} for the core-only base context */
+    private Future<ValidatorSnapshot.Outcome> validateIn(String ig, String body, String... profiles) {
+        return validateOn(core, ig, body, profiles);
+    }
+
+    private static Future<ValidatorSnapshot.Outcome> validateOn(CoreHarness on, String ig, String body, String... profiles) {
+        return on.services().validationService()
+                .validate(SupportedFhirVersion.R4, ig == null ? null : IgReference.parse(ig), body, SupportedContentType.JSON,
+                        List.of(profiles), java.util.function.Function.identity());
     }
 
     private static void assertUnknown(Throwable err, String... unresolved) {
@@ -213,17 +226,70 @@ class ProfileResolutionIT extends BaseTestContainer {
         })));
     }
 
-    // ---- US2 ----
+    // ---- US2 (as scoped by spec 004) ----
 
     @Test
-    void storedButNotIncludedPackageContributesNoProfiles(VertxTestContext ctx) {
+    void storedPackageContributesProfilesOnlyWhenItIsTheChosenIg(VertxTestContext ctx) {
         String onlyInB = BASE + "res-only-in-b";
         core.services().igPackageService()
                 .registerIg(TestPackages.profilePackage("res.notincluded", "1.0.0",
                         TestPackages.requiredPatientElements(onlyInB, "birthDate")), false)
                 .compose(pkg -> validate(TestPackages.minimalPatient(), onlyInB))
+                .<ValidatorSnapshot.Outcome>transform(ar -> {
+                    ctx.verify(() -> {
+                        assertTrue(ar.failed(), "another stored package's profile is not visible through " + MAIN);
+                        assertUnknown(ar.cause(), onlyInB);
+                    });
+                    // Named as the ig, the stored (never included) package is built on demand (spec 004 FR-006).
+                    return validateIn("res.notincluded#1.0.0", TestPackages.minimalPatient(), onlyInB);
+                })
+                .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
+                    assertTrue(TestPackages.hasError(o, "birthDate"));
+                    assertEquals(List.of(onlyInB), o.appliedProfiles());
+                    assertEquals("res.notincluded#1.0.0", o.igPackage());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void profileOfAnotherIncludedIgIsUnknown(VertxTestContext ctx) {
+        String other = BASE + "res-other-included";
+        TestPackages.includePackage(core.services(), TestPackages.profilePackage("res.other", "1.0.0",
+                        TestPackages.requiredPatientElements(other, "gender")), "res.other", "1.0.0")
+                .compose(v -> validate(TestPackages.minimalPatient(), other))
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
-                    assertUnknown(err, onlyInB);
+                    assertUnknown(err, other);
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void withoutIgOnlyTheCoreSpecificationResolves(VertxTestContext ctx) {
+        validateIn(null, TestPackages.minimalPatient(), P)
+                .<ValidatorSnapshot.Outcome>transform(ar -> {
+                    ctx.verify(() -> {
+                        assertTrue(ar.failed(), "an included IG's profile is not available in the base context");
+                        assertUnknown(ar.cause(), P);
+                        ProblemException p = (ProblemException) ar.cause();
+                        assertTrue(p.detail().contains("core specification"), p.detail());
+                    });
+                    return validateIn(null, TestPackages.minimalPatient(), "http://hl7.org/fhir/StructureDefinition/Patient");
+                })
+                .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
+                    assertNull(o.igPackage());
+                    assertEquals(List.of("http://hl7.org/fhir/StructureDefinition/Patient"), o.appliedProfiles());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void profileFromADependencyOfTheChosenIgIsApplied(VertxTestContext ctx) {
+        core.services().igPackageService()
+                .registerIg(TestPackages.npmPackage("res.dependent", "1.0.0", java.util.Map.of("res.main", "1.0.0"), List.of()), false)
+                .compose(pkg -> validateIn("res.dependent#1.0.0", TestPackages.minimalPatient(), P))
+                .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
+                    assertTrue(TestPackages.hasError(o, "birthDate"));
+                    assertEquals(List.of(P), o.appliedProfiles());
                     ctx.completeNow();
                 })));
     }
@@ -258,21 +324,25 @@ class ProfileResolutionIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Two packages of one context define the same canonical: the IG dup.b depends on dup.a, and both define x. The
+     * last package in the sorted resolved set wins, identically on every instance (spec 003 FR-003).
+     */
     @Test
     void duplicateCanonicalResolvesDeterministicallyOnEveryInstance(Vertx vertx, VertxTestContext ctx) {
         String x = BASE + "res-dup";
         Vertx vertxB = Vertx.vertx();
-        Future<CoreHarness> second = TestPackages.includePackage(core.services(), TestPackages.profilePackage("dup.a", "1.0.0",
-                        TestPackages.requiredPatientElements(x, "birthDate").put("version", "1.0.0")), "dup.a", "1.0.0")
-                .compose(v -> TestPackages.includePackage(core.services(), TestPackages.profilePackage("dup.b", "1.0.0",
-                        TestPackages.requiredPatientElements(x, "gender").put("version", "2.0.0")), "dup.b", "1.0.0"))
+        var ig = core.services().igPackageService();
+        Future<CoreHarness> second = ig.registerIg(TestPackages.profilePackage("dup.a", "1.0.0",
+                        TestPackages.requiredPatientElements(x, "birthDate").put("version", "1.0.0")), false)
+                .compose(v -> ig.registerIg(TestPackages.npmPackage("dup.b", "1.0.0", java.util.Map.of("dup.a", "1.0.0"),
+                        List.of(TestPackages.requiredPatientElements(x, "gender").put("version", "2.0.0"))), false))
                 .compose(v -> CoreHarness.start(vertxB, connectOptions()));
         second.<io.vertx.core.CompositeFuture>compose(b -> Future.all(
-                                validate(TestPackages.minimalPatient(), x),
-                                b.services().validationService().validate(SupportedFhirVersion.R4,
-                                        TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(x)),
-                                validate(TestPackages.minimalPatient(), x + "|1.0.0"),
-                                validate(TestPackages.minimalPatient(), x + "|2.0.0"))
+                                validateIn("dup.b#1.0.0", TestPackages.minimalPatient(), x),
+                                validateOn(b, "dup.b#1.0.0", TestPackages.minimalPatient(), x),
+                                validateIn("dup.b#1.0.0", TestPackages.minimalPatient(), x + "|1.0.0"),
+                                validateIn("dup.b#1.0.0", TestPackages.minimalPatient(), x + "|2.0.0"))
                         .eventually(() -> b.stop()))
                 .eventually(() -> vertxB.close())
                 .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
@@ -287,17 +357,22 @@ class ProfileResolutionIT extends BaseTestContainer {
                 })));
     }
 
+    /** Spec 004 US2: two versions of one IG are separate contexts, each with only its own profiles. */
     @Test
-    void replacingAPackageVersionReplacesItsProfiles(VertxTestContext ctx) {
+    void eachIncludedVersionKeepsOnlyItsOwnProfiles(VertxTestContext ctx) {
         String r = BASE + "res-replaced";
         TestPackages.includePackage(core.services(), TestPackages.profilePackage("p.test", "1.0.0",
                         TestPackages.requiredPatientElements(r, "birthDate").put("version", "1.0.0")), "p.test", "1.0.0")
                 .compose(v -> TestPackages.includePackage(core.services(), TestPackages.profilePackage("p.test", "2.0.0",
                         TestPackages.requiredPatientElements(r, "gender").put("version", "2.0.0")), "p.test", "2.0.0"))
-                .compose(v -> validate(TestPackages.minimalPatient(), r + "|2.0.0"))
+                .compose(v -> validateIn("p.test#2.0.0", TestPackages.minimalPatient(), r + "|2.0.0"))
                 .compose(o -> {
                     ctx.verify(() -> assertTrue(TestPackages.hasError(o, "gender")));
-                    return validate(TestPackages.minimalPatient(), r + "|1.0.0");
+                    return validateIn("p.test#1.0.0", TestPackages.minimalPatient(), r + "|1.0.0");
+                })
+                .compose(o -> {
+                    ctx.verify(() -> assertTrue(TestPackages.hasError(o, "birthDate"), "v1 is still available beside v2"));
+                    return validateIn("p.test#2.0.0", TestPackages.minimalPatient(), r + "|1.0.0");
                 })
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
                     assertUnknown(err, r + "|1.0.0");

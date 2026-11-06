@@ -38,6 +38,34 @@ public class HeapBudget {
         }
     }
 
+    /**
+     * Would fit in this heap, but not next to the contexts that cannot be evicted (base and pinned ones): an
+     * on-demand request answers 503 {@code insufficient-capacity} (spec 004 FR-016).
+     */
+    public static class InsufficientCapacityException extends InsufficientHeapException {
+        InsufficientCapacityException(String message) {
+            super(message);
+        }
+    }
+
+    /** Larger than the whole heap: it can never be built here (413 {@code package-too-large}, spec 004 FR-016). */
+    public static class NeverFitsException extends InsufficientHeapException {
+        NeverFitsException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Frees memory on request by dropping one evictable validator context (spec 004 FR-015): returns {@code false}
+     * when nothing is left to evict.
+     */
+    @FunctionalInterface
+    public interface Evictor {
+        Evictor NONE = () -> false;
+
+        boolean evictOne();
+    }
+
     private volatile LongSupplier maxHeap;
     private final LongSupplier usedHeap;
     private final Runnable collect;
@@ -96,10 +124,43 @@ public class HeapBudget {
      * @return the reserved bytes, to pass to {@link #release}
      */
     public synchronized long reserve(long expandedBytes) {
-        check(expandedBytes);
+        return reserve(expandedBytes, Evictor.NONE);
+    }
+
+    /**
+     * Like {@link #reserve(long)}, but when the build does not fit, evicts contexts through {@code evictor} one at a
+     * time (each followed by a collection) until it fits or nothing evictable is left (spec 004, research R7).
+     *
+     * @throws NeverFitsException           if the estimate exceeds the whole heap
+     * @throws InsufficientCapacityException if it would fit, but not next to what cannot be evicted
+     */
+    public synchronized long reserve(long expandedBytes, Evictor evictor) {
+        fitOrEvict(expandedBytes, evictor);
         long needed = estimate(expandedBytes);
         reserved.addAndGet(needed);
         return needed;
+    }
+
+    private void fitOrEvict(long expandedBytes, Evictor evictor) {
+        long needed = estimate(expandedBytes);
+        if (needed > maxHeap.getAsLong()) {
+            throw new NeverFitsException("needs about " + needed / MB + " MB of heap, more than the whole heap of "
+                    + maxHeap.getAsLong() / MB + " MB; raise FV_MEMORY_LIMIT (or the JVM heap)");
+        }
+        while (true) {
+            try {
+                check(expandedBytes);
+                return;
+            } catch (InsufficientHeapException e) {
+                if (!evictor.evictOne()) {
+                    if (evictor == Evictor.NONE) {
+                        throw e;
+                    }
+                    throw new InsufficientCapacityException(e.getMessage());
+                }
+                logger.info("Evicted an on-demand validator context to make room for a build of about {} MB", needed / MB);
+            }
+        }
     }
 
     public void release(long reservedBytes) {
@@ -110,8 +171,16 @@ public class HeapBudget {
      * For an include that is about to be committed: 413 {@code package-too-large} if it would not fit.
      */
     public void admitInclude(long expandedBytes) {
+        admitInclude(expandedBytes, Evictor.NONE);
+    }
+
+    /**
+     * {@link #admitInclude(long)}, evicting on-demand contexts first: administrator choices take priority over
+     * on-demand caching (spec 004, research R7).
+     */
+    public synchronized void admitInclude(long expandedBytes, Evictor evictor) {
         try {
-            check(expandedBytes);
+            fitOrEvict(expandedBytes, evictor);
         } catch (InsufficientHeapException e) {
             throw new ProblemException(413, "package-too-large",
                     "This instance cannot build a validator with this IG set: it " + e.getMessage());

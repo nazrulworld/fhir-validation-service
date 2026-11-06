@@ -89,6 +89,12 @@ public final class ApplicationConfig {
 
     public long syncPollIntervalMs() { return section("sync").getLong("pollIntervalMs"); }
 
+    /** Most on-demand validator contexts one instance keeps ({@code FV_IG_MAX_ON_DEMAND}, spec 004 FR-015). */
+    public int igMaxOnDemand() { return section("ig").getInteger("maxOnDemand"); }
+
+    /** How long a request waits for an on-demand context build ({@code FV_IG_BUILD_WAIT_MS}, spec 004 FR-012). */
+    public long igBuildWaitMs() { return section("ig").getLong("buildWaitMs"); }
+
     public boolean anonymousValidate() { return section("auth").getBoolean("anonymousValidate"); }
     public String bootstrapAdminKey() { return section("auth").getString("bootstrapAdminKey"); }
     public long authCacheTtlMs() { return section("auth").getLong("cacheTtlMs"); }
