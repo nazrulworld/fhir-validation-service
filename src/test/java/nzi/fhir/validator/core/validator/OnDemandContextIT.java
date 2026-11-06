@@ -220,4 +220,24 @@ class OnDemandContextIT extends BaseTestContainer {
             Thread.currentThread().interrupt();
         }
     }
+
+    /**
+     * Convergence T070 (FR-013): once contexts are built, validation needs neither the database nor the network: with
+     * the database pool closed, a pinned ig, a versionless ig and the base context all still validate.
+     */
+    @Test
+    void builtContextsValidateWithoutTheDatabase(Vertx vertx, VertxTestContext ctx) {
+        store("od.nodb")
+                .compose(v -> core.services().igPackageService().include(SupportedFhirVersion.R4, "od.nodb", "1.0.0"))
+                .compose(r -> core.services().pool().close())
+                .compose(v -> Future.all(validate(core, "od.nodb#1.0.0"), validate(core, "od.nodb"),
+                        core.services().validationService().validate(SupportedFhirVersion.R4, null, TestPackages.minimalPatient(),
+                                SupportedContentType.JSON, List.of(), Function.identity())))
+                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
+                    assertTrue(TestPackages.hasError(all.resultAt(0), "birthDate"));
+                    assertEquals("od.nodb#1.0.0", ((ValidatorSnapshot.Outcome) all.resultAt(1)).igPackage());
+                    assertNull(((ValidatorSnapshot.Outcome) all.resultAt(2)).igPackage());
+                    ctx.completeNow();
+                })));
+    }
 }

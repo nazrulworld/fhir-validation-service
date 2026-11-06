@@ -541,3 +541,37 @@ T055 upgrade-3.0.md | T056 CHANGELOG | T061 README | T062 profile-sourcing wordi
 - Every new future-returning API returns `io.vertx.core.Future`: no `.get()`, no `Thread.sleep`, and no blocking on
   the event loop.
 - Commit after each task or logical group, with commit messages ending in the required attribution line.
+
+---
+
+## Phase 8: Convergence
+
+- [X] T066 Remove the per-request overhead on the validation path: cache the `fv.validator.context.lookups` counters per (FHIR version, result) in `ServiceMetrics` instead of `Counter.builder(...).register(...)` on every lookup, and serve base and pinned contexts in `ValidatorRegistry.snapshot()` without taking the global registry lock (e.g. a volatile/concurrent read path). Then rerun `scripts/bench-validate.sh` against 2.0.0 and this build and record p50/p95/p99 in the PR, in `src/main/java/nzi/fhir/validator/core/metrics/ServiceMetrics.java` and `src/main/java/nzi/fhir/validator/core/validator/ValidatorRegistry.java` per SC-007 (partial)
+- [X] T067 When `ValidatorRegistry.applyPinned` demotes an excluded key, drop the context instead of keeping it when its resolution against the current catalog has missing dependencies (or always drop it), so a later `?ig=` request for it behaves like any other stored package, including 424 `dependency-not-found`. Add a case to `src/test/java/nzi/fhir/validator/core/validator/IncludeExcludeIT.java`, editing `src/main/java/nzi/fhir/validator/core/validator/ValidatorRegistry.java`, per US2-6 / FR-017 (contradicts)
+- [X] T068 Add a test that every log line emitted by an on-demand context build (including a build that waited in `SnapshotBuilder`'s `AsyncLimiter` queue) carries the request id of the request that started it, and fix the context propagation if it does not, in `src/test/java/nzi/fhir/validator/web/ObservabilityIT.java` and `src/main/java/nzi/fhir/validator/core/validator/SnapshotBuilder.java` per Constitution VII (partial)
+- [X] T069 Add a burst test: 20 distinct stored IGs requested concurrently with `ig.maxOnDemand = 4`; the on-demand count never exceeds 4, every request ends in 200 or a curated 503, and no build is admitted beyond the heap check, in `src/test/java/nzi/fhir/validator/core/validator/ContextEvictionIT.java` per SC-008 (partial)
+- [X] T070 Add a test that validation against a built pinned context and against the base context succeeds while the database is unreachable (pool closed or container paused), in `src/test/java/nzi/fhir/validator/core/validator/OnDemandContextIT.java` per FR-013 (partial)
+- [X] T071 Make a malformed `ig` win over an empty JSON body (today the contract layer answers `invalid-resource` first), or document that contract-layer exception in the `validationApiValidate` description in `src/main/resources/openapi.yaml`, and cover the JSON case in `src/test/java/nzi/fhir/validator/web/IgScopedValidationIT.java` per FR-009 (partial)
+- [X] T072 Add a `RegisterLatestIT` case where the registry's latest release is lower than a stored pre-release: `register` with `latest` returns the registry's version (downloading it if missing) and reports it, in `src/test/java/nzi/fhir/validator/core/npm/RegisterLatestIT.java` per spec edge case "Registry newest is lower than stored" (missing)
+- [X] T073 Remove the unused `PackageCache.invalidateAll()` (or call it from `PostgresPackageCacheManager.clear()`'s change handling), in `src/main/java/nzi/fhir/validator/core/npm/PackageCache.java` per plan: `PackageCache.invalidate` (unrequested)
+
+### Convergence notes (recorded during /speckit-implement)
+
+- **T066**: base and pinned contexts are served from a `ConcurrentHashMap` and volatile slot fields, without the
+  registry lock; validation and lookup counters and the validation timer are created once per tag set. Benchmark,
+  2.0.0 and this build back-to-back in one session (2000 requests, concurrency 8, laptop, PostgreSQL 16 in Docker):
+
+  | Build | Scenario | p50 | p95 | p99 |
+  |---|---|---|---|---|
+  | 2.0.0 | no ig | 16 ms | 26 ms | 34 ms |
+  | 3.0.0 | no ig (base) | 16 ms | 27 ms | 40 ms |
+  | 2.0.0 | dk-core included (2.0 ignores ig) | 15 ms | 21 ms | 23 ms |
+  | 3.0.0 | ig=dk-core (pinned) | 14 ms | 20 ms | 23 ms |
+
+  No difference beyond run-to-run noise (2.0.0 itself measured 20 ms p95 in an earlier session).
+- **T067**: an excluded IG whose resolution has a missing dependency is dropped instead of demoted; others are still
+  kept on demand.
+- **T068**: confirmed the defect (a queued build logged the id of the request whose build finished first) and fixed it
+  in `AsyncLimiter`: a queued task starts on its caller's Vert.x context.
+- **T071**: implemented rather than documented: the contract layer's failure handler checks the `ig` shape first.
+- `mvn verify`: 325 tests, 0 failures, no blocked-thread warnings.

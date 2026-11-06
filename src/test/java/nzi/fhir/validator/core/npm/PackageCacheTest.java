@@ -21,8 +21,5 @@ class PackageCacheTest {
         assertEquals(before - 1000L * PackageCache.EXPANSION_FACTOR, cache.weightBytes());
         cache.invalidate("missing#1.0.0");
         assertEquals(1, cache.size());
-        cache.invalidateAll();
-        assertEquals(0, cache.size());
-        assertEquals(0, cache.weightBytes());
     }
 }

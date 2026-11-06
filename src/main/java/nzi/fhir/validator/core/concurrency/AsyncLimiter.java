@@ -38,13 +38,24 @@ public final class AsyncLimiter {
                 result.handle(ar);
             });
         };
+        // A queued task is started later by whichever task finishes first, on that task's context. Start it on the
+        // caller's context instead, so context locals such as the request id (log correlation, Principle VII) stay
+        // with the work they belong to.
+        io.vertx.core.Context caller = io.vertx.core.Vertx.currentContext();
+        Runnable queued = caller == null ? start : () -> {
+            if (io.vertx.core.Vertx.currentContext() == caller) {
+                start.run();
+            } else {
+                caller.runOnContext(v -> start.run());
+            }
+        };
         boolean now;
         synchronized (this) {
             now = running < permits;
             if (now) {
                 running++;
             } else {
-                waiting.add(start);
+                waiting.add(queued);
             }
         }
         if (now) {

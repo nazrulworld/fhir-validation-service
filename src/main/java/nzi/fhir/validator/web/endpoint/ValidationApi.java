@@ -163,6 +163,14 @@ public class ValidationApi {
      * content type is 415; everything else follows the common mapping.
      */
     private static void handleValidateFailure(RoutingContext ctx) {
+        // FR-009: the ig parameter's shape is checked before the body, also when the contract layer has already
+        // refused the body (e.g. an empty or malformed JSON body).
+        try {
+            igParameter(ctx);
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
         if (ctx.failure() instanceof BodyProcessorException e
                 && e.getErrorType() == BodyProcessorException.BodyProcessorErrorType.PARSING_ERROR) {
             ErrorResponder.fail(ctx, invalidResource("The body is not well-formed JSON"));

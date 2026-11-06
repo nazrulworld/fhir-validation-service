@@ -201,4 +201,22 @@ class RegisterLatestIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * Convergence T072 (spec edge case "Registry newest is lower than stored"): a locally stored pre-release above the
+     * registry's latest release does not hide it; register latest returns the registry's version and says so.
+     */
+    @Test
+    void registryLatestBelowAStoredPreReleaseIsStillReturned(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, true)
+                .compose(a -> storeLocally("reg.p", "3.0.0-ballot"))
+                .compose(v -> register(new JsonObject().put("name", "reg.p")))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    assertEquals("2.0.0", r.bodyAsJsonObject().getString("version"), "the registry's latest release");
+                    assertTrue(r.bodyAsJsonObject().getBoolean("downloaded"));
+                    assertEquals(List.of(), r.bodyAsJsonObject().getJsonArray("warnings").getList());
+                    ctx.completeNow();
+                })));
+    }
 }

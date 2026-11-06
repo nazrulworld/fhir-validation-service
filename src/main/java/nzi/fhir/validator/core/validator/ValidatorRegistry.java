@@ -82,9 +82,10 @@ public class ValidatorRegistry {
     private static final class Slot {
         final SnapshotKey key;
         Kind kind;
-        ValidatorSnapshot snapshot;
+        /** Volatile: read without the lock on the hot path for base and pinned contexts (written under it). */
+        volatile ValidatorSnapshot snapshot;
         ResolvedContext activeResolved;
-        Status status = Status.ABSENT;
+        volatile Status status = Status.ABSENT;
         String reason;
         long appliedRevision;
         long wantedRevision;
@@ -94,7 +95,7 @@ public class ValidatorRegistry {
         boolean admissionHeld;
         long retryDelayMs = INITIAL_RETRY_MS;
         long retryTimer = -1;
-        long lastUsed;
+        volatile long lastUsed;
         final List<Promise<Void>> applyWaiters = new ArrayList<>();
         final List<Promise<ValidatorSnapshot>> requestWaiters = new ArrayList<>();
 
@@ -116,7 +117,11 @@ public class ValidatorRegistry {
     private final int maxOnDemand;
     private final long buildWaitMs;
     private final AdmissionController buildAdmission;
-    private final Map<SnapshotKey, Slot> pinned = new HashMap<>();
+    /**
+     * Base and pinned slots. Concurrent so validation can read them without the registry lock (SC-007); the map and
+     * the slots' fields are still only written under the lock.
+     */
+    private final Map<SnapshotKey, Slot> pinned = new java.util.concurrent.ConcurrentHashMap<>();
     /** Access-ordered: iteration starts at the least recently used slot. */
     private final LinkedHashMap<SnapshotKey, Slot> onDemand = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<SupportedFhirVersion, VersionState> versions = new EnumMap<>(SupportedFhirVersion.class);
@@ -197,10 +202,11 @@ public class ValidatorRegistry {
         if (slot.status == Status.STALE) {
             throw ProblemException.notReady("The validator for " + slot.key + " is out of date and being rebuilt");
         }
-        if (slot.snapshot == null) {
+        ValidatorSnapshot snapshot = slot.snapshot;
+        if (snapshot == null) {
             throw ProblemException.notReady("The validator for " + slot.key + " is not ready yet");
         }
-        return slot.snapshot;
+        return snapshot;
     }
 
     /**
@@ -209,6 +215,18 @@ public class ValidatorRegistry {
      * stored packages (never from a registry). The caller resolved {@code key} against the catalog first.
      */
     public Future<ValidatorSnapshot> snapshot(SnapshotKey key) {
+        // Hot path: base and pinned contexts are served from volatile state, without the registry lock.
+        Slot fast = pinned.get(key);
+        if (fast != null) {
+            try {
+                ValidatorSnapshot serving = serveable(fast);
+                fast.lastUsed = System.currentTimeMillis();
+                emitLookup(key, LOOKUP_HIT);
+                return Future.succeededFuture(serving);
+            } catch (ProblemException e) {
+                return Future.failedFuture(e);
+            }
+        }
         Slot toBuild = null;
         Future<ValidatorSnapshot> result;
         String lookup;
@@ -384,17 +402,24 @@ public class ValidatorRegistry {
             desired.put(SnapshotKey.base(version), ResolvedContext.EMPTY);
             pinnedContexts.forEach((ig, ctx) -> desired.put(SnapshotKey.of(version, ig), ctx));
 
-            // Excluded keys: demoted to on-demand, kept while memory and the bound allow (research R10).
+            // Excluded keys: demoted to on-demand, kept while memory and the bound allow (research R10). A context an
+            // on-demand request could not get (a dependency is not stored, FR-017) is dropped instead, so the excluded
+            // IG behaves exactly like any other stored package from now on (US2-6).
+            PackageCatalogView view = catalog.get();
             for (Iterator<Map.Entry<SnapshotKey, Slot>> it = pinned.entrySet().iterator(); it.hasNext(); ) {
                 Slot s = it.next().getValue();
                 if (s.kind == Kind.PINNED && s.key.fhirVersion() == version && !desired.containsKey(s.key)) {
                     it.remove();
                     cancelRetryLocked(s);
                     s.kind = Kind.ON_DEMAND;
-                    if (s.snapshot != null || s.building) {
+                    boolean missingDependency = !ResolvedContext.of(s.key.igPackage(), view).missing().isEmpty();
+                    if ((s.snapshot != null || s.building) && !missingDependency) {
                         onDemand.put(s.key, s);
+                        logger.info("Validator context {} is no longer included; kept on demand", s.key);
+                    } else {
+                        evicted.add(s.key);
+                        logger.info("Validator context {} is no longer included; dropped", s.key);
                     }
-                    logger.info("Validator context {} is no longer included; kept on demand", s.key);
                 }
             }
             makeRoomLocked(maxOnDemand, evicted);

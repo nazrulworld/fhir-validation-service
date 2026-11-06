@@ -180,4 +180,64 @@ class ObservabilityIT extends BaseTestContainer {
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
     }
+
+    /**
+     * Convergence T068 (Constitution VII): log lines of an on-demand build carry the id of the request that started it,
+     * also when the build waited in the build queue behind another request's build (default: one build at a time).
+     */
+    @Test
+    void onDemandBuildLogLinesCarryTheStartingRequestsId(VertxTestContext ctx) {
+        var services = app.bootstrap().services();
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean first = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Future.all(store("obs.first"), store("obs.queued"))
+                .compose(v -> {
+                    logs = LogCapture.start();
+                    services.snapshotBuilder().setBuildHook(() -> {
+                        if (first.getAndSet(false)) {
+                            try {
+                                release.await(30, java.util.concurrent.TimeUnit.SECONDS);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        }
+                    });
+                    Future<io.vertx.ext.web.client.HttpResponse<Buffer>> a = validateIg("obs.first#1.0.0", "req-first-build");
+                    Future<io.vertx.ext.web.client.HttpResponse<Buffer>> b =
+                            metricsVertx.timer(300).compose(t -> validateIg("obs.queued#1.0.0", "req-queued-build"));
+                    metricsVertx.setTimer(800, t -> release.countDown());
+                    return Future.all(a, b);
+                })
+                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
+                    services.snapshotBuilder().setBuildHook(null);
+                    for (int i = 0; i < 2; i++) {
+                        assertEquals(200, ((io.vertx.ext.web.client.HttpResponse<?>) all.resultAt(i)).statusCode());
+                    }
+                    List<String> firstIds = builtLogIds("R4:obs.first#1.0.0");
+                    List<String> queuedIds = builtLogIds("R4:obs.queued#1.0.0");
+                    assertFalse(firstIds.isEmpty() || queuedIds.isEmpty(), firstIds + " / " + queuedIds);
+                    assertTrue(firstIds.stream().allMatch("req-first-build"::equals), firstIds.toString());
+                    assertTrue(queuedIds.stream().allMatch("req-queued-build"::equals),
+                            "the queued build logs the request that started it, not the one whose build finished first: " + queuedIds);
+                    ctx.completeNow();
+                })));
+    }
+
+    private Future<Void> store(String name) {
+        return nzi.fhir.validator.testsupport.TestPackages.storePackage(app.bootstrap().services(),
+                nzi.fhir.validator.testsupport.TestPackages.profilePackage(name, "1.0.0",
+                        nzi.fhir.validator.testsupport.TestPackages.requiredPatientElements(
+                                "http://example.org/fhir/StructureDefinition/" + name, "birthDate")));
+    }
+
+    private List<String> builtLogIds(String key) {
+        return logs.events().stream().filter(e -> e.message().startsWith("Built validator for " + key + " "))
+                .map(LogCapture.Captured::requestId).toList();
+    }
+
+    private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> validateIg(String ig, String requestId) {
+        return app.client().post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", ig)
+                .putHeader("X-Request-Id", requestId).putHeader("Content-Type", "application/json").timeout(30_000)
+                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
+    }
 }

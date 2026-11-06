@@ -223,4 +223,37 @@ class IncludeExcludeIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * Convergence T067 (US2-6, FR-017): an excluded IG whose dependency is not stored is not kept on demand; a later
+     * request for it is refused with 424 like any other on-demand request for that package.
+     */
+    @Test
+    void excludedIgWithAMissingDependencyIsDroppedAndThen424(VertxTestContext ctx) {
+        ValidatorRegistry reg = services().validatorRegistry();
+        TestPackages.storePackage(services(), TestPackages.npmPackage("inc.needsdep", "1.0.0",
+                        java.util.Map.of("inc.absent", "1.0.0"), List.of(TestPackages.requiredPatientElements(P1, "birthDate"))))
+                .compose(v -> include("inc.needsdep", "1.0.0"))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertFalse(r.bodyAsJsonObject().getJsonArray("warnings").isEmpty(), "include warns about the missing dependency");
+                        assertEquals(ValidatorRegistry.Kind.PINNED, reg.kind(key("inc.needsdep#1.0.0")));
+                    });
+                    return exclude("inc.needsdep#1.0.0").send();
+                })
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertNull(reg.kind(key("inc.needsdep#1.0.0")), "dropped, not kept on demand");
+                    });
+                    return validate("inc.needsdep#1.0.0", P1).transform(Future::succeededFuture);
+                })
+                .onComplete(ctx.succeeding(ar -> ctx.verify(() -> {
+                    nzi.fhir.validator.web.ProblemException p = assertInstanceOf(nzi.fhir.validator.web.ProblemException.class, ar.cause());
+                    assertEquals(424, p.status());
+                    assertEquals("dependency-not-found", p.type());
+                    ctx.completeNow();
+                })));
+    }
 }
