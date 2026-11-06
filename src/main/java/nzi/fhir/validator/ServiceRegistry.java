@@ -11,6 +11,7 @@ import io.micrometer.prometheus.PrometheusMeterRegistry;
 import nzi.fhir.validator.core.metrics.ServiceMetrics;
 import nzi.fhir.validator.core.npm.PackageArchiveGuard;
 import nzi.fhir.validator.core.npm.PackageCache;
+import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.SafePackageFetcher;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.security.ApiKeyRepository;
@@ -54,7 +55,8 @@ public final class ServiceRegistry {
 
     private ServiceRegistry(ApplicationConfig config, Pool pool, Executors executors, HealthService healthService,
                             IgPackageService igPackageService, ValidatorRegistry validatorRegistry, ConfigSync configSync,
-                            FhirValidationService validationService, SafePackageFetcher fetcher) {
+                            FhirValidationService validationService, SafePackageFetcher fetcher,
+                            AdmissionController adminAdmission) {
         this.config = config;
         this.pool = pool;
         this.executors = executors;
@@ -64,8 +66,7 @@ public final class ServiceRegistry {
         this.configSync = configSync;
         this.validationService = validationService;
         this.fetcher = fetcher;
-        this.adminAdmission = new AdmissionController(config.adminMaxPending(),
-                "Too many administrative operations in progress; retry shortly");
+        this.adminAdmission = adminAdmission;
         this.apiKeys = new ApiKeyRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
         this.validationApi = new ValidationApi(validationService, igPackageService);
@@ -85,20 +86,34 @@ public final class ServiceRegistry {
         HeapBudget heap = HeapBudget.ofRuntime();
         SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()),
                 config.packageWorkers(), heap);
-        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder);
-        ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), registry, config.syncPollIntervalMs());
+        AdmissionController adminAdmission = new AdmissionController(config.adminMaxPending(),
+                "Too many administrative operations in progress; retry shortly");
+        // On-demand context builds share the administrative admission limit (spec 004 FR-014).
+        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, config.igMaxOnDemand(), config.igBuildWaitMs(),
+                adminAdmission);
+        PackageCatalog catalog = PackageCatalog.of(pool);
+        ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), registry, catalog, builder.cache(),
+                config.syncPollIntervalMs());
+        // A package stored here is visible at once on this instance; other instances follow the PACKAGE notification.
+        packages.setStoreListener(key -> {
+            catalog.markStale();
+            sync.syncCatalog();
+        });
         igPackageService.setApplyLocally(sync::syncNow);
         igPackageService.setAdmitBuild(expandedBytes -> executors.packages().executeBlocking(() -> {
-            heap.admitInclude(expandedBytes);
+            heap.admitInclude(expandedBytes, registry.evictor());
             return null;
         }, false));
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
+        healthService.setCatalogRevision(() -> catalog.current().revision());
         PackageCache packageCache = builder.cache();
+        FhirValidationService validationService = new FhirValidationService(registry, executors,
+                new AdmissionController(config.validationMaxPending()), config.validationMaxBundleEntries());
+        validationService.setCatalog(catalog);
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
-                new FhirValidationService(registry, executors, new AdmissionController(config.validationMaxPending()),
-                        config.validationMaxBundleEntries()), fetcher);
+                validationService, fetcher, adminAdmission);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
         metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache);
         services.validationService.setMetrics(metrics);

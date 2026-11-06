@@ -58,6 +58,11 @@ class PackageLatestResolutionIT extends BaseTestContainer {
                 .compose(v -> PostgresPackageCacheManager.getLatestVersionFromCache(pool, "example.latest"))
                 .compose(latest -> {
                     ctx.verify(() -> assertEquals("2.0.0", latest));
+                    // Spec 004 FR-031: outside registration, "latest" still means the highest stored version.
+                    return core.services().igPackageService().cacheManager().resolveVersion("example.latest", "latest", false);
+                })
+                .compose(resolved -> {
+                    ctx.verify(() -> assertEquals("2.0.0", resolved));
                     return core.services().igPackageService().include(SupportedFhirVersion.R4, "example.latest", "latest");
                 })
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {

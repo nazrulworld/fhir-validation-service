@@ -51,12 +51,21 @@ public final class TestPackages {
      * @param dependencies {@code name -> version}
      */
     public static byte[] npmPackage(String name, String version, Map<String, String> dependencies, List<JsonObject> resources) {
+        return igPackage(name, version, List.of("4.0.1"), dependencies, resources.toArray(JsonObject[]::new));
+    }
+
+    /**
+     * An NPM package ({@code .tgz}) whose {@code package.json} declares the given FHIR versions (spec 004: an
+     * {@code ig} for another FHIR version is refused).
+     */
+    public static byte[] igPackage(String name, String version, List<String> fhirVersions, Map<String, String> dependencies,
+                                   JsonObject... resources) {
         JsonObject deps = new JsonObject().put("hl7.fhir.r4.core", "4.0.1");
         dependencies.forEach(deps::put);
         JsonObject packageJson = new JsonObject()
                 .put("name", name)
                 .put("version", version)
-                .put("fhirVersions", new JsonArray().add("4.0.1"))
+                .put("fhirVersions", new JsonArray(List.copyOf(fhirVersions)))
                 .put("type", "fhir.ig")
                 .put("dependencies", deps);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -89,6 +98,48 @@ public final class TestPackages {
                 .compose(pkg -> services.igPackageService()
                         .include(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4, name, version))
                 .mapEmpty();
+    }
+
+    /**
+     * The same package archive with its non-core dependencies removed from {@code package.json}, so a real published
+     * IG (e.g. US Core) can be built on demand without its dependencies being stored.
+     */
+    public static byte[] withoutDependencies(byte[] tgz) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.tar.TarArchiveInputStream in =
+                     new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
+                             new org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream(new java.io.ByteArrayInputStream(tgz)));
+             TarArchiveOutputStream tar = new TarArchiveOutputStream(new GzipCompressorOutputStream(out))) {
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+            TarArchiveEntry entry;
+            while ((entry = in.getNextTarEntry()) != null) {
+                if (!entry.isFile()) {
+                    continue;
+                }
+                byte[] data = in.readAllBytes();
+                if (entry.getName().equals("package/package.json")) {
+                    JsonObject pkg = new JsonObject(new String(data, StandardCharsets.UTF_8));
+                    JsonObject deps = new JsonObject();
+                    JsonObject original = pkg.getJsonObject("dependencies", new JsonObject());
+                    original.fieldNames().stream().filter(n -> n.matches("hl7\\.fhir\\.r[0-9]b?\\.core"))
+                            .forEach(n -> deps.put(n, original.getValue(n)));
+                    data = pkg.put("dependencies", deps).encode().getBytes(StandardCharsets.UTF_8);
+                }
+                TarArchiveEntry copy = new TarArchiveEntry(entry.getName());
+                copy.setSize(data.length);
+                tar.putArchiveEntry(copy);
+                tar.write(data);
+                tar.closeArchiveEntry();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out.toByteArray();
+    }
+
+    /** Stores {@code tgz} without including it (it can still be named in {@code ig}, spec 004 FR-006). */
+    public static io.vertx.core.Future<Void> storePackage(nzi.fhir.validator.ServiceRegistry services, byte[] tgz) {
+        return services.igPackageService().registerIg(tgz, false).mapEmpty();
     }
 
     private static void add(TarArchiveOutputStream tar, String path, String content) throws IOException {

@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * B4/B5 regression: an IG upgrade replaces the validator atomically and leaves no content of the old version.
+ * B4/B5 regression, as redefined by spec 004 (US2): including a second version of an IG adds a separate context and
+ * leaves the first one untouched; each version's validation sees only its own content, and validations running while
+ * the second version is included are never affected by it.
  */
 @ExtendWith(VertxExtension.class)
 @Timeout(value = 180, timeUnit = TimeUnit.SECONDS)
@@ -57,9 +59,10 @@ class ValidatorSnapshotSwapIT extends BaseTestContainer {
         (core == null ? Future.<Void>succeededFuture() : core.stop()).onComplete(ar -> ctx.completeNow());
     }
 
-    private Future<String> classify(String profile) {
+    private Future<String> classify(String ig, String profile) {
         return core.services().validationService()
-                .validate(SupportedFhirVersion.R4, TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(profile))
+                .validate(SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
+                        List.of(profile), java.util.function.Function.identity())
                 .map(o -> {
                     boolean constraint = o.result().getMessages().stream().anyMatch(m ->
                             m.getSeverity().ordinal() >= ResultSeverityEnum.ERROR.ordinal() && m.getMessage().contains("birthDate"));
@@ -73,29 +76,39 @@ class ValidatorSnapshotSwapIT extends BaseTestContainer {
     }
 
     @Test
-    void upgradeSwapsAtomicallyAndDropsOldContent(Vertx vertx, VertxTestContext ctx) {
+    void secondVersionIsAddedBesideTheFirstWhichKeepsServing(Vertx vertx, VertxTestContext ctx) {
         var ig = core.services().igPackageService();
+        ValidatorRegistry registry = core.services().validatorRegistry();
+        SnapshotKey v1 = SnapshotKey.of(SupportedFhirVersion.R4, "example.swap#1.0.0");
+        SnapshotKey v2 = SnapshotKey.of(SupportedFhirVersion.R4, "example.swap#2.0.0");
+        ValidatorSnapshot[] v1Snapshot = new ValidatorSnapshot[1];
         ig.include(SupportedFhirVersion.R4, "example.swap", "1.0.0")
-                .compose(r -> classify(P1))
+                .compose(r -> classify("example.swap#1.0.0", P1))
                 .compose(before -> {
                     ctx.verify(() -> assertEquals("OLD", before, "v1 profile must apply"));
+                    v1Snapshot[0] = registry.current(v1);
                     List<Future<String>> during = new ArrayList<>();
                     for (int i = 0; i < 200; i++) {
-                        during.add(classify(P1));
+                        during.add(classify("example.swap#1.0.0", P1));
                     }
                     List<Future<?>> all = new ArrayList<>(during);
                     all.add(ig.include(SupportedFhirVersion.R4, "example.swap", "2.0.0"));
                     return Future.all(all).map(done -> during);
                 })
                 .compose(during -> {
-                    ctx.verify(() -> during.forEach(f -> assertTrue(f.result().equals("OLD") || f.result().equals("NEW"),
-                            "every validation runs entirely on one revision: " + f.result())));
-                    return classify(P1);
+                    ctx.verify(() -> during.forEach(f -> assertEquals("OLD", f.result(),
+                            "validations against v1 are unaffected while v2 is included")));
+                    return Future.all(classify("example.swap#2.0.0", P1), classify("example.swap#1.0.0", P1));
                 })
                 .onComplete(ctx.succeeding(after -> ctx.verify(() -> {
-                    assertEquals("NEW", after, "content only in v1 must be gone after the upgrade");
-                    assertEquals(List.of("example.swap#2.0.0"),
-                            core.services().validatorRegistry().current(SupportedFhirVersion.R4).resolvedPackages());
+                    assertEquals("NEW", after.resultAt(0), "v1-only content is not visible through v2");
+                    assertEquals("OLD", after.resultAt(1), "v1 keeps validating with its own content");
+                    assertSame(v1Snapshot[0], registry.current(v1), "including v2 did not rebuild v1 (SC-005)");
+                    assertEquals(ValidatorRegistry.Kind.PINNED, registry.kind(v1));
+                    assertEquals(ValidatorRegistry.Kind.PINNED, registry.kind(v2));
+                    assertEquals(List.of("example.swap#2.0.0"), registry.current(v2).resolvedPackages());
+                    assertEquals(List.of(), registry.current(SupportedFhirVersion.R4).resolvedPackages(),
+                            "the base context holds no IG");
                     ctx.completeNow();
                 })));
     }

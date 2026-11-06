@@ -79,14 +79,15 @@ public class IgPackageService {
     }
 
     /**
-     * Includes a stored IG package in the (global) validator configuration of {@code fhirVersion}, replacing any
-     * other version of the same package. Resolution and the revision bump run in one transaction with the
-     * configuration row locked, so concurrent includes serialise and every instance converges on one result.
-     * Completes after the change is applied on this instance, or after {@code localApplyWaitMs} with a warning while
-     * the rebuild continues in the background; other instances follow via notification/poll.
+     * Includes a stored IG package for {@code fhirVersion}: its validator context is pre-built and pinned on every
+     * instance (spec 004 FR-019 to FR-023). Other included packages, other versions of the same package included,
+     * are left alone. The revision bump runs in one transaction with the configuration row locked, so concurrent
+     * includes serialise and every instance converges on one result. Completes after the change is applied on this
+     * instance, or after {@code localApplyWaitMs} with a warning while the build continues in the background; other
+     * instances follow via notification/poll. Including a package that is already included changes nothing.
      *
      * @param requestedVersion an exact version, or {@code latest}/empty for the highest stored release
-     * @return {@code {fhirVersion, revision, included, resolved, warnings}}
+     * @return {@code {status, fhirVersion, key {fhirVersion, igPackage}, revision, included, resolved, warnings}}
      */
     static final String NOT_APPLIED_WARNING = "Committed; this instance has not applied it yet, see /health";
     static final String STILL_APPLYING_WARNING = "Committed; this instance is still rebuilding its validator, see /health";
@@ -114,24 +115,21 @@ public class IgPackageService {
                     String key = name + "#" + concrete.get();
                     return checkFhirVersion(tx, fhirVersion, name, concrete.get())
                             .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
-                        Set<String> included = new TreeSet<>();
-                        row.included().stream().filter(p -> !p.startsWith(name + "#")).forEach(included::add);
-                        included.add(key);
-                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(included, catalog);
+                        // This key's context only: one IG and its dependencies (FR-021).
+                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog);
                         warnings.addAll(resolution.warnings());
+                        if (row.included().contains(key)) {
+                            return Future.succeededFuture(includeResult(fhirVersion, key, row.revision(), row.included(),
+                                    resolution.resolved()));
+                        }
+                        Set<String> included = new TreeSet<>(row.included());
+                        included.add(key);
                         List<String> includedList = List.copyOf(included);
-                        // An unchanged package set does not rebuild; a changed one must fit in this instance's heap.
-                        Future<Void> admitted = resolution.resolved().equals(row.resolved())
-                                ? Future.succeededFuture()
-                                : PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild);
-                        return admitted.compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList,
-                                        resolution.resolved(), key))
-                                .map(revision -> new JsonObject()
-                                        .put("status", "success")
-                                        .put("fhirVersion", fhirVersion.name())
-                                        .put("revision", revision)
-                                        .put("included", new JsonArray(includedList))
-                                        .put("resolved", new JsonArray(resolution.resolved())));
+                        // The new context must fit in this instance's heap (after evicting on-demand contexts).
+                        return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild)
+                                .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
+                                        ConfigRevisionRepository.KIND_IG))
+                                .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved()));
                     });
                 }))
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
@@ -145,6 +143,64 @@ public class IgPackageService {
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
                 .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
+    }
+
+    private static JsonObject includeResult(SupportedFhirVersion fhirVersion, String key, long revision,
+                                            List<String> included, List<String> resolved) {
+        return new JsonObject()
+                .put("status", "success")
+                .put("fhirVersion", fhirVersion.name())
+                .put("key", new JsonObject().put("fhirVersion", fhirVersion.name()).put("igPackage", key))
+                .put("revision", revision)
+                .put("included", new JsonArray(List.copyOf(included)))
+                .put("resolved", new JsonArray(resolved));
+    }
+
+    /**
+     * Stops pre-building an included IG version for {@code fhirVersion} (spec 004 FR-024): removes exactly that
+     * {@code name#version} from the included set, commits and propagates like {@link #include}. The package stays
+     * stored and can still be named in {@code ig} (it is then built on demand).
+     *
+     * @param ig an exact {@code name#version}
+     * @return {@code {status, fhirVersion, revision, excluded, included, warnings}}
+     */
+    public Future<JsonObject> exclude(SupportedFhirVersion fhirVersion, String ig) {
+        nzi.fhir.validator.core.validator.IgReference ref;
+        try {
+            ref = nzi.fhir.validator.core.validator.IgReference.parse(ig);
+        } catch (ProblemException e) {
+            return Future.failedFuture(e);
+        }
+        if (ref.version() == null) {
+            return Future.failedFuture(new ProblemException(400, "invalid-request",
+                    "An exact name#version is required to exclude an IG"));
+        }
+        String key = ref.label();
+        List<String> warnings = new ArrayList<>();
+        return pgPool.withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
+                    if (!row.included().contains(key)) {
+                        return Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
+                                "IG package " + key + " is not included for " + fhirVersion.name()));
+                    }
+                    List<String> remaining = row.included().stream().filter(p -> !p.equals(key)).sorted().toList();
+                    return ConfigRevisionRepository.updateIgSet(tx, fhirVersion, remaining, key,
+                                    ConfigRevisionRepository.KIND_IG_EXCLUDE)
+                            .map(revision -> new JsonObject()
+                                    .put("status", "success")
+                                    .put("fhirVersion", fhirVersion.name())
+                                    .put("revision", revision)
+                                    .put("excluded", key)
+                                    .put("included", new JsonArray(remaining)));
+                }))
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                                () -> warnings.add(STILL_APPLYING_WARNING))
+                        .recover(err -> {
+                            logger.warn("Excluded IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
+                            warnings.add(NOT_APPLIED_WARNING);
+                            return Future.succeededFuture();
+                        })
+                        .map(v -> result.put("warnings", new JsonArray(warnings))))
+                .onSuccess(r -> logger.info("Excluded IG {} in {} (revision {})", key, fhirVersion, r.getLong("revision")));
     }
 
     /**
@@ -167,20 +223,9 @@ public class IgPackageService {
                 });
     }
 
-    /** FHIR releases a stored package declares ({@code fhirVersions}, else {@code fhirVersion}); unknown labels are skipped. */
+    /** FHIR releases a stored package declares; the rule lives in {@link PackageCatalogView.parseDeclaredFhirVersions(JsonObject)}. */
     static Set<SupportedFhirVersion> declaredFhirVersions(JsonObject meta) {
-        Set<SupportedFhirVersion> declared = new TreeSet<>();
-        if (meta == null) {
-            return declared;
-        }
-        JsonArray list = meta.getJsonArray("fhirVersions");
-        if (list != null) {
-            list.forEach(v -> SupportedFhirVersion.fromDeclaredVersion(String.valueOf(v)).ifPresent(declared::add));
-        }
-        if (declared.isEmpty() && meta.getValue("fhirVersion") instanceof String single) {
-            SupportedFhirVersion.fromDeclaredVersion(single).ifPresent(declared::add);
-        }
-        return declared;
+        return nzi.fhir.validator.core.npm.PackageCatalogView.parseDeclaredFhirVersions(meta);
     }
 
     /**
@@ -207,6 +252,46 @@ public class IgPackageService {
 
     public static IgPackageService create(Vertx vertx, Pool pgPool, PostgresPackageCacheManager cacheManager) {
         return new IgPackageService(vertx, pgPool, cacheManager);
+    }
+
+    /**
+     * Outcome of {@code POST /igs/register} (spec 004 FR-030).
+     *
+     * @param downloaded whether the package archive was fetched in this call
+     */
+    public record Registration(NpmPackage pkg, boolean downloaded, List<String> warnings) {
+        public Registration {
+            warnings = List.copyOf(warnings);
+        }
+    }
+
+    /**
+     * Registers {@code name} from the package registries (spec 004 FR-027 to FR-031). With no version or
+     * {@code latest}, the registries' highest release is used, falling back to the highest stored version with a
+     * warning when no registry can decide. A version that is already stored is returned without downloading it again;
+     * a new one is downloaded and stored, with its dependencies when {@code includeDependency}.
+     *
+     * @return fails with 404 {@code package-not-found} when no source has the package
+     */
+    public Future<Registration> register(String name, String version, boolean includeDependency) {
+        boolean latest = version == null || version.isBlank() || "latest".equals(version);
+        Future<PostgresPackageCacheManager.RegistrationVersion> chosen = latest
+                ? cacheManager.resolveForRegistration(name)
+                : Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(version, false, null));
+        return chosen.compose(rv -> {
+            if (rv == null) {
+                return Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND, "IG package "
+                        + name + " was not found in the configured package registries and is not stored"));
+            }
+            String key = name + "#" + rv.version();
+            List<String> warnings = rv.warning() == null ? List.of() : List.of(rv.warning());
+            return cacheManager.isPackageExists(name, rv.version()).compose(stored ->
+                    cacheManager.loadPackage(key, false, includeDependency).compose(pkg -> pkg == null
+                            ? Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
+                            "IG package " + key + " was not found in the configured package registries"))
+                            : Future.succeededFuture(new Registration(pkg, !stored, warnings))));
+        }).onSuccess(r -> logger.info("Registered IG {}#{} (downloaded: {})", r.pkg().name(), r.pkg().version(), r.downloaded()))
+                .onFailure(e -> logger.warn("Failed to register IG {}#{}: {}", name, version, e.getMessage()));
     }
 
     public Future<NpmPackage> registerIg(String name, String version) {

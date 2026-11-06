@@ -136,4 +136,48 @@ class ObservabilityIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /** Spec 004 FR-033: context gauges, builds, evictions, lookups and the package_not_found outcome are exported. */
+    @Test
+    void contextMetricsAreExposed(VertxTestContext ctx) {
+        var services = app.bootstrap().services();
+        nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                        nzi.fhir.validator.testsupport.TestPackages.profilePackage("obs.ig", "1.0.0",
+                                nzi.fhir.validator.testsupport.TestPackages.requiredPatientElements(
+                                        "http://example.org/fhir/StructureDefinition/obs", "birthDate")))
+                .compose(v -> validateIg("obs.ig#1.0.0"))
+                .compose(r -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    return validateIg("obs.ig#1.0.0");
+                })
+                .compose(r -> {
+                    assertTrue(services.validatorRegistry().evictOne(null), "evict the on-demand context");
+                    return validateIg("not.stored#1.0.0");
+                })
+                .compose(r -> {
+                    assertEquals(404, r.statusCode());
+                    return app.client().get(app.port(), "localhost", "/metrics").send();
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    String body = r.bodyAsString();
+                    for (String metric : List.of(
+                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"base\",?\\} 1\\.0",
+                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"on-demand\",?\\} 0\\.0",
+                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"pinned\",?\\} 0\\.0",
+                            "fv_validator_context_builds_total\\{fhir_version=\"R4\",kind=\"on-demand\",outcome=\"success\",?\\} 1\\.0",
+                            "fv_validator_context_evictions_total\\{fhir_version=\"R4\",reason=\"memory\",?\\} 1\\.0",
+                            "fv_validator_context_lookups_total\\{fhir_version=\"R4\",result=\"built\",?\\} 1\\.0",
+                            "fv_validator_context_lookups_total\\{fhir_version=\"R4\",result=\"hit\",?\\} [1-9]",
+                            "fv_validations_total\\{outcome=\"package_not_found\",version=\"R4\",?\\} 1\\.0")) {
+                        assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
+                    }
+                    ctx.completeNow();
+                })));
+    }
+
+    private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> validateIg(String ig) {
+        return app.client().post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", ig)
+                .putHeader("Content-Type", "application/json")
+                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
+    }
 }

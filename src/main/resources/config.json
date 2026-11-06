@@ -26,6 +26,9 @@
   "admin": {
     "maxPending": 4
   },
+  "ig": {
+    "maxOnDemand": 4
+  },
   "sync": {
     "pollIntervalMs": 5000
   },

@@ -15,25 +15,28 @@ import java.util.Map;
 import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 
 /**
- * Validator configuration rows ({@code fhir_validator_logs}): one per FHIR version, with a revision that increases
- * on every IG change. Writes notify other instances through {@code pg_notify}, which PostgreSQL delivers
- * only when the surrounding transaction commits.
+ * Validator configuration rows ({@code fhir_validator_logs}): one per FHIR version, holding the set of included IG
+ * packages ({@code name#version}, each its own pinned validator context since 3.0.0) and a revision that increases on
+ * every include or exclude. Writes notify other instances through {@code pg_notify}, which PostgreSQL delivers only
+ * when the surrounding transaction commits.
  */
 public final class ConfigRevisionRepository {
     public static final String CHANNEL = "fv_config_changed";
     public static final String VALIDATOR_ID = "standard_validator";
     public static final String KIND_IG = "IG";
+    public static final String KIND_IG_EXCLUDE = "IG_EXCLUDE";
+    public static final String KIND_PACKAGE = nzi.fhir.validator.core.npm.PostgresPackageCacheManager.KIND_PACKAGE;
 
     private static final String TABLE = DB_POSTGRES_SCHEMA_NAME + ".fhir_validator_logs";
 
-    public record ConfigRow(long revision, List<String> included, List<String> resolved) {
+    public record ConfigRow(long revision, List<String> included) {
     }
 
     private ConfigRevisionRepository() {
     }
 
     public static Future<Map<SupportedFhirVersion, ConfigRow>> current(SqlClient client) {
-        return client.preparedQuery("SELECT fhir_version, revision, included_ig_packages, resolved_ig_packages FROM "
+        return client.preparedQuery("SELECT fhir_version, revision, included_ig_packages FROM "
                         + TABLE + " WHERE validator_id = $1")
                 .execute(Tuple.of(VALIDATOR_ID))
                 .map(rows -> {
@@ -50,7 +53,7 @@ public final class ConfigRevisionRepository {
      * Locks and returns the configuration row of {@code version} (call inside a transaction).
      */
     public static Future<ConfigRow> lockForUpdate(SqlClient tx, SupportedFhirVersion version) {
-        return tx.preparedQuery("SELECT fhir_version, revision, included_ig_packages, resolved_ig_packages FROM "
+        return tx.preparedQuery("SELECT fhir_version, revision, included_ig_packages FROM "
                         + TABLE + " WHERE validator_id = $1 AND fhir_version = $2 FOR UPDATE")
                 .execute(Tuple.of(VALIDATOR_ID, version.name()))
                 .compose(rows -> rows.size() == 0
@@ -59,15 +62,24 @@ public final class ConfigRevisionRepository {
     }
 
     /**
-     * Stores a new IG set and bumps the revision; notifies on commit.
+     * Stores a new included IG set and bumps the revision; notifies on commit.
+     *
+     * @param kind {@link #KIND_IG} (include) or {@link #KIND_IG_EXCLUDE}
      */
     public static Future<Long> updateIgSet(SqlClient tx, SupportedFhirVersion version, List<String> included,
-                                           List<String> resolved, String key) {
-        return tx.preparedQuery("UPDATE " + TABLE + " SET included_ig_packages = $1, resolved_ig_packages = $2, "
-                        + "revision = revision + 1, updated_at = now() WHERE validator_id = $3 AND fhir_version = $4 RETURNING revision")
-                .execute(Tuple.of(included.toArray(new String[0]), resolved.toArray(new String[0]), VALIDATOR_ID, version.name()))
+                                           String key, String kind) {
+        return tx.preparedQuery("UPDATE " + TABLE + " SET included_ig_packages = $1, "
+                        + "revision = revision + 1, updated_at = now() WHERE validator_id = $2 AND fhir_version = $3 RETURNING revision")
+                .execute(Tuple.of(included.stream().sorted().toArray(String[]::new), VALIDATOR_ID, version.name()))
                 .map(rows -> rows.iterator().next().getLong(0))
-                .compose(revision -> notify(tx, version, revision, KIND_IG, key).map(revision));
+                .compose(revision -> notify(tx, version, revision, kind, key).map(revision));
+    }
+
+    /** The shared package catalog revision (spec 004, research R4). */
+    public static Future<Long> catalogRevision(SqlClient client) {
+        return client.query("SELECT revision FROM " + DB_POSTGRES_SCHEMA_NAME + ".fhir_package_catalog WHERE id = 1")
+                .execute()
+                .map(rows -> rows.size() == 0 ? 0L : rows.iterator().next().getLong(0));
     }
 
     private static Future<Void> notify(SqlClient tx, SupportedFhirVersion version, long revision, String kind, String key) {
@@ -81,7 +93,7 @@ public final class ConfigRevisionRepository {
     }
 
     private static ConfigRow toConfigRow(Row row) {
-        return new ConfigRow(row.getLong(1), array(row.getArrayOfStrings(2)), array(row.getArrayOfStrings(3)));
+        return new ConfigRow(row.getLong(1), array(row.getArrayOfStrings(2)));
     }
 
     private static List<String> array(String[] values) {

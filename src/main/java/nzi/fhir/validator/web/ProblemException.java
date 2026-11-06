@@ -38,8 +38,18 @@ public class ProblemException extends RuntimeException {
      */
     public static ProblemException unknownProfiles(nzi.fhir.validator.core.enums.SupportedFhirVersion version,
                                                    java.util.List<String> unresolved) {
-        return new ProblemException(400, TYPE_UNKNOWN_PROFILE, "One or more requested profiles are not available for FHIR "
-                + version + "; include the IG that defines them")
+        return unknownProfiles(version, null, unresolved);
+    }
+
+    /**
+     * @param igPackage the request's IG package ({@code name#version}), or {@code null} for the core-only base context
+     */
+    public static ProblemException unknownProfiles(nzi.fhir.validator.core.enums.SupportedFhirVersion version, String igPackage,
+                                                   java.util.List<String> unresolved) {
+        String context = igPackage == null ? "the core specification of FHIR " + version
+                : "IG package " + igPackage + " (FHIR " + version + "), its dependencies or the core specification";
+        return new ProblemException(400, TYPE_UNKNOWN_PROFILE, "One or more requested profiles are not defined by "
+                + context + "; name the IG that defines them with the ig parameter")
                 .withExtension("unresolvedProfiles", new io.vertx.core.json.JsonArray(java.util.List.copyOf(unresolved)));
     }
 
@@ -50,6 +60,31 @@ public class ProblemException extends RuntimeException {
     }
 
     public static final String TYPE_UNKNOWN_PROFILE = "unknown-profile";
+    public static final String TYPE_PACKAGE_NOT_FOUND = "package-not-found";
+
+    /** The {@code ig} package of a validation request is not stored (spec 004 FR-003). The name is client input. */
+    public static ProblemException igNotStored(String label) {
+        return new ProblemException(404, TYPE_PACKAGE_NOT_FOUND, "IG package " + label
+                + " is not stored. Register or upload it first via /igs/register or /igs/upload");
+    }
+
+    /**
+     * A dependency of the chosen IG package is not stored, so its validator context cannot be built (spec 004 FR-017).
+     */
+    public static ProblemException dependencyNotFound(String missing) {
+        return new ProblemException(424, "dependency-not-found", "A dependency of the requested IG package is not stored: "
+                + missing + ". Register or upload it via /igs/register or /igs/upload");
+    }
+
+    /**
+     * An on-demand validator context would fit in this instance's memory, but not next to the pinned ones (spec 004
+     * FR-016).
+     */
+    public static ProblemException insufficientCapacity() {
+        return new ProblemException(503, "insufficient-capacity",
+                "This instance has no memory left for another IG validator context; retry later or ask an administrator "
+                        + "to exclude an included IG or raise the memory limit").withHeader("Retry-After", "30");
+    }
 
     public ProblemException withExtension(String name, Object value) {
         extensions.put(name, value);

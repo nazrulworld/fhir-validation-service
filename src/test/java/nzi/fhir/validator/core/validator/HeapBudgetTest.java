@@ -54,4 +54,50 @@ class HeapBudgetTest {
         assertEquals(413, e.status());
         assertEquals("package-too-large", e.type());
     }
+
+    @Test
+    void reserveEvictsUntilTheBuildFits() {
+        AtomicLong used = new AtomicLong(1400 * MB);
+        AtomicInteger evictions = new AtomicInteger();
+        HeapBudget budget = new HeapBudget(() -> 1536 * MB, used::get, () -> { });
+        // Each eviction frees 200 MB; a 50 MB build needs about 364 MB and 136 MB are free.
+        long reserved = budget.reserve(50 * MB, () -> {
+            evictions.incrementAndGet();
+            used.addAndGet(-200 * MB);
+            return true;
+        });
+        assertEquals(2, evictions.get());
+        assertEquals(HeapBudget.estimate(50 * MB), reserved);
+    }
+
+    @Test
+    void nothingLeftToEvictIsInsufficientCapacity() {
+        HeapBudget budget = new HeapBudget(() -> 1536 * MB, () -> 1400 * MB, () -> { });
+        AtomicInteger asked = new AtomicInteger();
+        HeapBudget.InsufficientCapacityException e = assertThrows(HeapBudget.InsufficientCapacityException.class,
+                () -> budget.reserve(50 * MB, () -> asked.incrementAndGet() < 0));
+        assertEquals(1, asked.get());
+        assertTrue(e.getMessage().contains("MB of heap"), e.getMessage());
+    }
+
+    @Test
+    void largerThanTheWholeHeapNeverFitsAndEvictsNothing() {
+        HeapBudget budget = new HeapBudget(() -> 1024 * MB, () -> 100 * MB, () -> { });
+        AtomicInteger asked = new AtomicInteger();
+        assertThrows(HeapBudget.NeverFitsException.class, () -> budget.reserve(200 * MB, () -> asked.incrementAndGet() > 0));
+        assertEquals(0, asked.get(), "no context is dropped for a build that can never fit");
+    }
+
+    @Test
+    void includeAdmissionEvictsOnDemandContextsFirst() {
+        AtomicLong used = new AtomicLong(1400 * MB);
+        HeapBudget budget = new HeapBudget(() -> 1536 * MB, used::get, () -> { });
+        budget.admitInclude(50 * MB, () -> {
+            used.set(500 * MB);
+            return true;
+        });
+        ProblemException e = assertThrows(ProblemException.class, () -> new HeapBudget(() -> 1536 * MB, () -> 1400 * MB, () -> { })
+                .admitInclude(50 * MB, HeapBudget.Evictor.NONE));
+        assertEquals(413, e.status());
+    }
 }

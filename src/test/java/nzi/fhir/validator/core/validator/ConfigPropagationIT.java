@@ -61,14 +61,26 @@ class ConfigPropagationIT extends BaseTestContainer {
         Future.join(stopA, stopB).onComplete(ar -> vertxB.close().onComplete(v -> ctx.completeNow()));
     }
 
-    /** Whether B applies {@code profileUrl}; an unresolved profile (not propagated yet) counts as "not yet". */
-    private Future<Boolean> bEnforces(String profileUrl, String element) {
+    /**
+     * Whether B applies {@code profileUrl} when validating against IG {@code ig}; an unresolved profile counts as
+     * "not yet".
+     */
+    private Future<Boolean> bEnforces(String ig, String profileUrl, String element) {
         return b.services().validationService()
-                .validate(SupportedFhirVersion.R4, TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(profileUrl))
+                .validate(SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
+                        List.of(profileUrl), java.util.function.Function.identity())
                 .map(o -> TestPackages.hasError(o, element))
                 .recover(err -> err instanceof ProblemException p && ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())
                         ? Future.succeededFuture(false)
                         : Future.failedFuture(err));
+    }
+
+    /** Whether B holds {@code ig} as a pinned (pre-built) R4 context: proof the include propagated (spec 004 SC-006). */
+    private Future<Boolean> bPinned(String ig) {
+        SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, ig);
+        ValidatorRegistry registry = b.services().validatorRegistry();
+        return Future.succeededFuture(registry.kind(key) == ValidatorRegistry.Kind.PINNED
+                && registry.status(key) == ValidatorRegistry.Status.ACTIVE);
     }
 
     private Future<Void> includeThroughA(String name, String url, String element) {
@@ -80,9 +92,12 @@ class ConfigPropagationIT extends BaseTestContainer {
     void includedProfileReachesTheOtherInstance(Vertx vertx, VertxTestContext ctx) {
         String url = "http://example.org/fhir/StructureDefinition/from-ig";
         includeThroughA("example.prop", url, "gender")
-                .compose(r -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> Future.succeededFuture(
-                        b.services().validatorRegistry().current(SupportedFhirVersion.R4).resolvedPackages().contains("example.prop#1.0.0"))))
-                .compose(ms -> bEnforces(url, "gender"))
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> bPinned("example.prop#1.0.0")))
+                .compose(ms -> {
+                    ctx.verify(() -> assertEquals(List.of("example.prop#1.0.0"), b.services().validatorRegistry()
+                            .current(SnapshotKey.of(SupportedFhirVersion.R4, "example.prop#1.0.0")).resolvedPackages()));
+                    return bEnforces("example.prop#1.0.0", url, "gender");
+                })
                 .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
                     assertTrue(enforced, "B must validate with the profile of the IG included through A");
                     ctx.completeNow();
@@ -94,23 +109,30 @@ class ConfigPropagationIT extends BaseTestContainer {
         b.services().configSync().setNotificationsEnabled(false);
         String url = "http://example.org/fhir/StructureDefinition/polled";
         includeThroughA("example.polled", url, "birthDate")
-                .compose(v -> Await.until(vertx, PROPAGATION_MS, "profile reaches B by polling", () -> bEnforces(url, "birthDate")))
-                .onComplete(ctx.succeedingThenComplete());
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "IG reaches B by polling", () -> bPinned("example.polled#1.0.0")))
+                .compose(ms -> bEnforces("example.polled#1.0.0", url, "birthDate"))
+                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
+                    assertTrue(enforced);
+                    ctx.completeNow();
+                })));
     }
 
     @Test
     void unappliableConfigurationMakesVersionUnavailableUntilItRecovers(Vertx vertx, VertxTestContext ctx) {
         var pool = a.services().pool();
         // A committed configuration referencing a package that is not stored: B cannot build it.
+        SnapshotKey ghost = SnapshotKey.of(SupportedFhirVersion.R4, "example.ghost#1.0.0");
         pool.withTransaction(tx -> ConfigRevisionRepository.updateIgSet(tx, SupportedFhirVersion.R4,
-                        List.of("example.ghost#1.0.0"), List.of("example.ghost#1.0.0"), "example.ghost#1.0.0"))
+                        List.of("example.ghost#1.0.0"), "example.ghost#1.0.0", ConfigRevisionRepository.KIND_IG))
                 .compose(rev -> Await.until(vertx, PROPAGATION_MS, "B marks R4 stale",
                         () -> Future.succeededFuture(b.services().validatorRegistry().status(SupportedFhirVersion.R4) == ValidatorRegistry.Status.STALE)))
                 .compose(ms -> {
                     ctx.verify(() -> {
                         ProblemException e = assertThrows(ProblemException.class,
-                                () -> b.services().validatorRegistry().current(SupportedFhirVersion.R4));
+                                () -> b.services().validatorRegistry().current(ghost));
                         assertEquals(503, e.status());
+                        assertNotNull(b.services().validatorRegistry().current(SupportedFhirVersion.R4),
+                                "the R4 base context keeps serving requests without ig");
                         assertFalse(b.services().validatorRegistry().isReady());
                         // The reason names the missing package, never exception classes or messages (Principle IV).
                         String readiness = b.services().healthService().readiness().encode();
@@ -142,7 +164,7 @@ class ConfigPropagationIT extends BaseTestContainer {
         String url = "http://example.org/fhir/StructureDefinition/during-rebuilds";
         ValidatorRegistry registryB = b.services().validatorRegistry();
         includeThroughA("example.before", url, "birthDate")
-                .compose(v -> Await.until(vertx, PROPAGATION_MS, "profile reaches B", () -> bEnforces(url, "birthDate")))
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> bPinned("example.before#1.0.0")))
                 .compose(ms -> a.services().igPackageService().registerIg(TestPackages.npmPackage("example.slowbuild", "1.0.0", Map.of(), List.of())))
                 .compose(p -> {
                     builderB.setBuildHook(() -> {
@@ -154,18 +176,57 @@ class ConfigPropagationIT extends BaseTestContainer {
                         }
                     });
                     // Two rebuilds on B (R4B and R5), each blocked inside the package pool.
-                    registryB.apply(SupportedFhirVersion.R4B, 1_000, List.of("example.slowbuild#1.0.0"));
-                    registryB.apply(SupportedFhirVersion.R5, 1_000, List.of("example.slowbuild#1.0.0"));
+                    Map<String, ResolvedContext> slow = Map.of("example.slowbuild#1.0.0",
+                            new ResolvedContext(List.of("example.slowbuild#1.0.0"), Map.of()));
+                    registryB.applyPinned(SupportedFhirVersion.R4B, 1_000, slow);
+                    registryB.applyPinned(SupportedFhirVersion.R5, 1_000, slow);
                     return Await.until(vertx, PROPAGATION_MS, "a rebuild is running on B",
                             () -> Future.succeededFuture(buildsBlocked.get() >= 1));
                 })
-                .compose(ms -> bEnforces(url, "birthDate"))
+                .compose(ms -> bEnforces("example.before#1.0.0", url, "birthDate"))
                 .onComplete(ar -> {
                     builderB.setBuildHook(null);
                     release.countDown();
                 })
                 .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
                     assertTrue(enforced, "B keeps validating R4 with its current IG set during other rebuilds");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 004 US2-6, SC-006: an exclude reaches the other instance within the propagation window, also by polling. */
+    @Test
+    void excludeReachesTheOtherInstanceAlsoByPolling(Vertx vertx, VertxTestContext ctx) {
+        String url = "http://example.org/fhir/StructureDefinition/excluded";
+        SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, "example.excl#1.0.0");
+        includeThroughA("example.excl", url, "birthDate")
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> bPinned("example.excl#1.0.0")))
+                .compose(ms -> {
+                    b.services().configSync().setNotificationsEnabled(false);
+                    return a.services().igPackageService().exclude(SupportedFhirVersion.R4, "example.excl#1.0.0");
+                })
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "exclude reaches B by polling",
+                        () -> Future.succeededFuture(b.services().validatorRegistry().kind(key) != ValidatorRegistry.Kind.PINNED)))
+                .compose(ms -> bEnforces("example.excl#1.0.0", url, "birthDate"))
+                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
+                    assertTrue(enforced, "the excluded IG can still be named on B (built on demand)");
+                    assertTrue(b.services().validatorRegistry().isReady());
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 004 FR-006, research R4: a package stored through A can be named in ig on B. */
+    @Test
+    void packageStoredOnOneInstanceCanBeNamedOnTheOther(Vertx vertx, VertxTestContext ctx) {
+        String url = "http://example.org/fhir/StructureDefinition/stored-on-a";
+        TestPackages.storePackage(a.services(), TestPackages.profilePackage("example.storedona", "1.0.0",
+                        TestPackages.requiredPatientElements(url, "gender")))
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "B can validate against it",
+                        () -> bEnforces("example.storedona#1.0.0", url, "gender")
+                                .recover(err -> Future.succeededFuture(false))))
+                .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
+                    assertEquals(ValidatorRegistry.Kind.ON_DEMAND, b.services().validatorRegistry()
+                            .kind(SnapshotKey.of(SupportedFhirVersion.R4, "example.storedona#1.0.0")));
                     ctx.completeNow();
                 })));
     }

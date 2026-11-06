@@ -68,6 +68,26 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void igContextSettingsHaveBoundedDefaults() {
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
+        assertEquals(4, cfg.igMaxOnDemand());
+        // min(10 s, requestTimeout / 2) with the default 60 s request timeout
+        assertEquals(10_000, cfg.igBuildWaitMs());
+        ApplicationConfig shortTimeout = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_HTTP_REQUEST_TIMEOUT_MS", "6000"));
+        assertEquals(3_000, shortTimeout.igBuildWaitMs());
+        ApplicationConfig set = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_IG_MAX_ON_DEMAND", "12",
+                "FV_IG_BUILD_WAIT_MS", "30000"));
+        assertEquals(12, set.igMaxOnDemand());
+        assertEquals(30_000, set.igBuildWaitMs());
+        for (String[] bad : new String[][]{{"FV_IG_MAX_ON_DEMAND", "0"}, {"FV_IG_MAX_ON_DEMAND", "65"},
+                {"FV_IG_BUILD_WAIT_MS", "999"}, {"FV_IG_BUILD_WAIT_MS", "120001"}}) {
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", bad[0], bad[1])));
+            assertTrue(e.getMessage().contains(bad[0]), e.getMessage());
+        }
+    }
+
+    @Test
     void outOfBoundsValueFailsNamingTheVariable() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> ConfigLoader.load(env("FV_HTTP_PORT", "70000", "FV_PG_PASSWORD", "pw")));

@@ -4,10 +4,14 @@
 
 A horizontally scalable FHIR resource validation service built with Vert.x, HAPI FHIR and PostgreSQL.
 
-It validates FHIR resources (STU3, R4, R4B, R5) against the base specification and the Implementation Guide (IG)
-packages you include, the same model as the HL7 validator CLI's `-ig` and `-profile`. Any number of identical instances
-can run against one PostgreSQL database; IG changes reach every instance within seconds, without restarts.
+It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, or against one Implementation Guide
+(IG) package that each request names, the same model as the HL7 validator CLI's `-ig` and `-profile`. Several IGs, and
+several versions of one IG, can be offered side by side. Any number of identical instances can run against one
+PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+> **Upgrading from 2.x?** 3.0.0 validates a request against the core specification only unless it names an IG with
+> `?ig=name#version`. Read [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before upgrading.
+>
 > **Upgrading from 1.x?** 2.0.0 removes custom profile registration and deletes stored custom profiles. Read
 > [docs/upgrade-2.0.md](docs/upgrade-2.0.md) **before** upgrading: export first.
 
@@ -27,14 +31,15 @@ can run against one PostgreSQL database; IG changes reach every instance within 
   - Java 17 or later and your own PostgreSQL ([option C](#option-c-jar-with-your-own-postgresql)), or
   - Java 17 and Maven, to build and develop
 - PostgreSQL 16 (provided by the Compose setup)
-- Up to 4 GB of memory per instance (the default container limit; the JVM takes 75% as heap). Warmed validators for
-  four FHIR versions take about 0.9 GB of heap. Including an IG rebuilds that version's validator while the old one
-  keeps serving, and a build holds about 6 times the IG set's expanded size. Size the container as heap / 0.75 with
-  heap ≈ 0.9 GB + 64 MB + 6 × the largest IG set's expanded size: 4 GB fits IG sets up to about 350 MB expanded
-  (roughly a 30 MB archive), including a 20 MB IG such as `hl7.fhir.r4.examples` (180 MB expanded); 2 GB is enough
-  for IG sets up to about 100 MB expanded (roughly a 10 MB archive). The cluster profile runs two instances, so the
-  host needs room for two such limits. An include that would not fit is refused with 413
-  `package-too-large` and nothing is committed. Watch `fv_snapshot_package_size_bytes` (archive size).
+- Up to 4 GB of memory per instance (the default container limit; the JVM takes 75% as heap). Warmed core-only
+  validators for four FHIR versions take about 0.9 GB of heap. Every IG in use has its own validator context (the IG
+  plus its dependencies): one per included IG, plus up to `FV_IG_MAX_ON_DEMAND` (default 4) built on demand. A build
+  holds about 6 times the context's expanded size. Size the heap as 0.9 GB + the contexts you keep + 64 MB + 6 × the
+  largest context's expanded size: 4 GB fits contexts up to about 350 MB expanded (roughly a 30 MB archive), including
+  a 20 MB IG such as `hl7.fhir.r4.examples` (180 MB expanded). The cluster profile runs two instances, so the host needs
+  room for two such limits. An include that would not fit is refused with 413 `package-too-large` and nothing is
+  committed; on-demand contexts are evicted (least recently used first) before a new one is refused with 503
+  `insufficient-capacity`. Watch `fv_snapshot_package_size_bytes` and `fv_validator_contexts`.
 
 ## Installation
 
@@ -61,14 +66,15 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `2.0.0`        | an exact release (recommended for production: pin it)      |
-| `2.0`          | the newest patch release of 2.0                            |
+| `3.0.0`        | an exact release (recommended for production: pin it)      |
+| `3.0`          | the newest patch release of 3.0                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
-`latest` is now 2.0.0, a breaking release. A 1.x deployment that tracks `latest` (the default `FV_TAG` in
-`compose.yaml`) would upgrade on its next pull and delete registered custom profiles. Pin `FV_TAG` to your current
-release and follow [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before moving to 2.0.0.
+`latest` is now 3.0.0, a breaking release. A 2.x deployment that tracks `latest` (the default `FV_TAG` in
+`compose.yaml`) would upgrade on its next pull, and requests without `ig` would stop using included IGs. Pin `FV_TAG`
+to your current release and follow [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before moving to 3.0.0 (from 1.x, follow
+[docs/upgrade-2.0.md](docs/upgrade-2.0.md) first).
 
 **1. Create a directory and an `.env` file**
 
@@ -76,7 +82,7 @@ release and follow [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before moving to 2
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=2.0.0
+FV_TAG=3.0.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
 EOF
@@ -216,7 +222,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=2.0.0
+VERSION=3.0.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -236,7 +242,7 @@ export FV_ADMIN_API_KEY='<output of openssl rand -hex 32>'
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-2.0.0.jar
+  -jar fhir-validation-service-3.0.0.jar
 ```
 
 ```bash
@@ -283,7 +289,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-2.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-3.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
@@ -302,22 +308,33 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
 ```
 
 ```json
-{"valid": true, "messages": [], "fhirVersion": "R4", "appliedProfiles": []}
+{"valid": true, "messages": [], "fhirVersion": "R4", "appliedProfiles": [], "igPackage": null}
 ```
 
-- `Accept: application/fhir+json` or `application/fhir+xml` returns a FHIR `OperationOutcome`.
+- `?ig=<name>#<version>` validates against that one IG package, its dependencies and the core specification, like
+  `validator_cli.jar -ig`. URL-encode `#` as `%23`: `?ig=hl7.fhir.us.core%237.0.0`. `?ig=<name>` or `#latest` uses the
+  highest stored version. Without `ig`, only the core specification applies. Any **stored** package that supports the
+  FHIR version can be named: an included one is pre-built, any other is built on the first request that names it, from
+  stored packages only (nothing is downloaded); later requests reuse it. The response names the context used in the
+  `X-Validation-Context` header (`name#version` or `base`) and in `igPackage`.
+- `Accept: application/fhir+json` or `application/fhir+xml` returns a FHIR `OperationOutcome` (unchanged body; read the
+  header for the context).
 - `?profile=<canonical>[,<canonical>]` validates against additional profiles (at most 10, each at most 1024
-  characters). Each must be defined by an IG included for that FHIR version (or its dependencies) or by the core
-  specification, matched exactly by `url` or `url|version`. Profiles are **never downloaded** from their canonical URL.
-  If any of them cannot be resolved, the answer is **400 `unknown-profile`** with `unresolvedProfiles`, and nothing is
-  validated. `appliedProfiles` lists only profiles that were actually applied.
+  characters). Each must be defined by the chosen IG, its dependencies or the core specification (the core
+  specification alone without `ig`), matched exactly by `url` or `url|version`. Profiles are **never downloaded** from
+  their canonical URL. If any of them cannot be resolved, the answer is **400 `unknown-profile`** with
+  `unresolvedProfiles`, and nothing is validated. `appliedProfiles` lists only profiles that were actually applied.
 - A completed validation answers **200**, valid or not. A body that is not FHIR at all answers **400**
-  (`invalid-resource`); overload or a validator that is not ready answers **503** with `Retry-After`.
+  (`invalid-resource`). An `ig` package that is not stored answers **404** `package-not-found`, one whose dependency is
+  not stored **424** `dependency-not-found`, and a malformed `ig` or a package for another FHIR version **400**
+  `invalid-request`. Overload, a validator that is not ready (including an `ig` context still being built, for up to
+  `FV_IG_BUILD_WAIT_MS`) or no memory left for another context answers **503** with `Retry-After`.
 
 ### Manage IGs (administrator key required)
 
-Administrative calls need `Authorization: Bearer <FV_ADMIN_API_KEY>`. The change applies globally, to every consumer
-of that FHIR version, on every instance.
+Administrative calls need `Authorization: Bearer <FV_ADMIN_API_KEY>`. Changes apply on every instance within seconds.
+Including an IG pre-builds and keeps its validator context; it does not change what requests without `ig`, or requests
+naming another IG, validate against.
 
 ```bash
 AUTH="Authorization: Bearer $FV_ADMIN_API_KEY"
@@ -325,16 +342,24 @@ AUTH="Authorization: Bearer $FV_ADMIN_API_KEY"
 # Store an IG package: upload, from a registry, or from an approved https URL
 curl -H "$AUTH" -F "file=@hl7.fhir.dk.core-3.4.0.tgz;type=application/gzip" http://127.0.0.1:8880/igs/upload
 curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core","version":"7.0.0"}' http://127.0.0.1:8880/igs/register
+# Without a version (or "latest") the registries are asked for the newest release; the answer says which version was
+# chosen and whether it was downloaded ("downloaded": true) or already stored.
+curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core"}' http://127.0.0.1:8880/igs/register
 
-# Include it in the R4 validator (resolves dependencies; replaces another version of the same package)
+# Pre-build it for R4 on every instance. Other versions of the same package stay included.
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/include-ig
+
+# Stop pre-building it (the package stays stored and can still be named in ?ig=)
+curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.dk.core%233.4.0'
 ```
 
-Only **included** IGs supply profiles; a package that is stored but not included contributes nothing. To use your own
-profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`,
-`fhirVersions` and `dependencies`, plus the `.json` resources under `package/`), then upload and include it like any
-other IG.
+A request validates against the IG it names, its dependencies and the core specification; no other stored or included
+package contributes. `/igs/register` stores the dependencies too (unless `"includeDependency": false`); a package
+uploaded through `/igs/upload` needs its dependencies stored before it can be built on demand. To use your own
+profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`, `fhirVersions`
+and `dependencies`, plus the `.json` resources under `package/`), then upload it and name it in `ig`, or include it to
+have it pre-built.
 
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
@@ -373,7 +398,7 @@ bundled compose database runs on a private compose network. When the database is
 | Endpoint                | Meaning                                                                                                                  |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
-| `GET /health/readiness` | 200 when the database is reachable, every FHIR version has a usable validator, and the instance is not draining          |
+| `GET /health/readiness` | 200 when the database is reachable, every core and included-IG validator is usable, and the instance is not draining      |
 | `GET /health`           | detailed report                                                                                                          |
 | `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, ...) |
 
@@ -394,7 +419,9 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_AUTH_ANONYMOUS_VALIDATE`                                                 | `true`                                                          | `false` requires a key for validation and reads too               |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
-| `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
+| `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations and on-demand IG builds in progress; beyond it 503 `overloaded` |
+| `FV_IG_MAX_ON_DEMAND`                                                        | 4                                                               | IG validator contexts built on demand kept per instance (LRU)     |
+| `FV_IG_BUILD_WAIT_MS`                                                        | min(10000, request timeout / 2)                                 | how long a request waits for an on-demand IG build before 503     |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |
 | `FV_CORS_ALLOWED_ORIGINS`                                                    | *(none)*                                                        | browser origins allowed to call the API                           |
 

@@ -154,11 +154,16 @@ public class PostgresPackageCacheManager {
                 DO UPDATE SET ig_package_meta = $3, content_raw = $4, dependencies = $5, content_sha256 = $6,
                               source = $7, expanded_bytes = $8, updated_at = now()
                 """.formatted(TABLE);
-            return pgPool.preparedQuery(sql)
-                    .execute(Tuple.from(new Object[]{npmPackage.name(), npmPackage.version(), createNpmPackageMeta(npmPackage),
-                            Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source, expandedBytes(npmPackage)}))
-                    .map(rows -> {
-                        logger.info("Stored package {}#{} ({} bytes, source {})", npmPackage.name(), npmPackage.version(), bytes.length, source);
+            String key = npmPackage.name() + "#" + npmPackage.version();
+            // The upsert, the catalog revision bump and the notification commit together (spec 004, research R4):
+            // every instance then refreshes its catalog view and invalidates contexts built from a replaced package.
+            return pgPool.withTransaction(tx -> tx.preparedQuery(sql)
+                            .execute(Tuple.from(new Object[]{npmPackage.name(), npmPackage.version(), createNpmPackageMeta(npmPackage),
+                                    Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source, expandedBytes(npmPackage)}))
+                            .compose(rows -> bumpCatalog(tx, key)))
+                    .map(revision -> {
+                        logger.info("Stored package {} ({} bytes, source {}, catalog revision {})", key, bytes.length, source, revision);
+                        storeListener.accept(key);
                         return npmPackage;
                     });
         });
@@ -230,13 +235,48 @@ public class PostgresPackageCacheManager {
     }
 
     public Future<Void> removePackage(String name, String version) {
-        return pgPool.preparedQuery("DELETE FROM " + TABLE + " WHERE ig_package_id = $1 AND ig_package_version = $2")
-                .execute(Tuple.of(name, version))
+        return pgPool.withTransaction(tx -> tx.preparedQuery("DELETE FROM " + TABLE + " WHERE ig_package_id = $1 AND ig_package_version = $2")
+                        .execute(Tuple.of(name, version))
+                        .compose(rows -> bumpCatalog(tx, name + "#" + version)))
+                .onSuccess(r -> storeListener.accept(name + "#" + version))
                 .mapEmpty();
     }
 
     public Future<Void> clear() {
-        return pgPool.query("DELETE FROM " + TABLE).execute().mapEmpty();
+        return pgPool.withTransaction(tx -> tx.query("DELETE FROM " + TABLE).execute()
+                        .compose(rows -> bumpCatalog(tx, "*")))
+                .onSuccess(r -> storeListener.accept("*"))
+                .mapEmpty();
+    }
+
+    /** Notification kind for a package write (spec 004, contracts §7). */
+    public static final String KIND_PACKAGE = "PACKAGE";
+
+    private static final String CATALOG_TABLE = DB_POSTGRES_SCHEMA_NAME + ".fhir_package_catalog";
+
+    /**
+     * Increments the shared package catalog revision and notifies other instances; call inside the transaction that
+     * writes the package, so PostgreSQL delivers the notification only on commit.
+     *
+     * @return the new catalog revision
+     */
+    static Future<Long> bumpCatalog(SqlClient tx, String key) {
+        return tx.query("UPDATE " + CATALOG_TABLE + " SET revision = revision + 1, updated_at = now() WHERE id = 1 RETURNING revision")
+                .execute()
+                .compose(rows -> {
+                    long revision = rows.size() == 0 ? 0 : rows.iterator().next().getLong(0);
+                    String payload = new JsonObject().put("kind", KIND_PACKAGE).put("key", key).put("revision", revision).encode();
+                    return tx.preparedQuery("SELECT pg_notify($1, $2)")
+                            .execute(Tuple.of(nzi.fhir.validator.core.service.ConfigRevisionRepository.CHANNEL, payload))
+                            .map(revision);
+                });
+    }
+
+    private volatile java.util.function.Consumer<String> storeListener = key -> { };
+
+    /** Called on this instance after a package write commits (with its {@code name#version}, or {@code *}). */
+    public void setStoreListener(java.util.function.Consumer<String> listener) {
+        this.storeListener = listener == null ? key -> { } : listener;
     }
 
     /**
@@ -354,6 +394,70 @@ public class PostgresPackageCacheManager {
             });
         }
         return first.future().compose(bytes -> bytes == null ? Future.succeededFuture(null) : store(bytes.getBytes(), "REGISTRY"));
+    }
+
+    /**
+     * Version chosen by {@code POST /igs/register} for {@code latest} (spec 004 FR-027 to FR-029).
+     *
+     * @param fromRegistry the registries' highest release, rather than a fallback to the highest stored version
+     * @param warning      curated text when the registries could not decide, else {@code null}
+     */
+    public record RegistrationVersion(String version, boolean fromRegistry, String warning) {
+    }
+
+    public static final String NO_REGISTRY_WARNING = "No package registry could be consulted; using the highest stored version";
+    public static final String NOT_LISTED_WARNING = "No package registry lists this package; using the highest stored version";
+
+    private enum ListingOutcome { LISTED, NOT_LISTED, FAILED }
+
+    private record Listing(ListingOutcome outcome, String latest) {
+    }
+
+    /**
+     * The registries' highest released version of {@code name} (the {@link #latestFromListing} rule). When every
+     * registry fails or registries are disabled, or when none lists the package, falls back to the highest stored
+     * version with a warning saying which; completes with {@code null} when nothing is stored either. Unlike
+     * {@link #resolveVersion}, a stored version never hides a newer release.
+     */
+    public Future<RegistrationVersion> resolveForRegistration(String name) {
+        if (!registryEnabled || registryUrls.isEmpty()) {
+            return storedFallback(name, NO_REGISTRY_WARNING);
+        }
+        List<Future<Listing>> answers = new ArrayList<>();
+        for (String registry : registryUrls) {
+            answers.add(fetcher.fetch(registry + "/" + name)
+                    .map(body -> latestFromListing(body.toJsonObject())
+                            .map(v -> new Listing(ListingOutcome.LISTED, v))
+                            .orElse(new Listing(ListingOutcome.NOT_LISTED, null)))
+                    .recover(err -> {
+                        boolean notFound = err instanceof ProblemException p && p.status() == 404;
+                        if (!notFound) {
+                            logger.info("Registry {} could not list {}: {}", registry, name, err.getMessage());
+                        }
+                        return Future.succeededFuture(new Listing(notFound ? ListingOutcome.NOT_LISTED : ListingOutcome.FAILED, null));
+                    }));
+        }
+        return Future.join(answers).transform(ar -> {
+            List<String> versions = new ArrayList<>();
+            boolean anyAnswered = false;
+            for (Future<Listing> f : answers) {
+                Listing l = f.result();
+                if (l.outcome() == ListingOutcome.LISTED) {
+                    versions.add(l.latest());
+                }
+                anyAnswered |= l.outcome() != ListingOutcome.FAILED;
+            }
+            Optional<String> latest = PackageVersionComparator.max(versions);
+            if (latest.isPresent()) {
+                return Future.succeededFuture(new RegistrationVersion(latest.get(), true, null));
+            }
+            return storedFallback(name, anyAnswered ? NOT_LISTED_WARNING : NO_REGISTRY_WARNING);
+        });
+    }
+
+    private Future<RegistrationVersion> storedFallback(String name, String warning) {
+        return getLatestVersionFromCache(pgPool, name)
+                .map(stored -> stored == null ? null : new RegistrationVersion(stored, false, warning));
     }
 
     private Future<String> latestFromRegistries(String name) {

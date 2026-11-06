@@ -61,9 +61,14 @@ public class ApiKeyAuthHandler {
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
 
-    /** Whether the request is an administrative operation: one that changes IGs or validator configuration. */
+    /**
+     * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
+     * method on an administrative path counts (POST include/upload/register, DELETE include-ig since 3.0.0), except
+     * {@code OPTIONS} (CORS preflight), so a new method on these paths can never fall through unauthenticated.
+     */
     public static boolean isAdministrative(RoutingContext ctx) {
-        return ctx.request().method() == io.vertx.core.http.HttpMethod.POST && ADMIN_PATHS.matcher(ctx.normalizedPath()).matches();
+        return ctx.request().method() != io.vertx.core.http.HttpMethod.OPTIONS
+                && ADMIN_PATHS.matcher(ctx.normalizedPath()).matches();
     }
 
     /**

@@ -85,6 +85,9 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     assertEquals("hl7.fhir.dk.core", r.bodyAsJsonObject().getString("name"));
                     assertEquals("3.4.0", r.bodyAsJsonObject().getString("version"), "B11: version, not name");
+                    // Spec 004 FR-030: every registration response says whether an archive was downloaded.
+                    assertEquals(Boolean.TRUE, r.bodyAsJsonObject().getBoolean("downloaded"), "a URL registration downloads the archive");
+                    assertEquals(new io.vertx.core.json.JsonArray(), r.bodyAsJsonObject().getJsonArray("warnings"));
                     ctx.completeNow();
                 })));
     }

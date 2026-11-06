@@ -21,6 +21,7 @@ import ca.uhn.fhir.util.FhirTerser;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -34,10 +35,21 @@ public final class ValidatorSnapshot {
      * Result of one validation.
      */
     public record Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
-                          FhirContext fhirContext) {
+                          FhirContext fhirContext, String igPackage) {
+        public Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
+                       FhirContext fhirContext) {
+            this(version, result, appliedProfiles, fhirContext, null);
+        }
+
+        /** {@code name#version} of the IG package, or {@code base}: the {@code X-Validation-Context} header value. */
+        public String contextLabel() {
+            return igPackage == null ? "base" : igPackage;
+        }
     }
 
     private final SupportedFhirVersion version;
+    private final SnapshotKey key;
+    private final Map<String, byte[]> packageHashes;
     private final long revision;
     private final List<String> resolvedPackages;
     private final FhirContext fhirContext;
@@ -47,7 +59,18 @@ public final class ValidatorSnapshot {
 
     public ValidatorSnapshot(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                              FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
-        this.version = version;
+        this(SnapshotKey.base(version), revision, resolvedPackages, Map.of(), fhirContext, validator, chain);
+    }
+
+    /**
+     * @param packageHashes content hash of every resolved package ({@code name#version}), so a replaced stored package
+     *                      can be detected (spec 004 FR-025); missing hashes are allowed
+     */
+    public ValidatorSnapshot(SnapshotKey key, long revision, List<String> resolvedPackages, Map<String, byte[]> packageHashes,
+                             FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
+        this.version = key.fhirVersion();
+        this.key = key;
+        this.packageHashes = Map.copyOf(packageHashes);
         this.revision = revision;
         this.resolvedPackages = List.copyOf(resolvedPackages);
         this.fhirContext = fhirContext;
@@ -114,7 +137,7 @@ public final class ValidatorSnapshot {
             }
         }
         if (!unresolved.isEmpty()) {
-            throw ProblemException.unknownProfiles(version, unresolved);
+            throw ProblemException.unknownProfiles(version, key.igPackage(), unresolved);
         }
         applied.forEach(options::addProfile);
         if (resource instanceof IAnyResource anyResource) {
@@ -124,7 +147,8 @@ public final class ValidatorSnapshot {
                     .filter(p -> p != null && !applied.contains(p) && resolves(p))
                     .forEach(applied::add);
         }
-        return new Outcome(version, validator.validateWithResult(body, options), List.copyOf(applied), fhirContext);
+        return new Outcome(version, validator.validateWithResult(body, options), List.copyOf(applied), fhirContext,
+                key.igPackage());
     }
 
     /**
@@ -155,6 +179,15 @@ public final class ValidatorSnapshot {
 
     public long revision() {
         return revision;
+    }
+
+    public SnapshotKey key() {
+        return key;
+    }
+
+    /** Content hash per resolved package; a package without a recorded hash is absent. */
+    public Map<String, byte[]> packageHashes() {
+        return packageHashes;
     }
 
     public List<String> resolvedPackages() {

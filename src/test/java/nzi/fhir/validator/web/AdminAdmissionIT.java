@@ -89,6 +89,11 @@ class AdminAdmissionIT extends BaseTestContainer {
                         .sendJsonObject(new JsonObject().put("url", "http://example.org/fhir/StructureDefinition/gone"));
             }).compose(gone -> {
                 ctx.verify(() -> assertProblem(gone, 404, "not-found"));
+                // Spec 004: excluding an IG takes an admin slot like every other administrative operation.
+                return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+                        .addQueryParam("ig", "example.unknown#1.0.0").send();
+            }).compose(excludeRefused -> {
+                ctx.verify(() -> assertProblem(excludeRefused, 503, "overloaded"));
                 return validate();
             }).compose(validated -> {
                 ctx.verify(() -> assertEquals(200, validated.statusCode(), "validation is admitted while admin work is full: "

@@ -87,14 +87,16 @@ class HeapGuardIT extends BaseTestContainer {
         ValidatorRegistry registry = core.services().validatorRegistry();
         exhaustHeap();
         // As if another instance with more memory had committed it.
-        registry.apply(SupportedFhirVersion.R4, 1_000, List.of(PACKAGE))
+        SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, PACKAGE);
+        registry.applyPinned(SupportedFhirVersion.R4, 1_000, java.util.Map.of(PACKAGE,
+                        new ResolvedContext(List.of(PACKAGE), java.util.Map.of())))
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
                     assertInstanceOf(HeapBudget.InsufficientHeapException.class, err);
                     assertEquals(ValidatorRegistry.Status.STALE, registry.status(SupportedFhirVersion.R4));
-                    ProblemException notReady = assertThrows(ProblemException.class,
-                            () -> registry.current(SupportedFhirVersion.R4));
+                    ProblemException notReady = assertThrows(ProblemException.class, () -> registry.current(key));
                     assertEquals(503, notReady.status());
-                    String reason = registry.details().getJsonObject("R4").getString("reason");
+                    assertNotNull(registry.current(SupportedFhirVersion.R4), "the R4 base context keeps serving");
+                    String reason = registry.details().getJsonObject("R4").getJsonArray("contexts").getJsonObject(0).getString("reason");
                     assertTrue(reason.contains("MB of heap") && reason.contains("FV_MEMORY_LIMIT"), reason);
                     assertTrue(registry.notReadyReasons().stream().anyMatch(r -> r.startsWith("R4")));
                     for (SupportedFhirVersion other : SupportedFhirVersion.enabled()) {
@@ -107,7 +109,7 @@ class HeapGuardIT extends BaseTestContainer {
                     restoreHeap();
                     awaitActive(vertx, registry, System.currentTimeMillis() + 30_000)
                             .onComplete(ctx.succeeding(v -> ctx.verify(() -> {
-                                assertEquals(List.of(PACKAGE), registry.current(SupportedFhirVersion.R4).resolvedPackages());
+                                assertEquals(List.of(PACKAGE), registry.current(key).resolvedPackages());
                                 ctx.completeNow();
                             })));
                 })));

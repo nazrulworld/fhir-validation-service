@@ -14,6 +14,7 @@ import nzi.fhir.validator.core.model.MediaTypes.ResponseFormat;
 import nzi.fhir.validator.core.model.ValidationRequestOptions;
 import nzi.fhir.validator.core.service.FhirValidationService;
 import nzi.fhir.validator.core.service.IgPackageService;
+import nzi.fhir.validator.core.validator.IgReference;
 import nzi.fhir.validator.core.validator.OutcomeRenderer;
 import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
@@ -25,11 +26,14 @@ import java.util.List;
 /**
  * Validation and IG inclusion endpoints.
  * <p>
- * Status mapping for validation (research R12): 200 for a completed validation, valid or not; 400
- * {@code invalid-resource} for a body that is not FHIR; 400 {@code invalid-request} for a {@code profile} list over the
- * limits and 400 {@code unknown-profile} for a requested profile no included IG defines (spec 003); 406/415 for
- * unacceptable media types; 503 when not ready or overloaded; 500 otherwise. Every non-200 answer is a problem
- * document, whatever {@code Accept} asked for.
+ * Status mapping for validation (research R12): 200 for a completed validation, valid or not, with
+ * {@code X-Validation-Context} naming the IG package used (or {@code base}); 400 {@code invalid-resource} for a body
+ * that is not FHIR; 400 {@code invalid-request} for a malformed {@code ig} or a {@code profile} list over the limits;
+ * 404 {@code package-not-found} for an {@code ig} package that is not stored; 424 {@code dependency-not-found} when a
+ * dependency of it is missing; 400 {@code unknown-profile} for a requested profile the chosen context doesn't define
+ * (specs 003, 004); 406/415 for unacceptable media types; 413 for a context that can never fit; 503 when not ready,
+ * overloaded or out of capacity; 500 otherwise. Every non-200 answer is a problem document, whatever {@code Accept}
+ * asked for.
  *
  * @author Md Nazrul Islam
  */
@@ -56,6 +60,9 @@ public class ValidationApi {
         // Method: POST, Path: "/:version/include-ig"
         routerBuilder.operation("validationApiIncludeIg")
                 .handler(this::handleIncludeImplementationGuide);
+        // Method: DELETE, Path: "/:version/include-ig?ig=name#version"
+        routerBuilder.operation("validationApiExcludeIg")
+                .handler(this::handleExcludeImplementationGuide);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -89,14 +96,21 @@ public class ValidationApi {
             ErrorResponder.fail(ctx, e);
             return;
         }
+        IgReference ig;
+        try {
+            ig = igParameter(ctx);
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
         if (ctx.body() == null || ctx.body().isEmpty()) {
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
             return;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
-        Future<String> rendered = validationService
-                .validate(version, ctx.body().asString(), contentType, profiles,
-                        outcome -> OutcomeRenderer.render(outcome, responseFormat))
+        Future<Rendered> rendered = validationService
+                .validate(version, ig, ctx.body().asString(), contentType, profiles,
+                        outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel()))
                 .recover(err -> {
                     if (err instanceof DataFormatException) {
                         return Future.failedFuture(invalidResource(err.getMessage()));
@@ -108,10 +122,35 @@ public class ValidationApi {
                     }
                     return Future.failedFuture(err);
                 });
-        ErrorResponder.respond(ctx, rendered, (rc, body) -> rc.response()
+        ErrorResponder.respond(ctx, rendered, (rc, result) -> rc.response()
                 .setStatusCode(200)
                 .putHeader("Content-Type", responseFormat.mimeType())
-                .end(body));
+                .putHeader(VALIDATION_CONTEXT_HEADER, result.context())
+                .end(result.body()));
+    }
+
+    /** Names the validator context a 200 result came from: the IG package {@code name#version}, or {@code base}. */
+    public static final String VALIDATION_CONTEXT_HEADER = "X-Validation-Context";
+
+    private record Rendered(String body, String context) {
+    }
+
+    /**
+     * The {@code ig} query parameter: absent is {@code null} (the base context); more than one value, or a malformed
+     * one, is 400 {@code invalid-request} (FR-002). Client input is logged at DEBUG only.
+     */
+    private static IgReference igParameter(RoutingContext ctx) {
+        List<String> values = ctx.queryParam("ig");
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        if (values.size() > 1) {
+            throw new ProblemException(400, "invalid-request", "Name at most one IG package per request (ig parameter)");
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Validation requested against ig={}", values.get(0));
+        }
+        return IgReference.parse(values.get(0));
     }
 
     private static ProblemException invalidResource(String parserMessage) {
@@ -151,5 +190,21 @@ public class ValidationApi {
         }
         ErrorResponder.respond(ctx, igPackageService.include(version, body.getString("igPackageId"),
                 body.getString("igPackageVersion", "latest")));
+    }
+
+    /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/include-ig?ig=name#version}. */
+    private void handleExcludeImplementationGuide(RoutingContext ctx) {
+        SupportedFhirVersion version;
+        List<String> values = ctx.queryParam("ig");
+        try {
+            version = version(ctx);
+            if (values == null || values.size() != 1) {
+                throw new ProblemException(400, "invalid-request", "Exactly one ig=name#version is required");
+            }
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
+        ErrorResponder.respond(ctx, igPackageService.exclude(version, values.get(0)));
     }
 }

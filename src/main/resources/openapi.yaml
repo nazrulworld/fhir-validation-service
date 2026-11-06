@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 2.0.0
+  version: 3.0.0
 
 servers:
   - url: http://localhost:8880
@@ -89,25 +89,44 @@ paths:
       description: >-
         Content negotiation: Accept absent, */* or application/json returns the ValidationResponse JSON shape;
         application/fhir+json, application/fhir+xml and application/xml return a FHIR OperationOutcome.
-        A completed validation answers 200 whether the resource is valid or not. Every 4xx is problem JSON, whatever
-        Accept asks for: invalid-resource (body is not FHIR), invalid-request (e.g. profile limits) and
-        unknown-profile (a requested profile is not available; see UnknownProfileProblem).
+        A completed validation answers 200 whether the resource is valid or not; the X-Validation-Context header
+        names the validator context used (the IG package name#version, or `base`). The resource is validated against
+        exactly one IG package (the `ig` parameter), its dependencies and the core specification, or against the
+        core specification alone when `ig` is absent. Every 4xx is problem JSON, whatever Accept asks for:
+        invalid-resource (body is not FHIR), invalid-request (e.g. a malformed ig, profile limits, an ig package for
+        another FHIR version), package-not-found (404: the ig package is not stored), dependency-not-found (424: a
+        dependency of the ig package is not stored) and unknown-profile (a requested profile is not available; see
+        UnknownProfileProblem). 503 covers not-ready (including an ig context still being built), overloaded and
+        insufficient-capacity; 413 package-too-large means the ig context can never fit on this instance.
       parameters:
         - name: version
           in: path
           required: true
           schema:
             $ref: '#/components/schemas/FhirVersion'
+        - name: ig
+          in: query
+          required: false
+          description: >-
+            The one IG package to validate against: `name#version`, `name#latest` or `name`. URL-encode `#` as `%23`;
+            an unencoded `#` is cut off by the client and the bare name then resolves to the highest stored version.
+            Without a version (or with `latest`) the highest stored version is used; the response reports the
+            concrete version. Any stored package that supports this FHIR version can be named: included packages are
+            pre-built, others are built on first use from stored packages only (nothing is downloaded). Absent: the
+            core specification only. One value; at most 256 characters.
+          schema:
+            type: string
+            maxLength: 256
         - name: profile
           in: query
           required: false
           description: >-
             Comma-separated canonical URLs of profiles to validate against, in addition to meta.profile. Each URL must
-            be defined by an IG included for this FHIR version (or its dependencies) or by the core specification, and
-            is matched exactly against `url` or `url|version`. Profiles are never downloaded. At most 10 distinct
-            profiles per request, each at most 1024 characters (otherwise 400 invalid-request). If any URL cannot be
-            resolved the request fails with 400 unknown-profile (listing `unresolvedProfiles`) and nothing is
-            validated.
+            be defined by the chosen `ig` package, its dependencies or the core specification (the core specification
+            only when `ig` is absent), and is matched exactly against `url` or `url|version`. Profiles are never
+            downloaded. At most 10 distinct profiles per request, each at most 1024 characters (otherwise 400
+            invalid-request). If any URL cannot be resolved the request fails with 400 unknown-profile (listing
+            `unresolvedProfiles`) and nothing is validated.
           schema:
             type: string
       requestBody:
@@ -131,6 +150,11 @@ paths:
       responses:
         '200':
           description: Validation completed (see `valid` / the OperationOutcome issues)
+          headers:
+            X-Validation-Context:
+              description: The IG package (name#version) the result came from, or `base` for the core-only context
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -148,11 +172,15 @@ paths:
                 description: FHIR OperationOutcome (XML)
         '400':
           $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
         '406':
           $ref: '#/components/responses/Problem'
         '413':
           $ref: '#/components/responses/Problem'
         '415':
+          $ref: '#/components/responses/Problem'
+        '424':
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
@@ -162,12 +190,15 @@ paths:
   /{version}/include-ig:
     post:
       operationId: validationApiIncludeIg
-      summary: Include a stored Implementation Guide in the validator configuration of a FHIR version
+      summary: Pre-build and keep a validator context for a stored Implementation Guide version
       description: >-
-        Replaces any other version of the same package. The response confirms the committed configuration; other
-        instances apply it within the propagation window. A package set whose validator would not fit in this
-        instance's heap is refused with 413 package-too-large before it is committed. A package whose declared FHIR
-        versions don't include this version is refused with 400 invalid-request.
+        Adds a pinned validator context for igPackageId#igPackageVersion on every instance; other versions of the
+        same package stay included and usable through ?ig=. Including a version that is already included changes
+        nothing. igPackageVersion defaults to latest (the highest stored version); nothing is downloaded. The
+        response confirms the committed configuration; other instances apply it within the propagation window. A
+        context that would not fit in this instance's heap is refused with 413 package-too-large before it is
+        committed. A package whose declared FHIR versions don't include this version is refused with 400
+        invalid-request.
       parameters:
         - name: version
           in: path
@@ -200,6 +231,45 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '413':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: validationApiExcludeIg
+      summary: Stop pre-building an included Implementation Guide version for a FHIR version
+      description: >-
+        Removes one name#version from the included set and propagates to every instance. The package stays stored
+        and can still be named in ?ig= on validation (it is then built on demand). Administrative: requires an ADMIN
+        key. 404 package-not-found when that version is not included.
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/FhirVersion'
+        - name: ig
+          in: query
+          required: true
+          description: The exact IG package version to exclude, name#version (URL-encode `#` as %23); no `latest`
+          schema:
+            type: string
+            maxLength: 256
+      responses:
+        '200':
+          description: IG version excluded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExcludeResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
@@ -248,6 +318,12 @@ paths:
     post:
       operationId: igPackageApiRegisterIg
       summary: Fetch and store an Implementation Guide package (from a registry or an approved URL)
+      description: >-
+        With `name` and no version (or `latest`), the configured package registries are asked for the highest
+        released version: if that version is already stored it is returned without downloading it again, otherwise
+        it is downloaded and stored (with its dependencies when includeDependency is true). If no registry can be
+        consulted or none lists the package, the highest stored version is returned with a warning; 404
+        package-not-found when nothing is stored. `downloaded` says whether the archive was fetched in this call.
       requestBody:
         required: true
         content:
@@ -365,7 +441,7 @@ components:
       type: http
       scheme: bearer
       description: >-
-        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig) always
+        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig, exclude-ig) always
         require an ADMIN key. Validation and read operations require a VALIDATE or ADMIN key
         only when FV_AUTH_ANONYMOUS_VALIDATE=false. Enforced by the service (see contracts/http-api.md).
 
@@ -392,9 +468,17 @@ components:
         timestamp:
           type: integer
           format: int64
+        catalogRevision:
+          type: integer
+          format: int64
+          description: The package catalog revision this instance has loaded
         versions:
           type: object
-          description: Per FHIR version state (ACTIVE, BUILDING, STALE, ABSENT), revisions and packages
+          description: >-
+            Per FHIR version: appliedRevision, latestRevision, `base` (the core-only context: state, packages,
+            packageBytes) and `contexts` (every IG context on this instance: key name#version, kind pinned|on-demand,
+            state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason). Readiness
+            counts the base and pinned contexts only.
         reasons:
           type: array
           items:
@@ -431,8 +515,9 @@ components:
 
     UnknownProfileProblem:
       description: >-
-        400 from /{version}/validate when a requested profile is not defined by the core specification or an included
-        IG. Nothing was validated.
+        400 from /{version}/validate when a requested profile is not defined by the chosen ig package, its
+        dependencies or the core specification (the core specification alone when ig is absent). Nothing was
+        validated.
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -497,6 +582,10 @@ components:
             meta.profile entries. Each appears once; an unresolved URL is never listed.
           items:
             type: string
+        igPackage:
+          type: string
+          nullable: true
+          description: The concrete IG package (name#version) the result came from; null when the base context was used.
 
     OperationOutcome:
       type: object
@@ -514,6 +603,15 @@ components:
           enum: [success]
         fhirVersion:
           type: string
+        key:
+          type: object
+          description: The validator context this include pins
+          properties:
+            fhirVersion:
+              type: string
+            igPackage:
+              type: string
+              description: concrete name#version
         revision:
           type: integer
           format: int64
@@ -522,6 +620,28 @@ components:
           items:
             type: string
         resolved:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    ExcludeResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        fhirVersion:
+          type: string
+        revision:
+          type: integer
+          format: int64
+        excluded:
+          type: string
+        included:
           type: array
           items:
             type: string
@@ -540,3 +660,11 @@ components:
           type: string
         version:
           type: string
+          description: The concrete version stored or returned
+        downloaded:
+          type: boolean
+          description: True when the archive was fetched in this call
+        warnings:
+          type: array
+          items:
+            type: string
