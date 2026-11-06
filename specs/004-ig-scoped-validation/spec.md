@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-06
 
-**Status**: Draft
+**Status**: Implemented (merged in #45; released in v3.0.0, 2026-11-06)
 
 **Input**: User description: "@var/specify_instruction_ig_scoped_validation.md". In summary: let a client choose,
 on each validation request, the one Implementation Guide (`name#version`) the resource is validated against, the

@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] - 3.0.0
+## [3.0.0] - 2026-11-06
 
 A breaking release. Each validation request now chooses the one IG package it is validated against
 (`?ig=name#version`), the same model as the HL7 validator CLI's `-ig`, and several versions of one IG can be offered
@@ -17,6 +17,9 @@ side by side. Requests that name no IG are validated against the core specificat
 - **Back up the database.** Restoring it is the only way back to 2.x; there is no down-migration.
 - **Stop every 2.x instance before starting 3.0.0.** Migration V7 drops a column 2.x reads, so a mixed fleet is not
   supported, and `scripts/rolling-restart.sh` refuses to cross a major version.
+- **Pin your image tag.** The `latest` tag now points to 3.0.0. A 2.x deployment on `latest` (the default `FV_TAG`)
+  upgrades on its next pull, and requests without `ig` stop using included IGs, so set `FV_TAG` to your current 2.x
+  release until your clients name their IG and you have backed up.
 - Full procedure: [docs/upgrade-3.0.md](docs/upgrade-3.0.md). `scripts/upgrade-rehearsal-3.0.sh` rehearses it.
 
 ### Breaking
