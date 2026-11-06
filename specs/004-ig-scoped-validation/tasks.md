@@ -575,3 +575,20 @@ T055 upgrade-3.0.md | T056 CHANGELOG | T061 README | T062 profile-sourcing wordi
   in `AsyncLimiter`: a queued task starts on its caller's Vert.x context.
 - **T071**: implemented rather than documented: the contract layer's failure handler checks the `ig` shape first.
 - `mvn verify`: 325 tests, 0 failures, no blocked-thread warnings.
+
+---
+
+## Phase 9: Convergence
+
+- [X] T074 Make `ValidatorRegistry.onCatalogChanged` and the package-cache invalidation in `ConfigSync.runCatalogSync` ignore a catalog view older than the newest already seen (use `catalog.current()` when it is newer than the refreshed view, and skip views whose revision is below the highest revision the registry has reconciled), so a catalog sync never redirects a building on-demand context to, or drops an active one for, outdated metadata. Add a `ValidatorRegistryKeyTest` case where `onCatalogChanged` receives an older view after an on-demand context was built from a newer one (expect no rebuild, no removal), in `src/main/java/nzi/fhir/validator/core/validator/ValidatorRegistry.java`, `src/main/java/nzi/fhir/validator/core/validator/ConfigSync.java` and `src/test/java/nzi/fhir/validator/core/validator/ValidatorRegistryKeyTest.java` per FR-025 / plan: research R3, R4 (partial)
+
+### Convergence notes (Phase 9)
+
+- **T074**: `ValidatorRegistry.onCatalogChanged` reconciles with the newest catalog view and ignores views older than
+  the last one reconciled; `ConfigSync.runCatalogSync` does the same before invalidating cached packages. The
+  regression test failed before the fix (the older view dropped a context built from a newer one). `mvn verify`:
+  326 tests, 0 failures, no blocked-thread warnings.
+- **T068 follow-up (found by CI on #48)**: a validation whose `ig` lookup joined a catalog refresh started by the
+  background sync continued on that refresh's context, so its build and validation logged an empty request id.
+  `FhirValidationService` now returns to the caller's context after the lookup and after the snapshot step;
+  `ValidationContextPropagationTest` reproduces the case deterministically (it failed before the fix).

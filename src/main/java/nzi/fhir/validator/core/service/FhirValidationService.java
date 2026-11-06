@@ -86,8 +86,11 @@ public class FhirValidationService {
     public <T> Future<T> validate(SupportedFhirVersion version, IgReference ig, String body, SupportedContentType contentType,
                                   List<String> profiles, Function<ValidatorSnapshot.Outcome, T> finisher) {
         long started = System.nanoTime();
-        return admission.admit(() -> resolve(version, ig)
-                        .compose(registry::snapshot)
+        // Steps may complete on another context (a joined catalog refresh, a joined build): return to the caller's
+        // context after each, so its request id stays on every log line (Principle VII).
+        io.vertx.core.Context caller = io.vertx.core.Vertx.currentContext();
+        return admission.admit(() -> onCaller(caller, resolve(version, ig))
+                        .compose(key -> onCaller(caller, registry.snapshot(key)))
                         .compose(snapshot -> executors.validation().executeBlocking(() -> {
                             ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries);
                             return new Done<>(outcome.result().isSuccessful(), finisher.apply(outcome));
@@ -102,6 +105,22 @@ public class FhirValidationService {
                     }
                 })
                 .map(Done::value);
+    }
+
+    /** {@code future}'s outcome, delivered on {@code caller} (as is when there is no caller or it is already there). */
+    private static <T> Future<T> onCaller(io.vertx.core.Context caller, Future<T> future) {
+        if (caller == null) {
+            return future;
+        }
+        io.vertx.core.Promise<T> promise = io.vertx.core.Promise.promise();
+        future.onComplete(ar -> {
+            if (io.vertx.core.Vertx.currentContext() == caller) {
+                promise.handle(ar);
+            } else {
+                caller.runOnContext(v -> promise.handle(ar));
+            }
+        });
+        return promise.future();
     }
 
     private Future<SnapshotKey> resolve(SupportedFhirVersion version, IgReference ig) {

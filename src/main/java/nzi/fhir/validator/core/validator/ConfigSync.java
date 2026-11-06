@@ -243,10 +243,14 @@ public class ConfigSync {
     }
 
     private Future<Void> runCatalogSync() {
-        return catalog.refresh().compose(view -> {
+        return catalog.refresh().compose(refreshed -> {
+            // Never reconcile with a view older than the newest one (a lookup miss may have refreshed in between).
+            PackageCatalogView view = catalog.current().revision() > refreshed.revision() ? catalog.current() : refreshed;
             PackageCatalogView before = reconciled;
-            reconciled = view;
-            invalidateChangedPackages(before, view);
+            if (view.revision() >= before.revision()) {
+                reconciled = view;
+                invalidateChangedPackages(before, view);
+            }
             registry.onCatalogChanged(view);
             List<Future<Void>> versions = new ArrayList<>();
             for (SupportedFhirVersion version : states.keySet()) {

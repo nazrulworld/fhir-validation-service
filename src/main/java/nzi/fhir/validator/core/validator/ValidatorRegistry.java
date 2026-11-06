@@ -126,6 +126,8 @@ public class ValidatorRegistry {
     private final LinkedHashMap<SnapshotKey, Slot> onDemand = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<SupportedFhirVersion, VersionState> versions = new EnumMap<>(SupportedFhirVersion.class);
     private volatile Supplier<PackageCatalogView> catalog = () -> PackageCatalogView.EMPTY;
+    /** Highest catalog revision {@link #onCatalogChanged} has reconciled (guarded by the lock). */
+    private long reconciledCatalogRevision;
     private volatile Consumer<SupportedFhirVersion> buildFailureListener = v -> { };
     private volatile Events events = Events.NONE;
 
@@ -484,7 +486,17 @@ public class ValidatorRegistry {
      */
     public void onCatalogChanged(PackageCatalogView view) {
         List<SnapshotKey> removed = new ArrayList<>();
+        // A sync may deliver a view older than one a request has already built from (a lookup miss can refresh the
+        // catalog in between): reconcile with the newest view, and never with one older than already reconciled.
+        PackageCatalogView latest = catalog.get();
+        if (latest != null && latest.revision() > view.revision()) {
+            view = latest;
+        }
         synchronized (lock) {
+            if (view.revision() < reconciledCatalogRevision) {
+                return;
+            }
+            reconciledCatalogRevision = view.revision();
             for (Slot s : pinned.values()) {
                 if (s.kind == Kind.PINNED && s.snapshot != null && s.activeResolved != null) {
                     List<String> replaced = s.activeResolved.replacedIn(view);

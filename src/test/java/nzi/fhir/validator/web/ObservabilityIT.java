@@ -240,4 +240,27 @@ class ObservabilityIT extends BaseTestContainer {
                 .putHeader("X-Request-Id", requestId).putHeader("Content-Type", "application/json").timeout(30_000)
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
     }
+
+    /**
+     * T068 follow-up: when the ig lookup misses the in-memory catalog and waits for a refresh from PostgreSQL, the
+     * build and the validation still log the request's id (the continuation must return to the request's context).
+     */
+    @Test
+    void buildAfterACatalogMissKeepsTheRequestId(VertxTestContext ctx) {
+        var services = app.bootstrap().services();
+        // Store without updating this instance's catalog view, so the request takes the lookup-miss path.
+        services.igPackageService().cacheManager().setStoreListener(null);
+        store("obs.missed")
+                .compose(v -> {
+                    logs = LogCapture.start();
+                    return validateIg("obs.missed#1.0.0", "req-after-miss");
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    List<String> ids = builtLogIds("R4:obs.missed#1.0.0");
+                    assertFalse(ids.isEmpty(), "the build was logged");
+                    assertTrue(ids.stream().allMatch("req-after-miss"::equals), "build log ids: " + ids);
+                    ctx.completeNow();
+                })));
+    }
 }

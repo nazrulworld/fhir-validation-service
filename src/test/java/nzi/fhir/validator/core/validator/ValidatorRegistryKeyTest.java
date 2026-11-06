@@ -322,4 +322,38 @@ class ValidatorRegistryKeyTest {
                 "a stale pinned context makes the instance unready");
         registry.close();
     }
+
+    /**
+     * Convergence T074 (FR-025, research R3/R4): a catalog sync that delivers a view older than the one an on-demand
+     * context was built from must neither redirect its build nor drop it.
+     */
+    @Test
+    void anOlderCatalogViewNeverRebuildsOrDropsContextsFromANewerOne(Vertx vertx) {
+        ValidatorRegistry registry = registry(vertx, 4, 10_000, null);
+        PackageCatalogView older = new PackageCatalogView(1, Map.of(
+                "a#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{1}, 1)));
+        catalogView = new PackageCatalogView(5, Map.of(
+                "a#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{1}, 1),
+                "e#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{5}, 1),
+                "f#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{6}, 1)));
+
+        assertTrue(registry.snapshot(key("e#1")).succeeded());
+        builder.auto = false;
+        Future<ValidatorSnapshot> building = registry.snapshot(key("f#1"));
+
+        registry.onCatalogChanged(older);
+        assertEquals(ValidatorRegistry.Kind.ON_DEMAND, registry.kind(key("e#1")), "not dropped for outdated metadata");
+        builder.completeAll();
+        assertTrue(building.succeeded());
+        assertEquals(1, builder.count(key("f#1")), "the build was not redirected to the older view");
+        assertEquals(List.of("f#1"), registry.current(key("f#1")).resolvedPackages());
+        assertEquals(1, builder.count(key("e#1")));
+
+        // A newer view with genuinely changed content still invalidates.
+        registry.onCatalogChanged(new PackageCatalogView(6, Map.of(
+                "e#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{9}, 1),
+                "f#1", new PackageCatalogView.Entry(java.util.Set.of(), List.of(), new byte[]{6}, 1))));
+        assertNull(registry.kind(key("e#1")), "replaced content in a newer view still drops the context");
+        assertEquals(ValidatorRegistry.Kind.ON_DEMAND, registry.kind(key("f#1")));
+    }
 }
