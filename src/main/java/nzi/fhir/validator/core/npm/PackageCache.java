@@ -67,12 +67,6 @@ public class PackageCache {
         }
     }
 
-    /** Drops every cached package. */
-    public synchronized void invalidateAll() {
-        entries.clear();
-        weight = 0;
-    }
-
     /** Archive size of a cached package, or 0 if it is not cached. */
     public synchronized long archiveBytes(String idAndVersion) {
         Entry e = entries.get(idAndVersion);

@@ -29,6 +29,11 @@ public class ServiceMetrics {
     public static final String OUTCOME_PACKAGE_NOT_FOUND = "package_not_found";
 
     private final PrometheusMeterRegistry registry;
+    /**
+     * Counters on the validation path, created once per tag combination: building and registering a meter on every
+     * request costs measurable latency (spec 004 SC-007).
+     */
+    private final java.util.concurrent.ConcurrentMap<String, Counter> counters = new java.util.concurrent.ConcurrentHashMap<>();
 
     public ServiceMetrics(PrometheusMeterRegistry registry) {
         this.registry = registry;
@@ -97,9 +102,8 @@ public class ServiceMetrics {
 
             @Override
             public void lookup(SnapshotKey key, String result) {
-                Counter.builder("fv.validator.context.lookups").tag("fhir_version", key.fhirVersion().name())
-                        .tag("result", result).description("Validator context lookups: hit, joined a build, or built")
-                        .register(registry).increment();
+                counter("fv.validator.context.lookups", "Validator context lookups: hit, joined a build, or built",
+                        "fhir_version", key.fhirVersion().name(), "result", result).increment();
             }
         });
     }
@@ -113,12 +117,19 @@ public class ServiceMetrics {
     }
 
     public void recordValidation(SupportedFhirVersion version, String outcome, long nanos) {
-        Counter.builder("fv.validations").tag("version", version.name()).tag("outcome", outcome)
-                .description("Validation requests by outcome").register(registry).increment();
-        Timer.builder("fv.validation").tag("version", version.name())
+        counter("fv.validations", "Validation requests by outcome", "version", version.name(), "outcome", outcome).increment();
+        timers.computeIfAbsent(version, v -> Timer.builder("fv.validation").tag("version", v.name())
                 .description("Validation duration").publishPercentileHistogram()
                 .minimumExpectedValue(Duration.ofMillis(1)).maximumExpectedValue(Duration.ofSeconds(30))
-                .register(registry).record(Duration.ofNanos(nanos));
+                .register(registry)).record(Duration.ofNanos(nanos));
+    }
+
+    private final java.util.Map<SupportedFhirVersion, Timer> timers = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** A counter registered once per name and tag values ({@code tags} alternates keys and values). */
+    private Counter counter(String name, String description, String... tags) {
+        return counters.computeIfAbsent(name + '|' + String.join("|", tags),
+                k -> Counter.builder(name).tags(tags).description(description).register(registry));
     }
 
     public void recordBuildFailure(SupportedFhirVersion version) {

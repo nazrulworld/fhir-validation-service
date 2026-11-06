@@ -145,4 +145,50 @@ class ContextEvictionIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * Convergence T069 (SC-008): a burst of requests naming 20 distinct stored IGs never holds more on-demand contexts
+     * than the limit (2 here); every request ends in a result or a curated 503 with Retry-After, never an error.
+     */
+    @Test
+    void aBurstOfTwentyDistinctIgsStaysWithinTheBounds(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.atomic.AtomicLong maxSeen = new java.util.concurrent.atomic.AtomicLong();
+        Future<Void> stored = Future.succeededFuture();
+        for (int i = 0; i < 20; i++) {
+            String name = "ev.burst" + i;
+            stored = stored.compose(v -> TestPackages.storePackage(core.services(), TestPackages.profilePackage(name, "1.0.0",
+                    TestPackages.requiredPatientElements(P, "birthDate"))));
+        }
+        stored.compose(v -> {
+                    long sampler = vertx.setPeriodic(5, id -> maxSeen.accumulateAndGet(
+                            registry().contextCount(R4, ValidatorRegistry.Kind.ON_DEMAND), Math::max));
+                    List<Future<Object>> all = new java.util.ArrayList<>();
+                    for (int i = 0; i < 20; i++) {
+                        all.add(validate("ev.burst" + i + "#1.0.0").<Object>map(o -> o).recover(Future::succeededFuture));
+                    }
+                    return Future.join(all).map(cf -> {
+                        vertx.cancelTimer(sampler);
+                        return all;
+                    });
+                })
+                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
+                    int ok = 0;
+                    for (Future<Object> f : all) {
+                        Object r = f.result();
+                        if (r instanceof ValidatorSnapshot.Outcome o) {
+                            assertTrue(TestPackages.hasError(o, "birthDate"));
+                            ok++;
+                        } else {
+                            ProblemException p = assertInstanceOf(ProblemException.class, r, String.valueOf(r));
+                            assertEquals(503, p.status(), p.type() + ": " + p.detail());
+                            assertNotNull(p.headers().get("Retry-After"), p.type());
+                        }
+                    }
+                    assertTrue(ok >= 1, "some requests are served");
+                    assertTrue(maxSeen.get() <= 2, "on-demand contexts never exceed the limit; saw " + maxSeen.get());
+                    assertTrue(registry().contextCount(R4, ValidatorRegistry.Kind.ON_DEMAND) <= 2);
+                    assertEquals(ValidatorRegistry.Status.ACTIVE, registry().status(key("ev.pinned#1.0.0")));
+                    ctx.completeNow();
+                })));
+    }
 }

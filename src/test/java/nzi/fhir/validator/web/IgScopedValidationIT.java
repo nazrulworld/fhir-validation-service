@@ -212,6 +212,20 @@ class IgScopedValidationIT extends BaseTestContainer {
                 })));
     }
 
+    /** Convergence T071 (FR-009): a malformed ig also wins over an empty or malformed JSON body. */
+    @Test
+    void malformedIgWinsOverABodyTheContractLayerRefuses(VertxTestContext ctx) {
+        Future.all(validate("R4", "a##b").sendBuffer(Buffer.buffer("")),
+                        validate("R4", "a##b").sendBuffer(Buffer.buffer("{not json")))
+                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
+                    for (int i = 0; i < 2; i++) {
+                        JsonObject problem = assertProblem(all.resultAt(i), 400, "invalid-request");
+                        assertTrue(problem.getString("detail").contains("ig parameter"), problem.encode());
+                    }
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void operationOutcomeCarriesTheContextHeaderAndAnUnchangedBody(VertxTestContext ctx) {
         validate("R4", "scoped.b#1.0.0").putHeader("Accept", "application/fhir+json").sendBuffer(Buffer.buffer(PATIENT_A))
