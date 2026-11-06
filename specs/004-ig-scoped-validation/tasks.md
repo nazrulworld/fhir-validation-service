@@ -437,7 +437,7 @@ both usable through `ig`, and the base context for requests without `ig` (quicks
 - [X] T062 [P] Check that the README and `docs/upgrade-3.0.md` describe profile sourcing in line with constitution 1.1.0 Principle II: profiles come from the chosen package, its dependencies and the core specification, and never from the network.
 - [X] T063 [P] Add `scripts/bench-validate.sh`, which drives single-resource R4 validation with `hey` (or `wrk` if available) for (a) no `ig` and (b) `ig` naming a pinned IG, and prints p50, p95 and p99. Record results for the 2.0.0 tag and this branch in the PR (SC-007, Principle VI).
 - [X] T064 Run `mvn verify` and resolve every failure and every `BlockedThreadChecker` warning. Then run the manual walkthrough in `specs/004-ig-scoped-validation/quickstart.md` §2 and note the results in the PR.
-- [ ] T065 Set the release version `3.0.0` in `pom.xml` and the CHANGELOG date when releasing. Mark the spec status `Implemented` in `specs/004-ig-scoped-validation/spec.md`.
+- [X] T065 Set the release version `3.0.0` in `pom.xml` and the CHANGELOG date when releasing. Mark the spec status `Implemented` in `specs/004-ig-scoped-validation/spec.md`.
 
 ---
 
