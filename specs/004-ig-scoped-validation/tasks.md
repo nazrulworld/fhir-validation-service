@@ -588,3 +588,7 @@ T055 upgrade-3.0.md | T056 CHANGELOG | T061 README | T062 profile-sourcing wordi
   the last one reconciled; `ConfigSync.runCatalogSync` does the same before invalidating cached packages. The
   regression test failed before the fix (the older view dropped a context built from a newer one). `mvn verify`:
   326 tests, 0 failures, no blocked-thread warnings.
+- **T068 follow-up (found by CI on #48)**: a validation whose `ig` lookup joined a catalog refresh started by the
+  background sync continued on that refresh's context, so its build and validation logged an empty request id.
+  `FhirValidationService` now returns to the caller's context after the lookup and after the snapshot step;
+  `ValidationContextPropagationTest` reproduces the case deterministically (it failed before the fix).
