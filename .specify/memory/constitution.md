@@ -22,8 +22,9 @@ every request it owns.
 
 - Any number of instances MUST be able to run behind a load balancer without sticky sessions.
   PostgreSQL is the single source of truth for shared state: registered IG packages and the active
-  validator configuration/state. Profiles come only from included IG packages (feature
-  `003-ig-only-profile-resolution`).
+  validator configuration/state. Profiles come only from stored IG packages: the one package chosen for a
+  validation request (or none, for the core-only base context), its resolved dependencies and the core
+  specification (feature `004-ig-scoped-validation`). They are never fetched from the network.
 - In-memory structures (the validator registry `ValidatorRegistry`, the IG package cache) MUST be
   derived, rebuildable caches. Losing them
   MUST NOT lose data; an instance MUST be able to rebuild them from PostgreSQL.
@@ -172,4 +173,4 @@ None open. The seven deviations recorded at ratification (static `HashMap` regis
 upload limit, no changelog) were resolved by feature `001-service-hardening` (see `CHANGELOG.md`, 1.0.0). New code
 MUST NOT reintroduce them.
 
-**Version**: 1.0.2 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-03
+**Version**: 1.1.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-06
