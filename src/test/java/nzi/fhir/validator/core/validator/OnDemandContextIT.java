@@ -69,7 +69,7 @@ class OnDemandContextIT extends BaseTestContainer {
     }
 
     private Future<ValidatorSnapshot.Outcome> validate(CoreHarness on, String ig) {
-        return on.services().validationService().validate(SupportedFhirVersion.R4, IgReference.parse(ig),
+        return on.services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, IgReference.parse(ig),
                 TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(P), Function.identity());
     }
 
@@ -231,7 +231,7 @@ class OnDemandContextIT extends BaseTestContainer {
                 .compose(v -> core.services().igPackageService().include(SupportedFhirVersion.R4, "od.nodb", "1.0.0"))
                 .compose(r -> core.services().pool().close())
                 .compose(v -> Future.all(validate(core, "od.nodb#1.0.0"), validate(core, "od.nodb"),
-                        core.services().validationService().validate(SupportedFhirVersion.R4, null, TestPackages.minimalPatient(),
+                        core.services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, null, TestPackages.minimalPatient(),
                                 SupportedContentType.JSON, List.of(), Function.identity())))
                 .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
                     assertTrue(TestPackages.hasError(all.resultAt(0), "birthDate"));

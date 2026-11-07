@@ -67,7 +67,7 @@ class ConfigPropagationIT extends BaseTestContainer {
      */
     private Future<Boolean> bEnforces(String ig, String profileUrl, String element) {
         return b.services().validationService()
-                .validate(SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
+                .validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
                         List.of(profileUrl), java.util.function.Function.identity())
                 .map(o -> TestPackages.hasError(o, element))
                 .recover(err -> err instanceof ProblemException p && ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())
@@ -227,6 +227,32 @@ class ConfigPropagationIT extends BaseTestContainer {
                 .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
                     assertEquals(ValidatorRegistry.Kind.ON_DEMAND, b.services().validatorRegistry()
                             .kind(SnapshotKey.of(SupportedFhirVersion.R4, "example.storedona#1.0.0")));
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Spec 005 FR-019, research R8: an included context's access changed through A reaches B within the propagation
+     * window, and B swaps it without rebuilding the context (the same snapshot keeps serving).
+     */
+    @Test
+    void snapshotAccessChangeReachesTheOtherInstanceWithoutARebuild(Vertx vertx, VertxTestContext ctx) {
+        String ig = "example.access#1.0.0";
+        SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, ig);
+        java.util.concurrent.atomic.AtomicReference<ValidatorSnapshot> before = new java.util.concurrent.atomic.AtomicReference<>();
+        includeThroughA("example.access", "http://example.org/fhir/StructureDefinition/access", "gender")
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> bPinned(ig)))
+                .compose(ms -> {
+                    before.set(b.services().validatorRegistry().current(key));
+                    ctx.verify(() -> assertTrue(b.services().configSync().pinnedAccess(SupportedFhirVersion.R4).get(ig).shareable()));
+                    return a.services().pool().withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, SupportedFhirVersion.R4)
+                            .compose(row -> ConfigRevisionRepository.changeSnapshotAccess(tx, SupportedFhirVersion.R4, ig,
+                                    java.util.Optional.empty(), java.util.Optional.of(false))));
+                })
+                .compose(rev -> Await.until(vertx, PROPAGATION_MS, "access change reaches B", () -> Future.succeededFuture(
+                        !b.services().configSync().pinnedAccess(SupportedFhirVersion.R4).get(ig).shareable())))
+                .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
+                    assertSame(before.get(), b.services().validatorRegistry().current(key), "no rebuild for an access change");
                     ctx.completeNow();
                 })));
     }

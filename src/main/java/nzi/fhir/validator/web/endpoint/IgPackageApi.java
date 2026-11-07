@@ -7,6 +7,10 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.openapi.RouterBuilder;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
 import nzi.fhir.validator.core.npm.SafePackageFetcher;
+import nzi.fhir.validator.core.npm.PackageOwnership;
+import nzi.fhir.validator.core.security.Access;
+import nzi.fhir.validator.core.security.AccessChange;
+import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
@@ -36,26 +40,60 @@ public class IgPackageApi {
         // Method: GET Path: "/igs/:name/:version/dependencies"
         routerBuilder.operation("igPackageApiGetDependenciesGraph")
                 .handler(ctx -> ErrorResponder.respond(ctx,
-                        igPackageService.getDependencyGraph(ctx.pathParam("name"), ctx.pathParam("version"))));
+                        igPackageService.getDependencyGraph(ApiKeyAuthHandler.caller(ctx), ctx.pathParam("name"),
+                                ctx.pathParam("version"))));
         // Method: GET, Path: "/igs/:name/:version/conformance" (deprecated: a file listing)
         routerBuilder.operation("igPackageApiGenerateConformanceReport")
                 .handler(ctx -> ErrorResponder.respond(ctx,
-                        igPackageService.listPackageFiles(ctx.pathParam("name"), ctx.pathParam("version"))));
+                        igPackageService.listPackageFiles(ApiKeyAuthHandler.caller(ctx), ctx.pathParam("name"),
+                                ctx.pathParam("version"))));
         // Method: POST, Path: "/igs/upload"
         routerBuilder.operation("igPackageApiUploadIg")
                 .handler(this::handleUploadAndRegisterIg);
         // Method: POST, Path: "/igs/register"
         routerBuilder.operation("igPackageApiRegisterIg")
                 .handler(this::handleRegisterIg);
+        // Method: PATCH, Path: "/igs/:name/:version" (spec 005: sharing and ownership)
+        routerBuilder.operation("igPackageApiChangeAccess")
+                .handler(this::handleChangeAccess);
     }
 
-    private static JsonObject registered(NpmPackage npmPackage, boolean downloaded, java.util.List<String> warnings) {
+    private static JsonObject registered(NpmPackage npmPackage, boolean downloaded, java.util.List<String> warnings,
+                                         Access access) {
         return new JsonObject()
                 .put("status", "success")
                 .put("name", npmPackage.name())
                 .put("version", npmPackage.version())
                 .put("downloaded", downloaded)
+                .put("owner", access == null ? null : access.ownerShortName())
+                .put("shareable", access == null ? null : access.shareable())
                 .put("warnings", new io.vertx.core.json.JsonArray(java.util.List.copyOf(warnings)));
+    }
+
+    /** {@code registered(...)} with the stored package's owner and sharing (spec 005 FR-020). */
+    private Future<JsonObject> registered(NpmPackage pkg, boolean downloaded) {
+        return igPackageService.access(pkg.name(), pkg.version())
+                .map(access -> registered(pkg, downloaded, java.util.List.of(), access.orElse(null)));
+    }
+
+    private static PackageOwnership ownership(RoutingContext ctx, boolean shareable) {
+        try {
+            return PackageOwnership.of(ApiKeyAuthHandler.caller(ctx), shareable);
+        } catch (IllegalArgumentException e) {
+            throw new ProblemException(403, "forbidden", "This API key does not allow this operation");
+        }
+    }
+
+    /** {@code PATCH /igs/{name}/{version}} (spec 005 FR-019, contracts §5). */
+    private void handleChangeAccess(RoutingContext ctx) {
+        JsonObject body;
+        try {
+            body = ctx.body().asJsonObject();
+        } catch (RuntimeException e) {
+            body = null;
+        }
+        ErrorResponder.respond(ctx, igPackageService.changePackageAccess(ApiKeyAuthHandler.caller(ctx),
+                ctx.pathParam("name"), ctx.pathParam("version"), AccessChange.parse(body)));
     }
 
     private void handleRegisterIg(RoutingContext ctx) {
@@ -70,9 +108,14 @@ public class IgPackageApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "The body must be a JSON object"));
             return;
         }
+        Object shareableValue = body.getValue("shareable", true);
+        if (!(shareableValue instanceof Boolean shareable)) {
+            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
+            return;
+        }
         String downloadUrl = body.getString("downloadUrl", "");
         if (!downloadUrl.isEmpty()) {
-            handleDownloadIg(ctx, downloadUrl);
+            handleDownloadIg(ctx, downloadUrl, shareable);
             return;
         }
         String name = body.getString("name", "");
@@ -85,8 +128,9 @@ public class IgPackageApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "version must be 1-64 characters without whitespace"));
             return;
         }
-        Future<JsonObject> result = igPackageService.register(name, version, body.getBoolean("includeDependency", true))
-                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings()));
+        Future<JsonObject> result = igPackageService.register(ApiKeyAuthHandler.caller(ctx), name, version,
+                        body.getBoolean("includeDependency", true), shareable)
+                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings(), r.access()));
         ErrorResponder.respond(ctx, result);
     }
 
@@ -96,18 +140,37 @@ public class IgPackageApi {
             return;
         }
         FileUpload upload = ctx.fileUploads().get(0);
-        Future<JsonObject> result = igPackageService.registerUploadedFile(upload.uploadedFileName())
-                .map(pkg -> registered(pkg, false, java.util.List.of()));
+        String shareable = ctx.request().getFormAttribute("shareable");
+        if (shareable != null && !shareable.equals("true") && !shareable.equals("false")) {
+            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
+            return;
+        }
+        PackageOwnership ownership;
+        try {
+            ownership = ownership(ctx, shareable == null || Boolean.parseBoolean(shareable));
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
+        Future<JsonObject> result = igPackageService.registerUploadedFile(upload.uploadedFileName(), ownership)
+                .compose(pkg -> registered(pkg, false));
         ErrorResponder.respond(ctx, result);
     }
 
     /**
      * Downloads through {@link SafePackageFetcher}: only approved https sources, public addresses, capped size.
      */
-    private void handleDownloadIg(RoutingContext ctx, String downloadUrl) {
+    private void handleDownloadIg(RoutingContext ctx, String downloadUrl, boolean shareable) {
+        PackageOwnership ownership;
+        try {
+            ownership = ownership(ctx, shareable);
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
         Future<JsonObject> result = fetcher.fetch(downloadUrl)
-                .compose(body -> igPackageService.registerIg(body.getBytes(), false, "URL"))
-                .map(pkg -> registered(pkg, true, java.util.List.of()));
+                .compose(body -> igPackageService.registerIg(body.getBytes(), false, "URL", ownership))
+                .compose(pkg -> registered(pkg, true));
         ErrorResponder.respond(ctx, result);
     }
 }

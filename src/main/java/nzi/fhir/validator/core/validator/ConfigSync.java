@@ -28,6 +28,8 @@ import java.util.Map;
  * <ul>
  *     <li>{@code IG} / {@code IG_EXCLUDE}: re-reads that version's included set and applies it (one pinned context per
  *     included IG, each resolved from the catalog view).</li>
+ *     <li>{@code IG_ACCESS} (spec 005): re-reads that version's row and swaps the access of its included contexts;
+ *     the included set is unchanged, so nothing is rebuilt.</li>
  *     <li>{@code PACKAGE}: refreshes the catalog view, invalidates contexts and cached packages whose content changed,
  *     then re-applies every version (a changed dependency set rebuilds the affected pinned contexts).</li>
  * </ul>
@@ -59,6 +61,8 @@ public class ConfigSync {
      * miss may refresh the catalog view directly; the next catalog sync must still see what changed since this one.
      */
     private volatile PackageCatalogView reconciled = PackageCatalogView.EMPTY;
+    /** Access of the included contexts, per version (spec 005): read without a lock on the validation hot path. */
+    private final Map<SupportedFhirVersion, PinnedAccess> pinnedAccess = new java.util.concurrent.ConcurrentHashMap<>();
     private PgSubscriber subscriber;
     private long pollTimer = -1;
     private volatile boolean notificationsEnabled = true;
@@ -88,6 +92,12 @@ public class ConfigSync {
         return catalog;
     }
 
+    /** The access of {@code version}'s included contexts, as last read from the configuration. */
+    public PinnedAccess pinnedAccess(SupportedFhirVersion version) {
+        PinnedAccess a = pinnedAccess.get(version);
+        return a == null ? PinnedAccess.EMPTY : a;
+    }
+
     /**
      * Loads the catalog view, builds every context from the current configuration (completes when all are built or
      * failed), then starts listening and polling.
@@ -101,6 +111,9 @@ public class ConfigSync {
                         ConfigRevisionRepository.ConfigRow row = rows.get(version);
                         long revision = row == null ? 0 : row.revision();
                         List<String> included = row == null ? List.of() : row.included();
+                        if (row != null) {
+                            pinnedAccess.put(version, row.access());
+                        }
                         builds.add(registry.applyPinned(version, revision, resolveAll(included, view))
                                 .recover(err -> Future.succeededFuture()));
                     }
@@ -233,6 +246,11 @@ public class ConfigSync {
                     ConfigRevisionRepository.ConfigRow row = rows.get(version);
                     if (row == null) {
                         return Future.succeededFuture();
+                    }
+                    // Access first: it takes effect at once, also while a changed context is still being built.
+                    PinnedAccess previous = pinnedAccess.put(version, row.access());
+                    if (previous != null && !previous.equals(row.access())) {
+                        logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
                     boolean unknown = row.included().stream().anyMatch(k -> !catalog.current().contains(k));
                     Future<PackageCatalogView> view = unknown

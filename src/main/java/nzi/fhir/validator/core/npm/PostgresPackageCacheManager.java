@@ -105,16 +105,30 @@ public class PostgresPackageCacheManager {
      * @param source {@code UPLOAD}, {@code REGISTRY} or {@code URL}
      */
     public Future<NpmPackage> store(byte[] bytes, String source) {
+        return store(bytes, source, PackageOwnership.SYSTEM);
+    }
+
+    /**
+     * Like {@link #store(byte[], String)}, owned as {@code ownership} says (spec 005 research R7).
+     *
+     * @return fails with 409 {@code conflict} when another organisation stored the same {@code name#version}
+     */
+    public Future<NpmPackage> store(byte[] bytes, String source, PackageOwnership ownership) {
         return parser.<Void>executeBlocking(() -> {
             guard.check(bytes);
             return null;
-        }, false).compose(v -> storeChecked(bytes, source));
+        }, false).compose(v -> storeChecked(bytes, source, ownership));
     }
 
     /**
      * Stores an archive file (an upload): size and archive checks run on the file before it is read into memory.
      */
     public Future<NpmPackage> storeFile(String path, String source) {
+        return storeFile(path, source, PackageOwnership.SYSTEM);
+    }
+
+    /** Like {@link #storeFile(String, String)}, owned as {@code ownership} says. */
+    public Future<NpmPackage> storeFile(String path, String source, PackageOwnership ownership) {
         return parser.<byte[]>executeBlocking(() -> {
             Path file = Path.of(path);
             long size = Files.size(file);
@@ -126,10 +140,10 @@ public class PostgresPackageCacheManager {
                 guard.check(in, size);
             }
             return Files.readAllBytes(file);
-        }, false).compose(bytes -> storeChecked(bytes, source));
+        }, false).compose(bytes -> storeChecked(bytes, source, ownership));
     }
 
-    private Future<NpmPackage> storeChecked(byte[] bytes, String source) {
+    private Future<NpmPackage> storeChecked(byte[] bytes, String source, PackageOwnership ownership) {
         return parse(bytes).compose(npmPackage -> {
             if (npmPackage.name() == null || npmPackage.name().isBlank() || npmPackage.name().length() > MAX_NAME_LENGTH) {
                 return Future.failedFuture(new ProblemException(400, "invalid-request", "The package has no valid name"));
@@ -145,22 +159,31 @@ public class PostgresPackageCacheManager {
                 return Future.failedFuture(e);
             }
             String[] dependencies = npmPackage.dependencies() == null ? new String[0] : npmPackage.dependencies().toArray(String[]::new);
+            // Spec 005 research R7: a replacement keeps the stored owner and sharing, and is allowed only for the owner
+            // or the system organisation. The condition sits in the upsert itself, so there is no check-then-write race:
+            // no row back means another organisation stored it.
             String sql = """
-                INSERT INTO %s
+                INSERT INTO %s AS t
                     (ig_package_id, ig_package_version, ig_package_meta, content_raw, dependencies, content_sha256, source,
-                     expanded_bytes, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+                     expanded_bytes, updated_at, owner, is_shareable)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9, $10)
                 ON CONFLICT (ig_package_id, ig_package_version)
                 DO UPDATE SET ig_package_meta = $3, content_raw = $4, dependencies = $5, content_sha256 = $6,
                               source = $7, expanded_bytes = $8, updated_at = now()
+                WHERE t.owner = $9 OR $11
+                RETURNING owner
                 """.formatted(TABLE);
             String key = npmPackage.name() + "#" + npmPackage.version();
             // The upsert, the catalog revision bump and the notification commit together (spec 004, research R4):
             // every instance then refreshes its catalog view and invalidates contexts built from a replaced package.
             return pgPool.withTransaction(tx -> tx.preparedQuery(sql)
                             .execute(Tuple.from(new Object[]{npmPackage.name(), npmPackage.version(), createNpmPackageMeta(npmPackage),
-                                    Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source, expandedBytes(npmPackage)}))
-                            .compose(rows -> bumpCatalog(tx, key)))
+                                    Buffer.buffer(bytes), dependencies, Buffer.buffer(sha256), source, expandedBytes(npmPackage),
+                                    ownership.owner(), ownership.shareable(), ownership.callerIsSystem()}))
+                            .compose(rows -> rows.size() == 0
+                                    // Nothing changed: the catalog revision is not bumped, nobody is notified.
+                                    ? Future.failedFuture(ProblemException.conflictOwnedElsewhere(key))
+                                    : bumpCatalog(tx, key)))
                     .map(revision -> {
                         logger.info("Stored package {} ({} bytes, source {}, catalog revision {})", key, bytes.length, source, revision);
                         storeListener.accept(key);
@@ -258,9 +281,11 @@ public class PostgresPackageCacheManager {
      * Increments the shared package catalog revision and notifies other instances; call inside the transaction that
      * writes the package, so PostgreSQL delivers the notification only on commit.
      *
+     * @param key the changed {@code name#version}, {@code *}, or {@code null} for a refresh only (an organisation
+     *            rename changes owner short names, spec 005 research R8)
      * @return the new catalog revision
      */
-    static Future<Long> bumpCatalog(SqlClient tx, String key) {
+    public static Future<Long> bumpCatalog(SqlClient tx, String key) {
         return tx.query("UPDATE " + CATALOG_TABLE + " SET revision = revision + 1, updated_at = now() WHERE id = 1 RETURNING revision")
                 .execute()
                 .compose(rows -> {
@@ -270,6 +295,71 @@ public class PostgresPackageCacheManager {
                             .execute(Tuple.of(nzi.fhir.validator.core.service.ConfigRevisionRepository.CHANNEL, payload))
                             .map(revision);
                 });
+    }
+
+    /**
+     * Changes the owner and/or sharing of a stored package (spec 005 FR-019, research R8), in one transaction with
+     * the row locked: the catalog revision is bumped and {@code PACKAGE} notified, so every instance refreshes its
+     * catalog view; no validator context is rebuilt (access is checked per request). Check order: 404 (not stored, or
+     * {@code caller} is neither the owner nor the system organisation) → 403 (a transfer by a caller that isn't the
+     * system organisation) → 400 (body, unknown or inactive target organisation), so a refusal never reveals a
+     * package the caller can't see.
+     *
+     * @return the package's access after the change
+     */
+    public Future<nzi.fhir.validator.core.security.Access> changeAccess(String name, String version,
+                                                                        nzi.fhir.validator.core.security.Caller caller,
+                                                                        nzi.fhir.validator.core.security.AccessChange change) {
+        String key = name + "#" + version;
+        return pgPool.withTransaction(tx -> tx.preparedQuery("SELECT owner FROM " + TABLE
+                                + " WHERE ig_package_id = $1 AND ig_package_version = $2 FOR UPDATE")
+                        .execute(Tuple.of(name, version))
+                        .compose(rows -> {
+                            if (rows.size() == 0 || !(caller.system() || caller.owns(rows.iterator().next().getUUID(0)))) {
+                                return Future.failedFuture(ProblemException.packageNotStored(key));
+                            }
+                            if (change.transfers() && !caller.system()) {
+                                return Future.failedFuture(ProblemException.transferForbidden());
+                            }
+                            if (change.invalid() != null) {
+                                return Future.failedFuture(new ProblemException(400, "invalid-request", change.invalid()));
+                            }
+                            return resolveTargetOrganisation(tx, change);
+                        })
+                        .compose(newOwner -> tx.preparedQuery("UPDATE " + TABLE + " SET owner = coalesce($3, owner), "
+                                        + "is_shareable = coalesce($4, is_shareable), updated_at = now() "
+                                        + "WHERE ig_package_id = $1 AND ig_package_version = $2 RETURNING owner, is_shareable")
+                                .execute(Tuple.of(name, version, newOwner.orElse(null), change.shareable().orElse(null))))
+                        .compose(rows -> {
+                            Row row = rows.iterator().next();
+                            java.util.UUID owner = row.getUUID(0);
+                            boolean shareable = row.getBoolean(1);
+                            return bumpCatalog(tx, key)
+                                    .compose(rev -> nzi.fhir.validator.core.org.OrganisationRepository.findById(tx, owner))
+                                    .map(org -> new nzi.fhir.validator.core.security.Access(owner,
+                                            org.map(nzi.fhir.validator.core.org.Organisation::nameShort).orElse(null), shareable));
+                        }))
+                .onSuccess(a -> {
+                    logger.info("Changed access of package {} (owner {}, shareable {}) by {}", key, a.ownerShortName(),
+                            a.shareable(), caller.label());
+                    storeListener.accept(key);
+                });
+    }
+
+    /**
+     * The id of the organisation a change transfers to: empty when it doesn't transfer; 400 when the organisation
+     * doesn't exist or is inactive.
+     */
+    public static Future<Optional<java.util.UUID>> resolveTargetOrganisation(SqlClient tx,
+                                                                             nzi.fhir.validator.core.security.AccessChange change) {
+        if (change.owner().isEmpty()) {
+            return Future.succeededFuture(Optional.empty());
+        }
+        return nzi.fhir.validator.core.org.OrganisationRepository.findByShortName(tx, change.owner().get())
+                .compose(org -> org.isPresent() && org.get().active()
+                        ? Future.succeededFuture(Optional.of(org.get().id()))
+                        : Future.failedFuture(new ProblemException(400, "invalid-request",
+                        "The target organisation doesn't exist or is not active")));
     }
 
     private volatile java.util.function.Consumer<String> storeListener = key -> { };
@@ -315,10 +405,20 @@ public class PostgresPackageCacheManager {
      * @param loadDependencies also fetch missing (non-core) dependencies, recursively
      */
     public Future<NpmPackage> loadPackage(String idAndVersion, boolean cacheOnly, boolean loadDependencies) {
-        return loadPackage(idAndVersion, cacheOnly, loadDependencies, new HashSet<>());
+        return loadPackage(idAndVersion, cacheOnly, loadDependencies, PackageOwnership.SYSTEM);
     }
 
-    private Future<NpmPackage> loadPackage(String idAndVersion, boolean cacheOnly, boolean loadDependencies, Set<String> visited) {
+    /**
+     * Like {@link #loadPackage(String, boolean, boolean)}: every package downloaded and stored by this call, its
+     * dependencies included, is owned as {@code ownership} says (spec 005 FR-016). Packages already stored keep theirs.
+     */
+    public Future<NpmPackage> loadPackage(String idAndVersion, boolean cacheOnly, boolean loadDependencies,
+                                          PackageOwnership ownership) {
+        return loadPackage(idAndVersion, cacheOnly, loadDependencies, new HashSet<>(), ownership);
+    }
+
+    private Future<NpmPackage> loadPackage(String idAndVersion, boolean cacheOnly, boolean loadDependencies, Set<String> visited,
+                                           PackageOwnership ownership) {
         String name = idAndVersion.contains("#") ? idAndVersion.substring(0, idAndVersion.indexOf('#')) : idAndVersion;
         String requested = idAndVersion.contains("#") ? idAndVersion.substring(idAndVersion.indexOf('#') + 1) : null;
         return resolveVersion(name, requested, cacheOnly).compose(version -> {
@@ -330,22 +430,23 @@ public class PostgresPackageCacheManager {
                         if (raw != null) {
                             return parse(raw.getBytes());
                         }
-                        return cacheOnly || !registryEnabled ? Future.succeededFuture(null) : fetchFromRegistries(name, version);
+                        return cacheOnly || !registryEnabled ? Future.succeededFuture(null)
+                                : fetchFromRegistries(name, version, ownership);
                     })
                     .compose(pkg -> pkg == null || !loadDependencies || pkg.dependencies() == null
                             ? Future.succeededFuture(pkg)
-                            : loadDependencies(pkg, visited).map(pkg));
+                            : loadDependencies(pkg, visited, ownership).map(pkg));
         });
     }
 
-    private Future<Void> loadDependencies(NpmPackage pkg, Set<String> visited) {
+    private Future<Void> loadDependencies(NpmPackage pkg, Set<String> visited, PackageOwnership ownership) {
         List<Future<?>> deps = new ArrayList<>();
         for (String dependency : pkg.dependencies()) {
             String depName = dependency.contains("#") ? dependency.substring(0, dependency.indexOf('#')) : dependency;
             if (DependencyResolver.isCore(depName)) {
                 continue;
             }
-            deps.add(loadPackage(dependency, false, true, visited)
+            deps.add(loadPackage(dependency, false, true, visited, ownership)
                     .recover(err -> {
                         logger.warn("Dependency {} of {}#{} could not be loaded: {}", dependency, pkg.name(), pkg.version(), err.getMessage());
                         return Future.succeededFuture();
@@ -370,7 +471,7 @@ public class PostgresPackageCacheManager {
         });
     }
 
-    private Future<NpmPackage> fetchFromRegistries(String name, String version) {
+    private Future<NpmPackage> fetchFromRegistries(String name, String version, PackageOwnership ownership) {
         if (registryUrls.isEmpty()) {
             return Future.succeededFuture(null);
         }
@@ -393,7 +494,8 @@ public class PostgresPackageCacheManager {
                 }
             });
         }
-        return first.future().compose(bytes -> bytes == null ? Future.succeededFuture(null) : store(bytes.getBytes(), "REGISTRY"));
+        return first.future().compose(bytes -> bytes == null ? Future.succeededFuture(null)
+                : store(bytes.getBytes(), "REGISTRY", ownership));
     }
 
     /**

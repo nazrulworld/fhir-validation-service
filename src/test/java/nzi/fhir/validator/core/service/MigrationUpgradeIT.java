@@ -199,4 +199,161 @@ class MigrationUpgradeIT extends BaseTestContainer {
             assertLatestSchema(c);
         }
     }
+
+    // --- V8 (3.1.0, spec 005: organisation ownership) -----------------------------------------------------------
+
+    private static final String SYSTEM_ID = "00000000-0000-0000-0000-000000000001";
+
+    /** (a) V8 on an empty database: exactly one SYSTEM organisation, with the well-known id. */
+    @Test
+    void v8CreatesTheSystemOrganisation() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of(SYSTEM_ID + "|system|SYSTEM|true"), column(c, "SELECT id || '|' || name_short || '|' || type "
+                    + "|| '|' || is_active FROM " + S + ".organisations"));
+            assertLatestSchema(c);
+        }
+    }
+
+    /**
+     * (b) 3.0.0 (V7) to 3.1.0 (V8) with two keys, three packages and two included IGs on R4: everything is owned by
+     * the system organisation and shareable, and each included IG has a system-owned, shareable snapshot row.
+     */
+    @Test
+    void v8MakesExistingDataSystemOwnedAndShareable() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("7")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('bootstrap', '\\x01', 'ADMIN'), "
+                    + "('ci', '\\x02', 'VALIDATE')");
+            st.execute("INSERT INTO " + S + ".fhir_implementation_guides (ig_package_id, ig_package_version, ig_package_meta, content_raw) "
+                    + "VALUES ('a.ig', '1.0.0', '{}', '\\x01'), ('b.ig', '1.0.0', '{}', '\\x02'), ('c.ig', '1.0.0', '{}', '\\x03')");
+            st.execute("UPDATE " + S + ".fhir_validator_logs SET included_ig_packages = '{a.ig#1.0.0,b.ig#1.0.0}', revision = 4 "
+                    + "WHERE fhir_version = 'R4'");
+        }
+
+        DatabaseService.flyway(db).migrate();
+
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("bootstrap|" + SYSTEM_ID, "ci|" + SYSTEM_ID),
+                    column(c, "SELECT name || '|' || owner FROM " + S + ".api_keys ORDER BY name"));
+            assertEquals(List.of("a.ig|" + SYSTEM_ID + "|true", "b.ig|" + SYSTEM_ID + "|true", "c.ig|" + SYSTEM_ID + "|true"),
+                    column(c, "SELECT ig_package_id || '|' || owner || '|' || is_shareable FROM " + S
+                            + ".fhir_implementation_guides ORDER BY ig_package_id"));
+            assertEquals(List.of("R4|a.ig#1.0.0|" + SYSTEM_ID + "|true", "R4|b.ig#1.0.0|" + SYSTEM_ID + "|true"),
+                    column(c, "SELECT fhir_version || '|' || ig_package || '|' || owner || '|' || is_shareable FROM " + S
+                            + ".fhir_validator_snapshots ORDER BY ig_package"));
+            assertEquals(List.of("4|{a.ig#1.0.0,b.ig#1.0.0}"), column(c, "SELECT revision || '|' || included_ig_packages::text FROM "
+                    + S + ".fhir_validator_logs WHERE fhir_version = 'R4'"), "the configuration row is unchanged (research R1)");
+        }
+    }
+
+    /** (c) The system organisation is protected by constraints, even against hand-written SQL (FR-003). */
+    @Test
+    void v8ProtectsTheSystemOrganisation() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) "
+                    + "VALUES ('other-system', 'Other', 'SYSTEM')"), "a second SYSTEM organisation");
+            assertThrows(SQLException.class, () -> st.execute("UPDATE " + S + ".organisations SET is_active = false "
+                    + "WHERE id = '" + SYSTEM_ID + "'"), "deactivating the system organisation");
+            assertThrows(SQLException.class, () -> st.execute("UPDATE " + S + ".organisations SET type = 'COMMERCIAL' "
+                    + "WHERE id = '" + SYSTEM_ID + "'"), "demoting the system organisation");
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('ops', '\\x05', 'ADMIN')");
+            assertThrows(SQLException.class, () -> st.execute("DELETE FROM " + S + ".organisations WHERE id = '" + SYSTEM_ID + "'"),
+                    "an organisation that still owns a key can't be deleted (FR-005, ON DELETE RESTRICT)");
+        }
+    }
+
+    /** (d) Short names are unique regardless of case. */
+    @Test
+    void v8ShortNamesAreUniqueIgnoringCase() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) VALUES ('acme', 'Acme', 'COMMERCIAL')");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) "
+                    + "VALUES ('ACME', 'Acme again', 'NON_COMMERCIAL')"));
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) "
+                    + "VALUES ('a', 'Too short', 'COMMERCIAL')"), "name_short pattern");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type, country) "
+                    + "VALUES ('beta', 'Beta', 'COMMERCIAL', 'dk')"), "country pattern");
+        }
+    }
+
+    /**
+     * Spec 005 US4 (FR-004, FR-006, SC-001): on a 3.0.0 database, starting 3.1 applies only the configured system
+     * organisation fields, keeps the bootstrap key system-owned, and previous clients keep working unchanged.
+     */
+    @Test
+    void startWithSystemOrganisationSettingsOnAnUpgradedDatabase() throws Exception {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("7")).load().migrate();
+        io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+        try {
+            io.vertx.core.json.JsonObject config = nzi.fhir.validator.testsupport.AppHarness.baseConfig(db.getHost(), db.getPort(),
+                    db.getDatabase(), db.getUser(), db.getPassword());
+            config.put("systemOrg", new io.vertx.core.json.JsonObject().put("nameLong", "Acme Ops").put("email", "ops@acme.example"));
+            nzi.fhir.validator.testsupport.AppHarness app = join(nzi.fhir.validator.testsupport.AppHarness.start(vertx, config));
+            try {
+                join(app.awaitReady(90_000));
+                // A 3.0 client: validate without and with ig, include, register; same status and fields as before.
+                var client = app.client();
+                var services = app.bootstrap().services();
+                join(nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                        nzi.fhir.validator.testsupport.TestPackages.profilePackage("upgrade.ig", "1.0.0")));
+                var base = join(client.post(app.port(), "localhost", "/R4/validate").putHeader("Content-Type", "application/fhir+json")
+                        .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
+                assertEquals(200, base.statusCode(), base.bodyAsString());
+                for (String field : List.of("valid", "messages", "fhirVersion", "appliedProfiles", "igPackage")) {
+                    assertTrue(base.bodyAsJsonObject().containsKey(field), field);
+                }
+                var withIg = join(client.post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", "upgrade.ig#1.0.0")
+                        .putHeader("Content-Type", "application/fhir+json")
+                        .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
+                assertEquals(200, withIg.statusCode(), withIg.bodyAsString());
+                assertEquals("upgrade.ig#1.0.0", withIg.getHeader("X-Validation-Context"));
+                var include = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/R4/include-ig"))
+                        .sendJsonObject(new io.vertx.core.json.JsonObject().put("igPackageId", "upgrade.ig").put("igPackageVersion", "1.0.0")));
+                assertEquals(200, include.statusCode(), include.bodyAsString());
+                for (String field : List.of("status", "fhirVersion", "key", "revision", "included", "resolved", "warnings")) {
+                    assertTrue(include.bodyAsJsonObject().containsKey(field), field);
+                }
+                var register = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/igs/register"))
+                        .sendJsonObject(new io.vertx.core.json.JsonObject().put("name", "upgrade.ig").put("version", "1.0.0")));
+                assertEquals(200, register.statusCode(), register.bodyAsString());
+                for (String field : List.of("status", "name", "version", "downloaded", "warnings")) {
+                    assertTrue(register.bodyAsJsonObject().containsKey(field), field);
+                }
+            } finally {
+                join(app.stop());
+            }
+            try (Connection c = jdbc(db)) {
+                assertEquals(List.of("system|Acme Ops|ops@acme.example|null"), column(c, "SELECT name_short || '|' || name_long || '|' "
+                        + "|| email || '|' || coalesce(phone, 'null') FROM " + S + ".organisations WHERE type = 'SYSTEM'"));
+                assertEquals(List.of(SYSTEM_ID), column(c, "SELECT owner::text FROM " + S + ".api_keys WHERE name = 'bootstrap'"));
+            }
+
+            // A second start with only the email changed updates only the email.
+            config.put("systemOrg", new io.vertx.core.json.JsonObject().put("email", "ops2@acme.example"));
+            nzi.fhir.validator.testsupport.AppHarness again = join(nzi.fhir.validator.testsupport.AppHarness.start(vertx, config));
+            try {
+                join(again.bootstrap().warmUp());
+            } finally {
+                join(again.stop());
+            }
+            try (Connection c = jdbc(db)) {
+                assertEquals(List.of("Acme Ops|ops2@acme.example"), column(c, "SELECT name_long || '|' || email FROM " + S
+                        + ".organisations WHERE type = 'SYSTEM'"));
+            }
+        } finally {
+            join(vertx.close());
+        }
+    }
+
+    private static <T> T join(io.vertx.core.Future<T> f) throws Exception {
+        return f.toCompletionStage().toCompletableFuture().get(120, java.util.concurrent.TimeUnit.SECONDS);
+    }
 }

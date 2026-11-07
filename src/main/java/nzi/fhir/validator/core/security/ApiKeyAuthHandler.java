@@ -21,6 +21,17 @@ import java.util.Optional;
  */
 public class ApiKeyAuthHandler {
     public static final String CONTEXT_KEY = "apiKeyRole";
+    /** The request's {@link Caller} (spec 005): set for authenticated and anonymous requests. */
+    public static final String CALLER_KEY = "caller";
+
+    /**
+     * The caller of a request. A request the handler didn't authenticate (an open path) is anonymous: the default
+     * grants the least, never the most.
+     */
+    public static Caller caller(RoutingContext ctx) {
+        Caller c = ctx.get(CALLER_KEY);
+        return c == null ? Caller.ANONYMOUS : c;
+    }
     static final int DEFAULT_MAX_CACHED_KEYS = 10_000;
 
     private record Cached(Optional<KeyInfo> key, long expiresAt) {
@@ -57,13 +68,14 @@ public class ApiKeyAuthHandler {
     }
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
-            java.util.regex.Pattern.compile("^/(igs/(upload|register)|[^/]+/include-ig)/?$");
+            java.util.regex.Pattern.compile("^/(igs/(upload|register)|igs/[^/]+/[^/]+|[^/]+/include-ig)/?$");
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
 
     /**
      * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
-     * method on an administrative path counts (POST include/upload/register, DELETE include-ig since 3.0.0), except
+     * method on an administrative path counts (POST include/upload/register, DELETE include-ig since 3.0.0, PATCH
+     * include-ig and {@code /igs/{name}/{version}} since 3.1.0), except
      * {@code OPTIONS} (CORS preflight), so a new method on these paths can never fall through unauthenticated.
      */
     public static boolean isAdministrative(RoutingContext ctx) {
@@ -92,6 +104,7 @@ public class ApiKeyAuthHandler {
         String key = bearer(ctx.request().getHeader("Authorization"));
         if (key == null) {
             if (anonymousAllowed) {
+                ctx.put(CALLER_KEY, Caller.ANONYMOUS);
                 ctx.next();
             } else {
                 unauthorized(ctx);
@@ -108,9 +121,15 @@ public class ApiKeyAuthHandler {
                 unauthorized(ctx);
                 return;
             }
+            if (!info.get().ownerActive()) {
+                // FR-014: the key is valid, but its organisation is deactivated.
+                ErrorResponder.fail(ctx, new ProblemException(403, "forbidden", "The organisation of this API key is deactivated"));
+                return;
+            }
             for (Role role : allowed) {
                 if (info.get().role() == role) {
                     ctx.put(CONTEXT_KEY, role.name());
+                    ctx.put(CALLER_KEY, info.get().caller());
                     repository.touch(info.get().id());
                     ctx.next();
                     return;

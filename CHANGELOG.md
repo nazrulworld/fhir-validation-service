@@ -4,6 +4,51 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [3.1.0] - 2026-11-07
+
+Organisations own API keys, IG packages and included IGs, and content can be private to its organisation or
+shareable. Additive: with the defaults, previous clients see the same results, status codes and fields. Everything that
+existed before the upgrade belongs to the built-in system organisation and stays shareable. Upgrade guide:
+[docs/upgrade-3.1.md](docs/upgrade-3.1.md).
+
+### Added
+
+- **Organisations** (`organisations` table, migration V8): short and long name, type (`COMMERCIAL`,
+  `NON_COMMERCIAL`; one built-in `SYSTEM` organisation), active flag, address and contact fields. Organisations are
+  never deleted; the system organisation can't be deactivated.
+- **Ownership and sharing**: API keys, stored IG packages and included IGs have an owner; packages and included IGs
+  are shareable (default) or private. A caller may use what its organisation owns, what is shareable, and (the system
+  organisation) everything; anonymous callers shareable content only. A context is usable only when it and every
+  package it is built from are.
+- `shareable` on `POST /igs/register` (JSON), `POST /igs/upload` (form field) and `POST /{version}/include-ig`;
+  `owner` and `shareable` in their responses. Only the owner of an IG package can include it as private.
+- `PATCH /igs/{name}/{version}` and `PATCH /{version}/include-ig?ig=name#version`: the owner (or the system
+  organisation) changes `shareable`; the system organisation transfers ownership. Changes reach every instance within
+  the propagation window and never rebuild a validator (new notification kind `IG_ACCESS`).
+- Validation responses report the context's owner and sharing: `igOwner`, `igShareable` and the
+  `X-Validation-Context-Owner` / `X-Validation-Context-Shareable` headers (all formats).
+- **Command line** in the service jar: `org create|update|deactivate|activate|show|list`,
+  `key create|revoke|list`, `package share|transfer`, `snapshot share|transfer`. JSON on stdout, exit codes
+  0/1/2/3/4, every change logged at INFO without key values. The image adds `/usr/local/bin/fv-admin`.
+- `FV_SYSTEM_ORG_*` settings for the system organisation's names and contact details, applied at every start.
+
+### Changed
+
+- `/health` lists only contexts that are shareable and built from shareable packages; the others are counted in
+  `privateContexts` by state. Readiness reasons don't name private contexts. Owners are never listed.
+- A versionless `ig` resolves to the highest version the caller may use.
+- A dependency that is missing now records the validation outcome `package_not_found` (was `error`), the same as a
+  dependency the caller may not use, so `/metrics` can't tell the two apart.
+
+### Security
+
+- Content the caller may not use is answered exactly like content that isn't stored (404 `package-not-found`, or 424
+  `dependency-not-found` without naming the dependency), on validation, include, exclude, register, PATCH and the
+  package read endpoints, and no metric label reveals it.
+- Upload or URL download of a `name#version` another organisation stored is refused with 409 `conflict` (the system
+  organisation may still replace it; a replacement keeps the owner and sharing).
+- Keys of a deactivated organisation get 403 `forbidden` within `FV_AUTH_CACHE_TTL_MS`.
+
 ## [3.0.0] - 2026-11-06
 
 A breaking release. Each validation request now chooses the one IG package it is validated against

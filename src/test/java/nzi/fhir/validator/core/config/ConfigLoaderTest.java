@@ -164,4 +164,57 @@ class ConfigLoaderTest {
         ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "Sup3rS3cretValue"));
         assertFalse(cfg.toString().contains("Sup3r"));
     }
+
+    // --- spec 005 FR-004: the system organisation from the environment ------------------------------------------
+
+    @Test
+    void systemOrganisationVariablesMapToTheirFields() {
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                "FV_SYSTEM_ORG_NAME_SHORT", "ops",
+                "FV_SYSTEM_ORG_NAME_LONG", "Acme Ops",
+                "FV_SYSTEM_ORG_EMAIL", "ops@acme.example",
+                "FV_SYSTEM_ORG_PHONE", "+45 12 34 56 78",
+                "FV_SYSTEM_ORG_WEBSITE", "https://acme.example",
+                "FV_SYSTEM_ORG_COUNTRY", "DK",
+                "FV_SYSTEM_ORG_POST_CODE", "2100",
+                "FV_SYSTEM_ORG_ADDRESS_LINES", "a|b",
+                "FV_SYSTEM_ORG_CONTACT_PERSON_NAME", "Jane Doe",
+                "FV_SYSTEM_ORG_CONTACT_PERSON_MOBILE", "+45 87 65 43 21",
+                "FV_SYSTEM_ORG_CONTACT_PERSON_EMAIL", "jane@acme.example"));
+        Map<String, Object> org = cfg.systemOrganisation();
+        assertEquals("ops", org.get("nameShort"));
+        assertEquals("Acme Ops", org.get("nameLong"));
+        assertEquals("ops@acme.example", org.get("email"));
+        assertEquals("+45 12 34 56 78", org.get("phone"));
+        assertEquals("https://acme.example", org.get("website"));
+        assertEquals("DK", org.get("country"));
+        assertEquals("2100", org.get("postCode"));
+        assertEquals(java.util.List.of("a", "b"), org.get("addressLines"), "lines are separated by |");
+        assertEquals("Jane Doe", org.get("contactPersonName"));
+        assertEquals("+45 87 65 43 21", org.get("contactPersonMobile"));
+        assertEquals("jane@acme.example", org.get("contactPersonEmail"));
+        assertEquals(11, org.size());
+    }
+
+    @Test
+    void unsetSystemOrganisationVariablesAreAbsent() {
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_SYSTEM_ORG_EMAIL", "ops@acme.example",
+                "FV_SYSTEM_ORG_PHONE", ""));
+        assertEquals(Map.of("email", "ops@acme.example"), cfg.systemOrganisation(), "an empty variable is not set");
+        assertEquals(Map.of(), ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).systemOrganisation());
+    }
+
+    @Test
+    void invalidSystemOrganisationValuesFailNamingTheVariable() {
+        for (String[] bad : new String[][]{
+                {"FV_SYSTEM_ORG_COUNTRY", "XX1"},
+                {"FV_SYSTEM_ORG_EMAIL", "not-an-address"},
+                {"FV_SYSTEM_ORG_NAME_SHORT", "a b"},
+                {"FV_SYSTEM_ORG_WEBSITE", "ftp://acme.example"},
+                {"FV_SYSTEM_ORG_ADDRESS_LINES", "1|2|3|4|5|6|7"}}) {
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", bad[0], bad[1])), bad[0]);
+            assertTrue(e.getMessage().startsWith("Invalid " + bad[0]), e.getMessage());
+        }
+    }
 }

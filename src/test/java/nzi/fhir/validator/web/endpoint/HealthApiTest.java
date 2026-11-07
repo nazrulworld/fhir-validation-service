@@ -156,4 +156,65 @@ class HealthApiTest extends BaseTestContainer {
                     testContext.completeNow();
                 }))));
     }
+
+    /**
+     * Spec 005 FR-021, research R12: the unauthenticated health report lists only fully shareable contexts; private
+     * ones are counted by state, and no owner or private key appears anywhere in it.
+     */
+    @Test
+    void healthListsOnlyShareableContextsAndNeverOwners(VertxTestContext testContext) {
+        resetSchema();
+        java.util.concurrent.atomic.AtomicReference<nzi.fhir.validator.testsupport.CoreHarness> holder =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        nzi.fhir.validator.testsupport.CoreHarness.start(vertx, connectOptions())
+                .compose(core -> {
+                    holder.set(core);
+                    var services = core.services();
+                    return nzi.fhir.validator.testsupport.TestPackages.createOrganisation(services.pool(), "secretorg")
+                            .compose(org -> nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                                            nzi.fhir.validator.testsupport.TestPackages.profilePackage("health.public", "1.0.0"))
+                                    .compose(v -> nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                                            nzi.fhir.validator.testsupport.TestPackages.profilePackage("health.secret", "1.0.0")))
+                                    .compose(v -> nzi.fhir.validator.testsupport.TestPackages.setPackageAccess(services.pool(),
+                                            "health.secret#1.0.0", org, false))
+                                    .compose(v -> services.pool().withTransaction(tx ->
+                                            nzi.fhir.validator.core.service.ConfigRevisionRepository.lockForUpdate(tx,
+                                                            nzi.fhir.validator.core.enums.SupportedFhirVersion.R4)
+                                                    .compose(row -> nzi.fhir.validator.core.service.ConfigRevisionRepository.updateIgSet(tx,
+                                                            nzi.fhir.validator.core.enums.SupportedFhirVersion.R4,
+                                                            java.util.List.of("health.public#1.0.0"), "health.public#1.0.0",
+                                                            nzi.fhir.validator.core.service.ConfigRevisionRepository.KIND_IG))
+                                                    .compose(rev -> nzi.fhir.validator.core.service.ConfigRevisionRepository.updateIgSet(tx,
+                                                            nzi.fhir.validator.core.enums.SupportedFhirVersion.R4,
+                                                            java.util.List.of("health.public#1.0.0", "health.secret#1.0.0"),
+                                                            "health.secret#1.0.0", nzi.fhir.validator.core.service.ConfigRevisionRepository.KIND_IG,
+                                                            org, false)))));
+                })
+                .compose(rev -> holder.get().services().configSync().syncCatalogNow())
+                .compose(v -> holder.get().services().configSync().syncNow(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4))
+                .onComplete(ar -> {
+                    nzi.fhir.validator.testsupport.CoreHarness core = holder.get();
+                    try {
+                        testContext.verify(() -> {
+                            if (ar.failed()) {
+                                throw new AssertionError(ar.cause());
+                            }
+                            JsonObject report = core.services().healthService().readiness();
+                            JsonObject r4 = report.getJsonObject("versions").getJsonObject("R4");
+                            io.vertx.core.json.JsonArray contexts = r4.getJsonArray("contexts");
+                            assertEquals(1, contexts.size(), r4.encode());
+                            assertEquals("health.public#1.0.0", contexts.getJsonObject(0).getString("key"));
+                            JsonObject priv = r4.getJsonObject("privateContexts");
+                            assertEquals(1, priv.getInteger("count"));
+                            assertEquals(1, priv.getJsonObject("states").getInteger("ACTIVE"), priv.encode());
+                            String text = report.encode();
+                            assertFalse(text.contains("health.secret"), "the private key never appears: " + text);
+                            assertFalse(text.contains("secretorg"), "owners never appear: " + text);
+                            assertFalse(text.contains("owner"), text);
+                        });
+                    } finally {
+                        core.stop().onComplete(x -> testContext.completeNow());
+                    }
+                });
+    }
 }

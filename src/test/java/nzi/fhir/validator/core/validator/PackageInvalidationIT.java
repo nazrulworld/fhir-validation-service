@@ -68,7 +68,7 @@ class PackageInvalidationIT extends BaseTestContainer {
     }
 
     private static Future<ValidatorSnapshot.Outcome> validate(CoreHarness on, String ig) {
-        return on.services().validationService().validate(R4, IgReference.parse(ig), TestPackages.minimalPatient(),
+        return on.services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), R4, IgReference.parse(ig), TestPackages.minimalPatient(),
                 SupportedContentType.JSON, List.of(P), Function.identity());
     }
 

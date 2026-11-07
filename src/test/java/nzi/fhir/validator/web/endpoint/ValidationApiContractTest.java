@@ -101,6 +101,11 @@ class ValidationApiContractTest extends BaseTestContainer {
                         assertEquals("base", r.getHeader("X-Validation-Context"));
                         JsonObject body = r.bodyAsJsonObject();
                         assertTrue(body.containsKey("igPackage") && body.getValue("igPackage") == null, body.encode());
+                        // Spec 005 FR-020: the owner and sharing of the context, in the body and in headers.
+                        assertEquals("system", r.getHeader("X-Validation-Context-Owner"));
+                        assertEquals("true", r.getHeader("X-Validation-Context-Shareable"));
+                        assertEquals("system", body.getString("igOwner"));
+                        assertEquals(Boolean.TRUE, body.getBoolean("igShareable"));
                     });
                     return post("/R4/validate").addQueryParam("ig", "not.stored#1.0.0")
                             .putHeader("Content-Type", "application/fhir+json").sendBuffer(Buffer.buffer(PATIENT));
@@ -126,6 +131,9 @@ class ValidationApiContractTest extends BaseTestContainer {
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode());
                     assertTrue(r.getHeader("Content-Type").startsWith("application/fhir+xml"));
+                    // Spec 005 R13: the OperationOutcome body is unchanged; ownership is in the headers on every format.
+                    assertEquals("system", r.getHeader("X-Validation-Context-Owner"));
+                    assertEquals("true", r.getHeader("X-Validation-Context-Shareable"));
                     assertTrue(r.bodyAsString().startsWith("<OperationOutcome"), r.bodyAsString());
                     ctx.completeNow();
                 })));
@@ -389,9 +397,12 @@ class ValidationApiContractTest extends BaseTestContainer {
                         JsonObject body = included.bodyAsJsonObject();
                         assertEquals("contract.ig#1.0.0", body.getJsonObject("key").getString("igPackage"));
                         assertEquals("R4", body.getJsonObject("key").getString("fhirVersion"));
-                        for (String field : java.util.List.of("status", "fhirVersion", "revision", "included", "resolved", "warnings")) {
+                        for (String field : java.util.List.of("status", "fhirVersion", "revision", "included", "resolved", "warnings",
+                                "owner", "shareable")) {
                             assertTrue(body.containsKey(field), field);
                         }
+                        assertEquals("system", body.getString("owner"), "the bootstrap key's organisation (spec 005 FR-006)");
+                        assertEquals(Boolean.TRUE, body.getBoolean("shareable"), "shareable by default (FR-016)");
                     });
                     return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000))
                             .addQueryParam("ig", "contract.ig#1.0.0").send();

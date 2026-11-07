@@ -85,7 +85,7 @@ class ValidationContextPropagationTest {
         ContextInternal request = ((ContextInternal) vertx.getOrCreateContext()).duplicate();
         request.runOnContext(v -> {
             ContextualData.put("requestId", "req-ctx-1");
-            service.validate(SupportedFhirVersion.R4, IgReference.parse("ctx.ig#1.0.0"),
+            service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, IgReference.parse("ctx.ig#1.0.0"),
                             "{\"resourceType\":\"Patient\"}", SupportedContentType.JSON, List.of(), Function.identity())
                     .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                         assertEquals(List.of("snapshot=req-ctx-1", "validate=req-ctx-1"), seen);

@@ -126,4 +126,22 @@ class PackageCatalogViewTest {
         assertEquals(3, loads.get(), "then loads again, because the store may have committed after it started");
         assertTrue(afterInFlight.succeeded());
     }
+
+    /** Spec 005: every entry has an access; rows from before 3.1 are owned by the system organisation and shareable. */
+    @Test
+    void accessDefaultsToSystemSharedAndUnknownPackagesHaveNone() {
+        PackageCatalogView v = view();
+        assertEquals(nzi.fhir.validator.core.org.Organisations.SYSTEM_ID, v.access("a.ig#1.0.0").owner());
+        assertTrue(v.access("a.ig#1.0.0").shareable());
+        assertNull(v.access("nope#1.0.0"));
+        assertEquals("system", v.systemShortName());
+        java.util.UUID acme = java.util.UUID.randomUUID();
+        PackageCatalogView owned = new PackageCatalogView(1, Map.of("p#1.0.0", new PackageCatalogView.Entry(Set.of(), List.of(),
+                null, 0, new nzi.fhir.validator.core.security.Access(acme, "acme", false))), "ops");
+        assertEquals("acme", owned.access("p#1.0.0").ownerShortName());
+        assertFalse(owned.access("p#1.0.0").shareable());
+        assertEquals("ops", owned.systemShortName());
+        assertTrue(owned.highestVisible("p", nzi.fhir.validator.core.security.Caller.ANONYMOUS).isEmpty());
+        assertEquals("1.0.0", owned.highest("p").orElseThrow(), "highest ignores access (include and health use it)");
+    }
 }

@@ -4,6 +4,8 @@ import io.vertx.core.Future;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
+import nzi.fhir.validator.core.security.AccessPolicy;
+import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.web.ProblemException;
 
 import java.util.Optional;
@@ -63,16 +65,19 @@ public record IgReference(String name, String version) {
     }
 
     /**
-     * The validator context for this reference and {@code fhirVersion}: a versionless reference becomes the highest
-     * stored version (the include rule, FR-002), then the declared FHIR versions are checked (FR-004). A package the
-     * view doesn't know triggers one rate-limited catalog refresh before the request is rejected (research R4).
+     * The validator context for this reference and {@code fhirVersion}, as {@code caller} may use it (spec 005 research
+     * R5): a versionless reference becomes the highest version the caller may use (the include rule, FR-002), an exact
+     * version the caller may not use is treated exactly like one that isn't stored, and only then are the declared FHIR
+     * versions checked (FR-004), so the 400 never reveals a package the caller can't see. A package the view doesn't
+     * know (or doesn't let the caller see) triggers one rate-limited catalog refresh before the request is rejected
+     * (research R4), so the timing matches "not stored".
      *
      * @return fails with 404 {@code package-not-found} or 400 {@code invalid-request}
      */
-    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog) {
+    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller) {
         Optional<SnapshotKey> known;
         try {
-            known = resolveIn(fhirVersion, catalog.current());
+            known = resolveIn(fhirVersion, catalog.current(), caller);
         } catch (ProblemException e) {
             return Future.failedFuture(e);
         }
@@ -81,21 +86,25 @@ public record IgReference(String name, String version) {
         }
         return catalog.refreshOnMiss()
                 .recover(err -> Future.succeededFuture(catalog.current()))
-                .compose(view -> resolveIn(fhirVersion, view)
+                .compose(view -> resolveIn(fhirVersion, view, caller)
                         .map(Future::succeededFuture)
                         .orElseGet(() -> Future.failedFuture(ProblemException.igNotStored(label()))));
     }
 
     /**
-     * @return empty when the package (or, versionless, any version of it) is not in {@code view}
+     * @return empty when the package (or, versionless, any version of it) is not in {@code view} or {@code caller}
+     * may not use it
      * @throws ProblemException 400 when the resolved package does not support {@code fhirVersion}
      */
-    Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view) {
-        String concrete = version != null ? version : view.highest(name).orElse(null);
-        if (concrete == null || !view.contains(name + "#" + concrete)) {
+    Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller) {
+        String concrete = version != null ? version : view.highestVisible(name, caller).orElse(null);
+        if (concrete == null) {
             return Optional.empty();
         }
         String key = name + "#" + concrete;
+        if (!view.contains(key) || !AccessPolicy.canUse(caller, view.access(key))) {
+            return Optional.empty();
+        }
         if (!view.supports(key, fhirVersion)) {
             throw new ProblemException(400, "invalid-request", "IG package " + key + " is for FHIR "
                     + view.declaredFhirVersions(key).stream().map(Enum::name).sorted().collect(Collectors.joining(", "))

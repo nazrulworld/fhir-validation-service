@@ -113,7 +113,7 @@ class UpgradeFrom2IT extends BaseTestContainer {
     }
 
     private static Future<nzi.fhir.validator.core.validator.ValidatorSnapshot.Outcome> validate(CoreHarness h, String ig, String profile) {
-        return h.services().validationService().validate(SupportedFhirVersion.R4, ig == null ? null : IgReference.parse(ig),
+        return h.services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, ig == null ? null : IgReference.parse(ig),
                 TestPackages.minimalPatient(), SupportedContentType.JSON, List.of(profile), Function.identity());
     }
 }

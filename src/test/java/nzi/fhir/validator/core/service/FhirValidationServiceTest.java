@@ -77,7 +77,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @Test
     @DisplayName("Valid R4 Patient validates without errors")
     void validPatient(VertxTestContext ctx) {
-        service.validate(SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of())
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of())
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertTrue(o.result().isSuccessful(), o.result().getMessages().toString());
                     assertFalse(hasErrors(o.result()));
@@ -88,7 +88,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @Test
     @DisplayName("Invalid R4 Patient reports errors")
     void invalidPatient(VertxTestContext ctx) {
-        service.validate(SupportedFhirVersion.R4, INVALID_PATIENT_JSON, SupportedContentType.FHIR_JSON, List.of())
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, INVALID_PATIENT_JSON, SupportedContentType.FHIR_JSON, List.of())
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertFalse(o.result().isSuccessful());
                     assertTrue(hasErrors(o.result()));
@@ -100,7 +100,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @DisplayName("Explicit base profile is applied and reported")
     void explicitProfile(VertxTestContext ctx) {
         String base = "http://hl7.org/fhir/StructureDefinition/Patient";
-        service.validate(SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of(base))
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of(base))
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertTrue(o.result().isSuccessful());
                     assertTrue(o.appliedProfiles().contains(base));
@@ -112,7 +112,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @DisplayName("An unresolved requested profile is counted as unknown_profile, not as a server error")
     void unknownProfileMetricOutcome(VertxTestContext ctx) {
         String unknown = "http://example.org/fhir/StructureDefinition/metric-unknown";
-        service.validate(SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of(unknown))
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, VALID_PATIENT_JSON, SupportedContentType.JSON, List.of(unknown))
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
                     assertEquals("unknown-profile", assertInstanceOf(nzi.fhir.validator.web.ProblemException.class, err).type());
                     String scrape = core.services().metrics().scrape();
@@ -125,7 +125,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @Test
     @DisplayName("XML content is parsed as XML")
     void xmlContent(VertxTestContext ctx) {
-        service.validate(SupportedFhirVersion.R4, VALID_PATIENT_XML, SupportedContentType.FHIR_XML, List.of())
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, VALID_PATIENT_XML, SupportedContentType.FHIR_XML, List.of())
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertFalse(hasErrors(o.result()), o.result().getMessages().toString());
                     ctx.completeNow();
@@ -135,7 +135,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     @Test
     @DisplayName("Malformed JSON fails with a parse error")
     void malformedJson(VertxTestContext ctx) {
-        service.validate(SupportedFhirVersion.R4, "{invalid_json}", SupportedContentType.JSON, List.of())
+        service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, "{invalid_json}", SupportedContentType.JSON, List.of())
                 .onComplete(ctx.failing(err -> ctx.verify(() -> {
                     assertInstanceOf(DataFormatException.class, err);
                     ctx.completeNow();
@@ -147,7 +147,7 @@ class FhirValidationServiceTest extends BaseTestContainer {
     void everyEnabledVersionValidates(VertxTestContext ctx) {
         String patient = "{\"resourceType\":\"Patient\",\"active\":true}";
         List<Future<?>> all = SupportedFhirVersion.enabled().stream()
-                .<Future<?>>map(v -> service.validate(v, patient, SupportedContentType.JSON, List.of())
+                .<Future<?>>map(v -> service.validate(nzi.fhir.validator.core.security.Caller.system("system"), v, patient, SupportedContentType.JSON, List.of())
                         .map(o -> {
                             assertEquals(v, o.version());
                             assertFalse(hasErrors(o.result()), v + ": " + o.result().getMessages());

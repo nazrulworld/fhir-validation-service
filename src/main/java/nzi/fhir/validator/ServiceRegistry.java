@@ -13,6 +13,7 @@ import nzi.fhir.validator.core.npm.PackageArchiveGuard;
 import nzi.fhir.validator.core.npm.PackageCache;
 import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.SafePackageFetcher;
+import nzi.fhir.validator.core.org.OrganisationRepository;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.security.ApiKeyRepository;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
@@ -43,6 +44,7 @@ public final class ServiceRegistry {
     private final FhirValidationService validationService;
     private final ValidationApi validationApi;
     private final ApiKeyRepository apiKeys;
+    private final OrganisationRepository organisations;
     private final ApiKeyAuthHandler auth;
     private final SafePackageFetcher fetcher;
     private final AdmissionController adminAdmission;
@@ -68,6 +70,7 @@ public final class ServiceRegistry {
         this.fetcher = fetcher;
         this.adminAdmission = adminAdmission;
         this.apiKeys = new ApiKeyRepository(pool);
+        this.organisations = new OrganisationRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
         this.validationApi = new ValidationApi(validationService, igPackageService);
     }
@@ -112,6 +115,10 @@ public final class ServiceRegistry {
         FhirValidationService validationService = new FhirValidationService(registry, executors,
                 new AdmissionController(config.validationMaxPending()), config.validationMaxBundleEntries());
         validationService.setCatalog(catalog);
+        // Spec 005: access of included contexts for the validation hot path, and the health filter (research R12).
+        validationService.setPinnedAccess(sync::pinnedAccess);
+        registry.setPublicFilter((key, resolved) -> nzi.fhir.validator.core.security.AccessPolicy.isPublic(key, resolved,
+                catalog.current(), sync.pinnedAccess(key.fhirVersion())));
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
                 validationService, fetcher, adminAdmission);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
@@ -176,6 +183,11 @@ public final class ServiceRegistry {
 
     public ApiKeyRepository apiKeys() {
         return apiKeys;
+    }
+
+    /** Organisations (spec 005). */
+    public OrganisationRepository organisations() {
+        return organisations;
     }
 
     public ApiKeyAuthHandler auth() {
