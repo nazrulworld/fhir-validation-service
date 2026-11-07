@@ -31,6 +31,9 @@ existed before the upgrade belongs to the built-in system organisation and stays
   `key create|revoke|list`, `package share|transfer`, `snapshot share|transfer`. JSON on stdout, exit codes
   0/1/2/3/4, every change logged at INFO without key values. The image adds `/usr/local/bin/fv-admin`.
 - `FV_SYSTEM_ORG_*` settings for the system organisation's names and contact details, applied at every start.
+- `openapi.yaml` (3.1.0) documents every new answer: `424` on `POST /{version}/include-ig` (a dependency the caller
+  may not use), `401`/`403` on `GET /igs/{name}/{version}/dependencies` and `/conformance`, `503` on
+  `PATCH /igs/{name}/{version}` (administrative admission), and the "not visible" meaning of `404 package-not-found`.
 
 ### Changed
 
