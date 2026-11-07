@@ -272,9 +272,9 @@ research R2, R6).
   - **Added**: version series (`N.x`, `N.x.x`, `N.N.x`) on `POST /igs/register` (resolved from the package registries, with a stored fallback and warning) and on `POST /{version}/include-ig` (resolved from stored packages only); `requestedVersion` on `IgRegistrationResponse` and `IncludeResponse`. Reference GitHub issue #56.
   - **Changed**: `?ig=name#<series>` on `POST /{version}/validate` is now 400 `invalid-request` (was 404 `package-not-found`). The request could never succeed before.
 - [X] T029 [P] Set the `info.version` in `src/main/resources/openapi.yaml` and the `<version>` in `pom.xml` to `3.2.0` only if this repository bumps versions in feature branches (check `git log` for #54 `release-3.1.0`). Otherwise leave both, and note in the PR description that the release PR does the bump.
-- [ ] T030 Run the full suite (`mvn -q test`) and fix any regressions. In particular, `RegisterLatestIT`, `IncludeExcludeIT`, `IncludeOwnershipIT` and `IgScopedValidationIT` must pass unchanged (FR-016, SC-006).
+- [X] T030 Run the full suite (`mvn -q test`) and fix any regressions. In particular, `RegisterLatestIT`, `IncludeExcludeIT`, `IncludeOwnershipIT` and `IgScopedValidationIT` must pass unchanged (FR-016, SC-006).
 - [X] T031 Walk through the automated checks in `specs/006-ig-version-series/quickstart.md`. Correct any command or expected output that doesn't match the implementation (for example warning texts and field names).
-- [ ] T032 Benchmark the validation hot path (constitution VI; T025 changes `IgReference.parse`).
+- [X] T032 Benchmark the validation hot path (constitution VI; T025 changes `IgReference.parse`).
   - Add an optional `IG` environment variable to `perf/validate.js`. When it's set, post to `` `${BASE}/R4/validate?ig=${encodeURIComponent(__ENV.IG)}` `` instead of `/R4/validate`. Keep the `validate` tag and the thresholds.
   - Document the variable in `perf/README.md`.
   - Run the measurement with the same IG, which must be included first, for example `-e IG=hl7.fhir.us.core#6.1.0`:
