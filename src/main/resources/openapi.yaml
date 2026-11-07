@@ -225,7 +225,8 @@ paths:
         invalid-request. Organisation ownership (3.1.0): the new context is owned by the caller's organisation and is
         shareable unless `shareable` is false; a package (or dependency) the caller may not use is answered 404. When
         the version is already included (possibly by another organisation) nothing changes and the response reports
-        the existing owner and sharing.
+        the existing owner and sharing. A dependency the caller may not use is answered 424 dependency-not-found
+        without naming it.
       parameters:
         - name: version
           in: path
@@ -270,6 +271,14 @@ paths:
           $ref: '#/components/responses/PackageNotFound'
         '413':
           $ref: '#/components/responses/Problem'
+        '424':
+          description: >-
+            dependency-not-found: a dependency of the IG package is not available to the caller (3.1.0); the
+            dependency is not named
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '500':
           $ref: '#/components/responses/Problem'
         '503':

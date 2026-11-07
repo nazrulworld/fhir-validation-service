@@ -327,6 +327,16 @@ class MigrationUpgradeIT extends BaseTestContainer {
                 for (String field : List.of("status", "name", "version", "downloaded", "warnings")) {
                     assertTrue(register.bodyAsJsonObject().containsKey(field), field);
                 }
+                java.nio.file.Path tgz = java.nio.file.Files.createTempFile("upgrade-upload", ".tgz");
+                java.nio.file.Files.write(tgz, nzi.fhir.validator.testsupport.TestPackages.profilePackage("upgrade.upload", "1.0.0"));
+                var upload = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/igs/upload"))
+                        .sendMultipartForm(io.vertx.ext.web.multipart.MultipartForm.create()
+                                .binaryFileUpload("file", "upgrade-upload.tgz", tgz.toString(), "application/gzip")));
+                assertEquals(200, upload.statusCode(), upload.bodyAsString());
+                for (String field : List.of("status", "name", "version", "downloaded", "warnings")) {
+                    assertTrue(upload.bodyAsJsonObject().containsKey(field), field);
+                }
+                assertEquals("upgrade.upload", upload.bodyAsJsonObject().getString("name"));
             } finally {
                 join(app.stop());
             }

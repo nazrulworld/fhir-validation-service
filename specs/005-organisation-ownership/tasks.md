@@ -653,3 +653,10 @@ T062 .env.example | T063 upgrade-3.1.md | T064 CHANGELOG | T065 README
 - Every new future-returning API returns `io.vertx.core.Future`: no `.get()`, no `Thread.sleep`, and no blocking on
   the event loop. The command line waits on a latch in `main` only.
 - Commit after each task or logical group, with commit messages ending in the required attribution line.
+
+---
+
+## Phase 8: Convergence
+
+- [X] T069 CRITICAL: Declare `'424'` (`dependency-not-found`: a dependency of the IG package is not available to the caller, not named) on `validationApiIncludeIg` in `src/main/resources/openapi.yaml`, change contracts/http-api.md §2 from "404: the package or a dependency isn't visible" to "404 for the package, 424 for a dependency", and assert the 424 problem shape for an include whose dependency is private to another organisation in `src/test/java/nzi/fhir/validator/core/validator/IncludeOwnershipIT.java` per Constitution IV (contradicts)
+- [X] T070 Add the 3.0-client `POST /igs/upload` call (200, fields `status`, `name`, `version`, `downloaded`, `warnings`) to `startWithSystemOrganisationSettingsOnAnUpgradedDatabase` in `src/test/java/nzi/fhir/validator/core/service/MigrationUpgradeIT.java` per T059 / SC-001 (partial)

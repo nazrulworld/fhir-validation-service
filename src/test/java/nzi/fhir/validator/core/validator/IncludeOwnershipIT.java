@@ -212,4 +212,30 @@ class IncludeOwnershipIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /** A dependency the caller may not use: 424 without naming it, and nothing is committed (contracts §2). */
+    @Test
+    void aPrivateDependencyIs424WithoutItsName(VertxTestContext ctx) {
+        TestPackages.storePackage(core.services(), TestPackages.profilePackage("inc.dep", "1.0.0"))
+                .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "inc.dep#1.0.0", b.orgId(), false))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.igPackage("inc.user", "1.0.0",
+                        java.util.List.of("4.0.1"), java.util.Map.of("inc.dep", "1.0.0"))))
+                .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "inc.user#1.0.0", a.orgId(), true))
+                .compose(v -> failure(service().include(a, R4, "inc.user", "1.0.0", Optional.empty())))
+                .compose(err -> {
+                    ctx.verify(() -> {
+                        assertProblem(err, 424, "dependency-not-found");
+                        assertFalse(((ProblemException) err).detail().contains("inc.dep"), ((ProblemException) err).detail());
+                    });
+                    return snapshotRow("inc.user#1.0.0");
+                })
+                .compose(row -> {
+                    ctx.verify(() -> assertNull(row, "nothing was committed"));
+                    return service().include(b, R4, "inc.user", "1.0.0", Optional.empty());
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals("orgb", r.getString("owner"), "the dependency's owner may include it");
+                    ctx.completeNow();
+                })));
+    }
 }
