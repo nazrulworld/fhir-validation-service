@@ -71,8 +71,9 @@ shareable:
 
 - `IncludeResponse` gains `owner` and `shareable` (the context's, which may belong to another organisation when it
   was already included, spec clarification Q1).
-- 404: the package or a dependency isn't visible to the caller. 400 `invalid-request`: `shareable=false` for
-  another organisation's package.
+- 404: the package isn't visible to the caller (the same answer as not stored). 424 `dependency-not-found`: a
+  dependency isn't visible to the caller; the dependency is not named (as on validate, §1). 400 `invalid-request`:
+  `shareable=false` for another organisation's package.
 
 ## 3. `DELETE /{version}/include-ig` (changed)
 
