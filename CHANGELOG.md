@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `openapi.yaml` declares `401 unauthorized` on `POST /{version}/validate`, returned when
+  `FV_AUTH_ANONYMOUS_VALIDATE=false` and no valid key is sent (the behaviour is unchanged since 1.0.0).
+
 ## [3.1.0] - 2026-11-07
 
 Organisations own API keys, IG packages and included IGs, and content can be private to its organisation or
