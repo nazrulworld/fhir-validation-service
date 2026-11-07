@@ -660,3 +660,10 @@ T062 .env.example | T063 upgrade-3.1.md | T064 CHANGELOG | T065 README
 
 - [X] T069 CRITICAL: Declare `'424'` (`dependency-not-found`: a dependency of the IG package is not available to the caller, not named) on `validationApiIncludeIg` in `src/main/resources/openapi.yaml`, change contracts/http-api.md §2 from "404: the package or a dependency isn't visible" to "404 for the package, 424 for a dependency", and assert the 424 problem shape for an include whose dependency is private to another organisation in `src/test/java/nzi/fhir/validator/core/validator/IncludeOwnershipIT.java` per Constitution IV (contradicts)
 - [X] T070 Add the 3.0-client `POST /igs/upload` call (200, fields `status`, `name`, `version`, `downloaded`, `warnings`) to `startWithSystemOrganisationSettingsOnAnUpgradedDatabase` in `src/test/java/nzi/fhir/validator/core/service/MigrationUpgradeIT.java` per T059 / SC-001 (partial)
+
+---
+
+## Phase 9: Convergence
+
+- [X] T071 CRITICAL: Declare `'503'` (`overloaded`: more than `FV_ADMIN_MAX_PENDING` administrative operations in progress, with `Retry-After`) on `igPackageApiChangeAccess` (`PATCH /igs/{name}/{version}`) in `src/main/resources/openapi.yaml`, as every other administrative operation already does, per Constitution IV (contradicts)
+- [X] T072 CRITICAL: Declare `'401'` (`unauthorized`, when `FV_AUTH_ANONYMOUS_VALIDATE=false` and no key is sent) and `'403'` (`$ref: '#/components/responses/Forbidden'`, a key of a deactivated organisation) on `igPackageApiGetDependenciesGraph` and `igPackageApiGenerateConformanceReport` in `src/main/resources/openapi.yaml`, and add a deactivated-organisation case for `GET /igs/{name}/{version}/dependencies` to `src/test/java/nzi/fhir/validator/web/ApiKeyAuthIT.java` per Constitution IV / FR-014 (contradicts)

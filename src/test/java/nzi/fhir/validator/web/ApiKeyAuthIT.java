@@ -191,7 +191,9 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 .compose(v -> Await.until(vertx, 5_000, "a deactivated organisation's key is refused",
                         () -> validate(validateKey.get()).map(r -> r.statusCode() == 403)))
                 .compose(v -> Future.all(validate(validateKey.get()),
-                        req("POST", "/R4/include-ig", adminKey.get()).sendJsonObject(new JsonObject().put("igPackageId", "x"))))
+                        req("POST", "/R4/include-ig", adminKey.get()).sendJsonObject(new JsonObject().put("igPackageId", "x")),
+                        // The package read endpoints are authorised paths too (openapi.yaml declares the 403).
+                        req("GET", "/igs/none/1.0.0/dependencies", validateKey.get()).send()))
                 .compose(refused -> {
                     ctx.verify(() -> refused.<HttpResponse<Buffer>>list().forEach(r -> {
                         assertProblem(r, 403, "forbidden");
