@@ -30,6 +30,16 @@ public final class PackageVersionComparator implements Comparator<String> {
         return release.isPresent() ? release : versions.stream().max(INSTANCE);
     }
 
+    /**
+     * The numeric release parts (major, minor, patch) of a SemVer-like label, with missing parts as {@code 0} and any
+     * pre-release or build suffix ignored; empty for labels this comparator does not parse ({@code current}, {@code
+     * 1.2.x}, {@code null}). Used to match version series (spec 006 FR-003). Returns a copy.
+     */
+    public static Optional<BigInteger[]> releaseParts(String version) {
+        Parsed p = parse(version);
+        return p == null ? Optional.empty() : Optional.of(p.core().clone());
+    }
+
     public static boolean isRelease(String version) {
         Parsed p = parse(version);
         return p != null && p.pre() == null;

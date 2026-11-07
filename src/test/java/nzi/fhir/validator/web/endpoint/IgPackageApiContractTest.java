@@ -134,6 +134,37 @@ class IgPackageApiContractTest extends BaseTestContainer {
                 })));
     }
 
+    /** Spec 006 FR-010, FR-017: a series resolves to a concrete version and the response echoes the request. */
+    @Test
+    void registerWithASeriesReportsTheConcreteAndTheRequestedVersion(VertxTestContext ctx) {
+        app.bootstrap().services().igPackageService()
+                .registerIg(TestPackages.npmPackage("ct.series", "1.2.3", Map.of(), List.of()))
+                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/register")).timeout(10_000)
+                        .sendJsonObject(new JsonObject().put("name", "ct.series").put("version", "1.2.x")))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    JsonObject body = r.bodyAsJsonObject();
+                    assertEquals("1.2.3", body.getString("version"));
+                    assertEquals("1.2.x", body.getString("requestedVersion"));
+                    assertEquals(Boolean.FALSE, body.getBoolean("downloaded"));
+                    nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredBySchema(body, "IgRegistrationResponse",
+                            "requestedVersion");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 006 FR-002: a malformed series is a client error, not a literal version. */
+    @Test
+    void registerWithAMalformedSeriesIs400(VertxTestContext ctx) {
+        AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/register")).timeout(5_000)
+                .sendJsonObject(new JsonObject().put("name", "ct.series").put("version", "1.x.3"))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject problem = assertProblem(r, 400, "invalid-request");
+                    assertEquals("Version series must be N.x, N.x.x or N.N.x (for example 1.2.x)", problem.getString("detail"));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void registerWithoutNameOrUrlIs400(VertxTestContext ctx) {
         AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/register")).timeout(5_000).sendJsonObject(new JsonObject())

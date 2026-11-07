@@ -12,6 +12,7 @@ import nzi.fhir.validator.core.npm.DependencyResolver;
 import nzi.fhir.validator.core.npm.PackageVersionComparator;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
 import nzi.fhir.validator.core.npm.PackageOwnership;
+import nzi.fhir.validator.core.npm.VersionSeries;
 import nzi.fhir.validator.core.org.Organisations;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.AccessChange;
@@ -115,6 +116,13 @@ public class IgPackageService {
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
         }
+        // Spec 006 FR-001, FR-002: a series is parsed before anything is read; a malformed one is 400.
+        VersionSeries series;
+        try {
+            series = VersionSeries.isSeries(requestedVersion) ? VersionSeries.parse(requestedVersion) : null;
+        } catch (ProblemException e) {
+            return Future.failedFuture(e);
+        }
         if (requestedVersion != null && !requestedVersion.isBlank() && !"latest".equalsIgnoreCase(requestedVersion)
                 && !PostgresPackageCacheManager.isValidVersionLabel(requestedVersion)) {
             return Future.failedFuture(new ProblemException(400, "invalid-request",
@@ -128,7 +136,9 @@ public class IgPackageService {
                     List<String> visible = catalog.catalog().versions(name).stream()
                             .filter(v -> AccessPolicy.canUse(caller, catalog.access().get(name + "#" + v)))
                             .toList();
-                    Optional<String> concrete = latest ? PackageVersionComparator.max(visible)
+                    // Spec 006 FR-011: a series picks the highest stored match the caller may use; no registry.
+                    Optional<String> concrete = series != null ? series.highest(visible)
+                            : latest ? PackageVersionComparator.max(visible)
                             : visible.contains(requestedVersion) ? Optional.of(requestedVersion) : Optional.empty();
                     if (concrete.isEmpty()) {
                         String label = latest ? name : name + "#" + requestedVersion;
@@ -458,9 +468,20 @@ public class IgPackageService {
             return Future.failedFuture(new ProblemException(403, "forbidden", "This API key does not allow this operation"));
         }
         boolean latest = version == null || version.isBlank() || "latest".equals(version);
-        Future<PostgresPackageCacheManager.RegistrationVersion> chosen = latest
-                ? cacheManager.resolveForRegistration(name)
-                : Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(version, false, null));
+        Future<PostgresPackageCacheManager.RegistrationVersion> chosen;
+        if (VersionSeries.isSeries(version)) {
+            VersionSeries series;
+            try {
+                series = VersionSeries.parse(version);
+            } catch (ProblemException e) {
+                return Future.failedFuture(e);
+            }
+            chosen = resolveSeriesForRegistration(caller, name, series);
+        } else {
+            chosen = latest
+                    ? cacheManager.resolveForRegistration(name)
+                    : Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(version, false, null));
+        }
         return chosen.compose(rv -> {
             if (rv == null) {
                 return Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND, "IG package "
@@ -480,9 +501,48 @@ public class IgPackageService {
                                 : packageAccess(pgPool, pkg.name(), pkg.version())
                                 .map(access -> new Registration(pkg, stored.isEmpty(), warnings, access.orElse(null))));
             });
-        }).onSuccess(r -> logger.info("Registered IG {}#{} (downloaded: {}) by {}", r.pkg().name(), r.pkg().version(),
-                        r.downloaded(), caller.label()))
+        }).onSuccess(r -> logger.info("Registered IG {}#{} (requested: {}, downloaded: {}) by {}", r.pkg().name(),
+                        r.pkg().version(), version, r.downloaded(), caller.label()))
                 .onFailure(e -> logger.warn("Failed to register IG {}#{}: {}", name, version, e.getMessage()));
+    }
+
+    /**
+     * The concrete version a series registers (spec 006 FR-006, FR-009, research R4): the highest match listed by the
+     * registries, else the highest stored match {@code caller} may use, with the registries' warning. A stored version
+     * of another organisation that is private is never a fallback candidate. Fails with 404 when nothing matches.
+     */
+    private Future<PostgresPackageCacheManager.RegistrationVersion> resolveSeriesForRegistration(Caller caller, String name,
+                                                                                              VersionSeries series) {
+        return cacheManager.resolveSeriesFromRegistries(name, series).compose(result -> {
+            if (result.version() != null) {
+                return Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(result.version(), true, null));
+            }
+            return storedVersionsWithAccess(pgPool, name).compose(stored -> {
+                List<String> usable = stored.entrySet().stream()
+                        .filter(e -> AccessPolicy.canUse(caller, e.getValue()))
+                        .map(Map.Entry::getKey)
+                        .toList();
+                return series.highest(usable)
+                        .map(v -> Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(v, false, result.warning())))
+                        .orElseGet(() -> Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
+                                "IG package " + name + " has no version in series " + series.raw()
+                                        + " in the configured package registries and none is stored")));
+            });
+        });
+    }
+
+    /** Every stored version of {@code name} with its owner and sharing (spec 006 research R4). */
+    static Future<Map<String, Access>> storedVersionsWithAccess(SqlClient client, String name) {
+        return client.preparedQuery("SELECT g.ig_package_version, g.owner, o.name_short, g.is_shareable FROM %s.fhir_implementation_guides g "
+                                .formatted(DB_POSTGRES_SCHEMA_NAME) + "JOIN %s.organisations o ON o.id = g.owner "
+                                .formatted(DB_POSTGRES_SCHEMA_NAME) + "WHERE g.ig_package_id = $1")
+                .execute(Tuple.of(name))
+                .map(rows -> {
+                    Map<String, Access> versions = new HashMap<>();
+                    rows.forEach(row -> versions.put(row.getString(0),
+                            new Access(row.getUUID(1), row.getString(2), row.getBoolean(3))));
+                    return versions;
+                });
     }
 
     public Future<NpmPackage> registerIg(String name, String version) {
