@@ -46,6 +46,21 @@ class IgReferenceTest {
         }
     }
 
+    /** Spec 006 FR-018: the ig parameter needs an exact version; a version series is a client error. */
+    @Test
+    void rejectsAVersionSeries() {
+        for (String series : List.of("p#1.2.x", "p#1.x", "p#1.X.x", "p#1.x.3")) {
+            ProblemException e = assertThrows(ProblemException.class, () -> IgReference.parse(series), series);
+            assertEquals(400, e.status());
+            assertEquals("invalid-request", e.type());
+            assertEquals("The ig parameter needs an exact version (for example the version reported by include-ig), "
+                    + "not a version series", e.detail());
+        }
+        assertEquals(new IgReference("p", "1.2.3"), IgReference.parse("p#1.2.3"));
+        assertEquals(new IgReference("p", null), IgReference.parse("p#latest"));
+        assertEquals(new IgReference("p", null), IgReference.parse("p"));
+    }
+
     private static PackageCatalogView view(Map<String, String[]> packages) {
         Map<String, PackageCatalogView.Entry> entries = new java.util.HashMap<>();
         packages.forEach((k, fhir) -> entries.put(k, new PackageCatalogView.Entry(PackageCatalogView.parseDeclaredFhirVersions(

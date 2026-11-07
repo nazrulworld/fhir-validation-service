@@ -52,6 +52,20 @@ is refused with 413 `package-too-large` at 2g (needs about 1144 MB, 657 MB free)
 compose project (`COMPOSE_PROJECT_NAME=fvperf`) and `docker compose down -v` afterwards, so the test package does not
 stay in your configuration.
 
+## Validation against an IG (`?ig=`)
+
+`perf/validate.js` takes an optional `IG=name#version` and then posts to `/R4/validate?ig=<url-encoded IG>`, which
+exercises `?ig=` parsing and the IG's validator context. Store and include the IG first so the run measures warm
+validation, not the first on-demand build. Compare a run on `main` with a run on your branch at the same load, for
+example for spec 006 (which changes `IgReference.parse`):
+
+```bash
+k6 run -e VUS=8 -e DURATION=60s -e IG='hl7.fhir.dk.core#3.4.0' perf/validate.js
+```
+
+Record `http_reqs`, `http_req_duration p(95)` and `http_req_failed` for both runs in the PR. Expected: p95 < 200 ms,
+0 failed, and throughput within run-to-run noise of the baseline.
+
 ## Rolling restart under load (SC-008)
 
 ```bash

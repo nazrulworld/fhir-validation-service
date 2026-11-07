@@ -1,9 +1,11 @@
 // k6 load test: single-resource validation (SC-003).
 //   k6 run -e BASE=http://127.0.0.1:8880 -e VUS=8 -e DURATION=60s perf/validate.js
+// Optional IG=name#version validates against that IG (?ig=, URL-encoded); it must be stored (and ideally included).
 import http from 'k6/http';
 import { check } from 'k6';
 
 const BASE = __ENV.BASE || 'http://127.0.0.1:8880';
+const TARGET = __ENV.IG ? `${BASE}/R4/validate?ig=${encodeURIComponent(__ENV.IG)}` : `${BASE}/R4/validate`;
 const patient = open('../src/test/resources/fhir/resources/dk/Patient.json');
 
 export const options = {
@@ -16,7 +18,7 @@ export const options = {
 };
 
 export default function () {
-  const r = http.post(`${BASE}/R4/validate`, patient, {
+  const r = http.post(TARGET, patient, {
     headers: { 'Content-Type': 'application/fhir+json', Accept: 'application/json' },
     tags: { name: 'validate' },
   });

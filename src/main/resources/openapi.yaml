@@ -120,7 +120,9 @@ paths:
             pre-built, others are built on first use from stored packages only (nothing is downloaded). Absent: the
             core specification only. One value; at most 256 characters. Only packages your organisation owns or
             that are shareable can be named. Anonymous callers can name shareable packages only. Without a version,
-            the highest version you may use is chosen.
+            the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
+            series such as `name#1.2.x` is rejected with 400 invalid-request (3.2.0); use the concrete version reported
+            by include-ig.
           schema:
             type: string
             maxLength: 256
@@ -233,7 +235,9 @@ paths:
         shareable unless `shareable` is false; a package (or dependency) the caller may not use is answered 404. When
         the version is already included (possibly by another organisation) nothing changes and the response reports
         the existing owner and sharing. A dependency the caller may not use is answered 424 dependency-not-found
-        without naming it.
+        without naming it. Version series (3.2.0): igPackageVersion `1.2.x` / `1.x.x` includes the highest matching
+        stored version; 404 package-not-found when none is stored, and the highest match is never swapped for a lower
+        one (a highest match for another FHIR version is 400).
       parameters:
         - name: version
           in: path
@@ -254,6 +258,12 @@ paths:
                 igPackageVersion:
                   type: string
                   default: latest
+                  description: >-
+                    An exact version, `latest` (the highest stored version), or a version series `N.x`, `N.x.x` or
+                    `N.N.x` (for example `1.2.x`; 3.2.0): the highest matching stored version your organisation may
+                    use. No registry is contacted. The context is pinned to that concrete version; storing a newer
+                    matching version later does not change it. Any other value containing an `x` part is rejected
+                    with 400 invalid-request.
                 shareable:
                   type: boolean
                   default: true
@@ -448,6 +458,9 @@ paths:
         owned by the caller's organisation with `shareable` from the request (default true; the package licence is
         not used). A version that is already stored keeps its owner and sharing, and is answered 404 when the caller
         may not use it. A downloadUrl archive whose name#version another organisation stored gives 409 conflict.
+        Version series (3.2.0): `1.2.x` / `1.x.x` resolve to the highest matching registry release, then behave
+        exactly like a registration of that version (stored → returned without download; new → downloaded and
+        stored). The response's `version` is the concrete version and `requestedVersion` the value sent.
       requestBody:
         required: true
         content:
@@ -463,6 +476,13 @@ paths:
                 version:
                   type: string
                   default: latest
+                  description: >-
+                    An exact version, `latest`, or a version series: `N.x`, `N.x.x` or `N.N.x` (for example `1.2.x`;
+                    `x` or `X`). A series is resolved to the highest matching version listed by the configured package
+                    registries (a release before a pre-release). If no registry can be consulted or none lists a
+                    matching version, the highest matching stored version the caller may use is returned with a
+                    warning; 404 package-not-found when there is none. Any other value containing an `x` part is
+                    rejected with 400 invalid-request.
                 includeDependency:
                   type: boolean
                   default: true
@@ -826,6 +846,9 @@ components:
             igPackage:
               type: string
               description: concrete name#version
+        requestedVersion:
+          type: string
+          description: The igPackageVersion value of the request (latest, an exact version or a version series) (3.2.0)
         revision:
           type: integer
           format: int64
@@ -880,6 +903,11 @@ components:
         version:
           type: string
           description: The concrete version stored or returned
+        requestedVersion:
+          type: string
+          description: >-
+            The version value of the request (latest, an exact version or a version series) (3.2.0). Absent for
+            downloadUrl and upload registrations, which take the version from the archive.
         downloaded:
           type: boolean
           description: True when the archive was fetched in this call

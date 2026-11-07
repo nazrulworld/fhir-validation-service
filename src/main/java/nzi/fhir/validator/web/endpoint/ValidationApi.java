@@ -219,9 +219,11 @@ public class ValidationApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
             return;
         }
+        String requestedVersion = body.getString("igPackageVersion", "latest");
+        // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
         ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
-                body.getString("igPackageId"), body.getString("igPackageVersion", "latest"),
-                java.util.Optional.ofNullable((Boolean) shareable)));
+                body.getString("igPackageId"), requestedVersion,
+                java.util.Optional.ofNullable((Boolean) shareable)).map(json -> json.put("requestedVersion", requestedVersion)));
     }
 
     /** {@code PATCH /{version}/include-ig?ig=name#version} (spec 005 FR-019, contracts §4). */

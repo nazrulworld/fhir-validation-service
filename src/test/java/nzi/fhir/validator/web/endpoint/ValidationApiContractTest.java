@@ -365,6 +365,52 @@ class ValidationApiContractTest extends BaseTestContainer {
                 })));
     }
 
+    /** Spec 006 FR-011, FR-013, FR-017: a series includes a concrete version and the response echoes the request. */
+    @Test
+    void includeWithASeriesReportsTheConcreteKeyAndTheRequestedVersion(VertxTestContext ctx) {
+        app.bootstrap().services().igPackageService()
+                .registerIg(nzi.fhir.validator.testsupport.TestPackages.profilePackage("ct.inc", "1.2.3"))
+                .compose(p -> app.bootstrap().services().configSync().syncCatalogNow())
+                .compose(v -> AppHarness.asAdmin(post("/R4/include-ig").timeout(60_000)).sendJsonObject(new JsonObject()
+                        .put("igPackageId", "ct.inc").put("igPackageVersion", "1.2.x")))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    JsonObject body = r.bodyAsJsonObject();
+                    assertEquals("ct.inc#1.2.3", body.getJsonObject("key").getString("igPackage"));
+                    assertEquals("1.2.x", body.getString("requestedVersion"));
+                    nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredBySchema(body, "IncludeResponse",
+                            "requestedVersion");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 006 FR-002: a malformed series on include is a client error. */
+    @Test
+    void includeWithAMalformedSeriesIs400(VertxTestContext ctx) {
+        AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject()
+                        .put("igPackageId", "ct.inc").put("igPackageVersion", "1.x.3"))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject problem = assertProblem(r, 400, "invalid-request");
+                    assertEquals("Version series must be N.x, N.x.x or N.N.x (for example 1.2.x)", problem.getString("detail"));
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 006 FR-018: the ig parameter needs an exact version; a series is 400 before anything is validated. */
+    @Test
+    void validateWithASeriesInTheIgParameterIs400(VertxTestContext ctx) {
+        post("/R4/validate").addQueryParam("ig", "some.pkg#1.2.x")
+                .putHeader("Content-Type", "application/fhir+json")
+                .sendBuffer(Buffer.buffer(PATIENT))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject problem = assertProblem(r, 400, "invalid-request");
+                    assertEquals("The ig parameter needs an exact version (for example the version reported by include-ig), "
+                            + "not a version series", problem.getString("detail"));
+                    assertNull(r.getHeader("X-Validation-Context"));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void includeOfUnstoredIgIs404(VertxTestContext ctx) {
         AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject().put("igPackageId", "hl7.fhir.us.core").put("igPackageVersion", "3.1.1"))

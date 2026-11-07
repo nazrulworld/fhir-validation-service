@@ -213,6 +213,43 @@ class IncludeOwnershipIT extends BaseTestContainer {
                 })));
     }
 
+    /** Spec 006 US3 (SC-007): a series resolves only among versions the caller may use. */
+    @Test
+    void aSeriesNeverChoosesAnotherOrganisationsPrivateVersion(VertxTestContext ctx) {
+        TestPackages.storePackage(core.services(), TestPackages.profilePackage("own.p", "1.2.4"))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.profilePackage("own.p", "1.2.9")))
+                .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "own.p#1.2.9", b.orgId(), false))
+                .compose(v -> core.services().configSync().syncCatalogNow())
+                .compose(v -> service().include(a, R4, "own.p", "1.2.x", Optional.empty()))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals("own.p#1.2.4", r.getJsonObject("key").getString("igPackage"));
+                        assertFalse(r.encode().contains("1.2.9"), r.encode());
+                    });
+                    return service().include(b, R4, "own.p", "1.2.x", Optional.empty());
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals("own.p#1.2.9", r.getJsonObject("key").getString("igPackage"), "the owner sees its private version");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 006 US3 scenario 2: only a hidden version matches → 404 that names neither it nor its owner. */
+    @Test
+    void aSeriesMatchingOnlyAHiddenVersionIs404WithoutNamingIt(VertxTestContext ctx) {
+        TestPackages.storePackage(core.services(), TestPackages.profilePackage("own.q", "1.2.9"))
+                .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "own.q#1.2.9", b.orgId(), false))
+                .compose(v -> core.services().configSync().syncCatalogNow())
+                .compose(v -> failure(service().include(a, R4, "own.q", "1.2.x", Optional.empty())))
+                .onComplete(ctx.succeeding(err -> ctx.verify(() -> {
+                    assertProblem(err, 404, "package-not-found");
+                    String detail = ((ProblemException) err).detail();
+                    assertTrue(detail.contains("own.q#1.2.x"), detail);
+                    assertFalse(detail.contains("1.2.9") || detail.contains("orgb"), detail);
+                    ctx.completeNow();
+                })));
+    }
+
     /** A dependency the caller may not use: 424 without naming it, and nothing is committed (contracts §2). */
     @Test
     void aPrivateDependencyIs424WithoutItsName(VertxTestContext ctx) {

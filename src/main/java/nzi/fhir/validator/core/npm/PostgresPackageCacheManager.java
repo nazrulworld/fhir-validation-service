@@ -510,9 +510,54 @@ public class PostgresPackageCacheManager {
     public static final String NO_REGISTRY_WARNING = "No package registry could be consulted; using the highest stored version";
     public static final String NOT_LISTED_WARNING = "No package registry lists this package; using the highest stored version";
 
+    /** Fallback warnings for a version series (spec 006 FR-009); formatted with the series as requested. */
+    public static final String SERIES_NO_REGISTRY_WARNING =
+            "No package registry could be consulted; using the highest stored version in series %s";
+    public static final String SERIES_NOT_LISTED_WARNING =
+            "No package registry lists a version in series %s; using the highest stored version";
+
     private enum ListingOutcome { LISTED, NOT_LISTED, FAILED }
 
-    private record Listing(ListingOutcome outcome, String latest) {
+    /** One registry's answer: {@code versions} is non-empty exactly when the outcome is {@code LISTED}. */
+    private record Listing(ListingOutcome outcome, List<String> versions) {
+    }
+
+    /**
+     * Version chosen by {@code POST /igs/register} for a version series (spec 006 FR-006, FR-009).
+     *
+     * @param version the highest matching version listed by the registries that answered, or {@code null} when none
+     *                could decide (the caller then falls back to the stored versions it may use)
+     * @param warning curated text saying why the registries could not decide, else {@code null}
+     */
+    public record SeriesRegistryResult(String version, String warning) {
+    }
+
+    /**
+     * Every configured registry's listing of {@code name}, fetched in parallel. A 404 means "not listed"; any other
+     * failure is logged and means "could not answer". Never fails.
+     */
+    private Future<List<Listing>> fetchListings(String name) {
+        List<Future<Listing>> answers = new ArrayList<>();
+        for (String registry : registryUrls) {
+            answers.add(fetcher.fetch(registry + "/" + name)
+                    .map(body -> {
+                        List<String> versions = versionsFromListing(body.toJsonObject());
+                        return new Listing(versions.isEmpty() ? ListingOutcome.NOT_LISTED : ListingOutcome.LISTED, versions);
+                    })
+                    .recover(err -> {
+                        boolean notFound = err instanceof ProblemException p && p.status() == 404;
+                        if (!notFound) {
+                            logger.info("Registry {} could not list {}: {}", registry, name, err.getMessage());
+                        }
+                        return Future.succeededFuture(new Listing(notFound ? ListingOutcome.NOT_LISTED : ListingOutcome.FAILED,
+                                List.of()));
+                    }));
+        }
+        return Future.join(answers).transform(ar -> Future.succeededFuture(answers.stream().map(Future::result).toList()));
+    }
+
+    private static boolean anyAnswered(List<Listing> listings) {
+        return listings.stream().anyMatch(l -> l.outcome() != ListingOutcome.FAILED);
     }
 
     /**
@@ -525,35 +570,44 @@ public class PostgresPackageCacheManager {
         if (!registryEnabled || registryUrls.isEmpty()) {
             return storedFallback(name, NO_REGISTRY_WARNING);
         }
-        List<Future<Listing>> answers = new ArrayList<>();
-        for (String registry : registryUrls) {
-            answers.add(fetcher.fetch(registry + "/" + name)
-                    .map(body -> latestFromListing(body.toJsonObject())
-                            .map(v -> new Listing(ListingOutcome.LISTED, v))
-                            .orElse(new Listing(ListingOutcome.NOT_LISTED, null)))
-                    .recover(err -> {
-                        boolean notFound = err instanceof ProblemException p && p.status() == 404;
-                        if (!notFound) {
-                            logger.info("Registry {} could not list {}: {}", registry, name, err.getMessage());
-                        }
-                        return Future.succeededFuture(new Listing(notFound ? ListingOutcome.NOT_LISTED : ListingOutcome.FAILED, null));
-                    }));
-        }
-        return Future.join(answers).transform(ar -> {
+        return fetchListings(name).compose(listings -> {
             List<String> versions = new ArrayList<>();
-            boolean anyAnswered = false;
-            for (Future<Listing> f : answers) {
-                Listing l = f.result();
+            for (Listing l : listings) {
                 if (l.outcome() == ListingOutcome.LISTED) {
-                    versions.add(l.latest());
+                    PackageVersionComparator.max(l.versions()).ifPresent(versions::add);
                 }
-                anyAnswered |= l.outcome() != ListingOutcome.FAILED;
             }
             Optional<String> latest = PackageVersionComparator.max(versions);
             if (latest.isPresent()) {
                 return Future.succeededFuture(new RegistrationVersion(latest.get(), true, null));
             }
-            return storedFallback(name, anyAnswered ? NOT_LISTED_WARNING : NO_REGISTRY_WARNING);
+            return storedFallback(name, anyAnswered(listings) ? NOT_LISTED_WARNING : NO_REGISTRY_WARNING);
+        });
+    }
+
+    /**
+     * The highest version in {@code series} listed by any registry that answered (spec 006 FR-006). Does not look at
+     * stored packages: when no registry can decide, the result has no version and a warning saying whether no
+     * registry could be consulted or none lists a matching version, and the caller falls back to the stored versions
+     * it may use (FR-009). Never fails.
+     */
+    public Future<SeriesRegistryResult> resolveSeriesFromRegistries(String name, VersionSeries series) {
+        String noRegistry = String.format(SERIES_NO_REGISTRY_WARNING, series.raw());
+        if (!registryEnabled || registryUrls.isEmpty()) {
+            return Future.succeededFuture(new SeriesRegistryResult(null, noRegistry));
+        }
+        return fetchListings(name).map(listings -> {
+            List<String> pooled = listings.stream()
+                    .filter(l -> l.outcome() == ListingOutcome.LISTED)
+                    .flatMap(l -> l.versions().stream())
+                    .distinct()
+                    .toList();
+            Optional<String> highest = series.highest(pooled);
+            if (highest.isPresent()) {
+                return new SeriesRegistryResult(highest.get(), null);
+            }
+            return new SeriesRegistryResult(null, anyAnswered(listings)
+                    ? String.format(SERIES_NOT_LISTED_WARNING, series.raw()) : noRegistry);
         });
     }
 
@@ -584,12 +638,21 @@ public class PostgresPackageCacheManager {
      * publication order, so it is only a fallback for listings without a version list.
      */
     private static Optional<String> latestFromListing(JsonObject listing) {
+        return PackageVersionComparator.max(versionsFromListing(listing));
+    }
+
+    /**
+     * The versions a registry listing offers: its version list, or only {@code dist-tags.latest} for a listing
+     * without one; empty when it has neither.
+     */
+    private static List<String> versionsFromListing(JsonObject listing) {
         JsonObject versions = listing.getJsonObject("versions");
         if (versions != null && !versions.isEmpty()) {
-            return PackageVersionComparator.max(versions.fieldNames());
+            return List.copyOf(versions.fieldNames());
         }
         JsonObject tags = listing.getJsonObject("dist-tags");
-        return tags == null ? Optional.empty() : Optional.ofNullable(tags.getString("latest"));
+        String latest = tags == null ? null : tags.getString("latest");
+        return latest == null ? List.of() : List.of(latest);
     }
 
     public static JsonObject createNpmPackageMeta(NpmPackage npmPackage) {

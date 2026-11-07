@@ -56,4 +56,25 @@ class PackageVersionComparatorTest {
         assertEquals("2.0.0", PackageVersionComparator.max(List.of("1.5.0", "2.0.0", "2.1.0-ballot", "current")).orElseThrow());
         assertTrue(PackageVersionComparator.max(List.of()).isEmpty());
     }
+
+    @Test
+    void releasePartsFillMissingPartsAndIgnoreSuffixes() {
+        assertArrayEquals(parts(1, 2, 0), PackageVersionComparator.releaseParts("1.2").orElseThrow());
+        assertArrayEquals(parts(1, 2, 7), PackageVersionComparator.releaseParts("1.2.7-ballot").orElseThrow());
+        assertArrayEquals(parts(1, 2, 7), PackageVersionComparator.releaseParts("1.2.7+b").orElseThrow());
+        assertTrue(PackageVersionComparator.releaseParts("current").isEmpty());
+        assertTrue(PackageVersionComparator.releaseParts(null).isEmpty());
+        assertTrue(PackageVersionComparator.releaseParts("1.2.x").isEmpty());
+    }
+
+    @Test
+    void releasePartsReturnsACopy() {
+        java.math.BigInteger[] first = PackageVersionComparator.releaseParts("1.2.3").orElseThrow();
+        first[0] = java.math.BigInteger.TEN;
+        assertArrayEquals(parts(1, 2, 3), PackageVersionComparator.releaseParts("1.2.3").orElseThrow());
+    }
+
+    private static java.math.BigInteger[] parts(long... values) {
+        return java.util.Arrays.stream(values).mapToObj(java.math.BigInteger::valueOf).toArray(java.math.BigInteger[]::new);
+    }
 }

@@ -6,6 +6,28 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Version series on `POST /igs/register` and `POST /{version}/include-ig`** (GitHub issue #56, spec 006): a version
+  `N.x`, `N.x.x` or `N.N.x` (for example `1.2.x`; `x` or `X`) resolves to the highest matching version, a release
+  before a pre-release, with version parts compared numerically (`1.2.x` never matches `1.20.0`).
+  - `register` matches against the versions listed by the configured package registries, then stores or returns
+    that version as an exact registration would. When no registry can be consulted or none lists a matching version,
+    it falls back to the highest matching stored version the caller may use, with a warning; 404
+    `package-not-found` when there is none.
+  - `include-ig` matches against the stored versions the caller may use and never contacts a registry. The context
+    is pinned to the concrete version; including the series again later adds the then-highest match.
+  - Any other value with an `x` part (`1.x.3`, `x.x.x`, `1.2.3.x`) is 400 `invalid-request`.
+- `requestedVersion` on `IgRegistrationResponse` (name registrations) and `IncludeResponse`: the version value of the
+  request (`latest`, an exact version or a series), next to the concrete version.
+
+### Changed
+
+- `POST /{version}/validate?ig=name#<series>` (for example `name#1.2.x`) is now 400 `invalid-request` saying the `ig`
+  parameter needs an exact version; it was 404 `package-not-found`. The request could never succeed before, so this
+  is not a breaking change (spec 006 clarification, 2026-11-08). Exact versions, `latest` and a bare name are
+  unchanged.
+
 ### Fixed
 
 - `openapi.yaml` declares `401 unauthorized` on `POST /{version}/validate`, returned when

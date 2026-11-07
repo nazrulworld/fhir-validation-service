@@ -130,7 +130,8 @@ public class IgPackageApi {
         }
         Future<JsonObject> result = igPackageService.register(ApiKeyAuthHandler.caller(ctx), name, version,
                         body.getBoolean("includeDependency", true), shareable)
-                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings(), r.access()));
+                // Spec 006 FR-010: the concrete version is `version`; `requestedVersion` echoes latest, exact or series.
+                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings(), r.access()).put("requestedVersion", version));
         ErrorResponder.respond(ctx, result);
     }
 

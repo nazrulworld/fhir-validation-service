@@ -4,6 +4,7 @@ import io.vertx.core.Future;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
+import nzi.fhir.validator.core.npm.VersionSeries;
 import nzi.fhir.validator.core.security.AccessPolicy;
 import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.web.ProblemException;
@@ -15,7 +16,8 @@ import java.util.stream.Collectors;
 /**
  * The {@code ig} parameter of a validation request (spec 004 FR-001, FR-002, data-model §2.2): {@code name#version},
  * {@code name#latest} or a bare {@code name}. Parsed before any lookup; resolved to a concrete {@link SnapshotKey}
- * through the in-memory catalog view (no database wait on the hot path).
+ * through the in-memory catalog view (no database wait on the hot path). A version series such as {@code 1.2.x} is
+ * rejected with 400 (spec 006 FR-018).
  *
  * @param version {@code null} when absent or {@code latest}: the highest stored version
  */
@@ -41,6 +43,11 @@ public record IgReference(String name, String version) {
         if (version != null) {
             if (version.equalsIgnoreCase("latest")) {
                 version = null;
+            } else if (VersionSeries.isSeries(version)) {
+                // Spec 006 FR-018: a series is resolved by include-ig and register only; validation needs the concrete
+                // version, so `1.2.x` is a client error here, not a literal version that is answered 404.
+                throw new ProblemException(400, "invalid-request", "The ig parameter needs an exact version (for example "
+                        + "the version reported by include-ig), not a version series");
             } else if (!VERSION.matcher(version).matches()) {
                 throw invalid();
             }
