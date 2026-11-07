@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-08
+
+IG versions can be requested as a series such as `1.2.x` on `POST /igs/register` and `POST /{version}/include-ig`
+(GitHub issue #56). Additive: exact versions and `latest` behave as before, and no migration or configuration change
+is needed. The only status change is for a request that could never succeed: a series in `?ig=` on validation is
+now 400 instead of 404.
+
 ### Added
 
 - **Version series on `POST /igs/register` and `POST /{version}/include-ig`** (GitHub issue #56, spec 006): a version

@@ -345,17 +345,25 @@ curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us
 # Without a version (or "latest") the registries are asked for the newest release; the answer says which version was
 # chosen and whether it was downloaded ("downloaded": true) or already stored.
 curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core"}' http://127.0.0.1:8880/igs/register
+# A version series (3.2.0): the newest 6.1.x release the registries list. The answer reports the concrete "version"
+# and the "requestedVersion" you sent.
+curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core","version":"6.1.x"}' http://127.0.0.1:8880/igs/register
 
 # Pre-build it for R4 on every instance. Other versions of the same package stay included.
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/include-ig
+# A series here picks the newest *stored* match you may use, without contacting a registry, and pins that version.
+curl -H "$AUTH" -H 'Content-Type: application/json' \
+  --data '{"igPackageId":"hl7.fhir.us.core","igPackageVersion":"6.x"}' http://127.0.0.1:8880/R4/include-ig
 
 # Stop pre-building it (the package stays stored and can still be named in ?ig=)
 curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.dk.core%233.4.0'
 ```
 
 A request validates against the IG it names, its dependencies and the core specification; no other stored or included
-package contributes. `/igs/register` stores the dependencies too (unless `"includeDependency": false`); a package
+package contributes. A version series is `N.x`, `N.x.x` or `N.N.x`; versions are compared part by part, so `1.2.x`
+never matches `1.20.0`, and a release wins over a pre-release. `?ig=` on validation needs an exact version (or none):
+a series there is 400. `/igs/register` stores the dependencies too (unless `"includeDependency": false`); a package
 uploaded through `/igs/upload` needs its dependencies stored before it can be built on demand. To use your own
 profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`, `fhirVersions`
 and `dependencies`, plus the `.json` resources under `package/`), then upload it and name it in `ig`, or include it to
