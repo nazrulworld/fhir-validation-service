@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Command-line mode (spec 005, contracts/cli.md): stdout carries exactly one JSON document, so every log line goes to
+  stderr. Selected by AdminCli before any command runs.
+-->
+<Configuration status="WARN" shutdownHook="disable">
+    <Appenders>
+        <Console name="stderr" target="SYSTEM_ERR">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Root level="warn">
+            <AppenderRef ref="stderr"/>
+        </Root>
+        <Logger name="nzi.fhir.validator" level="info"/>
+        <Logger name="org.flywaydb.core" level="warn"/>
+    </Loggers>
+</Configuration>

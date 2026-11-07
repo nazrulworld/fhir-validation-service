@@ -81,7 +81,7 @@ class ProfileResolutionIT extends BaseTestContainer {
 
     private static Future<ValidatorSnapshot.Outcome> validateOn(CoreHarness on, String ig, String body, String... profiles) {
         return on.services().validationService()
-                .validate(SupportedFhirVersion.R4, ig == null ? null : IgReference.parse(ig), body, SupportedContentType.JSON,
+                .validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, ig == null ? null : IgReference.parse(ig), body, SupportedContentType.JSON,
                         List.of(profiles), java.util.function.Function.identity());
     }
 

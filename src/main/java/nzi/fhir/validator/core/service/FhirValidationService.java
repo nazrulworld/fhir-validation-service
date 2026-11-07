@@ -7,7 +7,14 @@ import nzi.fhir.validator.core.concurrency.AdmissionController;
 import nzi.fhir.validator.core.concurrency.Executors;
 import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.npm.PackageCatalogView;
+import nzi.fhir.validator.core.security.Access;
+import nzi.fhir.validator.core.security.AccessPolicy;
+import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.core.validator.IgReference;
+import nzi.fhir.validator.core.validator.PinnedAccess;
+import nzi.fhir.validator.core.validator.ResolvedContext;
+import nzi.fhir.validator.web.ProblemException;
 import nzi.fhir.validator.core.validator.SnapshotKey;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.core.validator.ValidatorSnapshot;
@@ -28,6 +35,9 @@ import java.util.function.Function;
  * @author Md Nazrul Islam
  */
 public class FhirValidationService {
+    private static final org.apache.logging.log4j.Logger logger =
+            org.apache.logging.log4j.LogManager.getLogger(FhirValidationService.class);
+    private volatile Function<SupportedFhirVersion, PinnedAccess> pinnedAccess = v -> PinnedAccess.EMPTY;
 
     private final ValidatorRegistry registry;
     private final Executors executors;
@@ -62,37 +72,52 @@ public class FhirValidationService {
         this.catalog = catalog;
     }
 
+    /** The access of each version's included contexts (spec 005), read without a lock. */
+    public void setPinnedAccess(Function<SupportedFhirVersion, PinnedAccess> pinnedAccess) {
+        this.pinnedAccess = pinnedAccess;
+    }
+
     /**
+     * Validates against the base context.
+     *
+     * @param who the request's caller; there is deliberately no overload without one (spec 005: fail closed)
      * @return the outcome; fails with {@code DataFormatException} if the body is not parseable FHIR, with a 503
      * problem if the version's validator is not ready or the instance is overloaded
      */
-    public Future<ValidatorSnapshot.Outcome> validate(SupportedFhirVersion version, String body,
+    public Future<ValidatorSnapshot.Outcome> validate(Caller who, SupportedFhirVersion version, String body,
                                                       SupportedContentType contentType, List<String> profiles) {
-        return validate(version, body, contentType, profiles, Function.identity());
+        return validate(who, version, null, body, contentType, profiles, Function.identity());
     }
 
     /**
      * Validates and then applies {@code finisher} to the outcome, both on the validation worker, so rendering large
      * results never runs on the event loop (constitution Principle I).
+     *
+     * @param who the request's caller: only contexts it may use are served (spec 005 FR-010 to FR-013)
+     * @param ig  the request's {@code ig} reference, or {@code null} for the base context
      */
-    public <T> Future<T> validate(SupportedFhirVersion version, String body, SupportedContentType contentType,
-                                  List<String> profiles, Function<ValidatorSnapshot.Outcome, T> finisher) {
-        return validate(version, null, body, contentType, profiles, finisher);
-    }
-
-    /**
-     * @param ig the request's {@code ig} reference, or {@code null} for the base context
-     */
-    public <T> Future<T> validate(SupportedFhirVersion version, IgReference ig, String body, SupportedContentType contentType,
-                                  List<String> profiles, Function<ValidatorSnapshot.Outcome, T> finisher) {
+    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
+                                  SupportedContentType contentType, List<String> profiles,
+                                  Function<ValidatorSnapshot.Outcome, T> finisher) {
+        java.util.Objects.requireNonNull(who, "caller");
         long started = System.nanoTime();
         // Steps may complete on another context (a joined catalog refresh, a joined build): return to the caller's
         // context after each, so its request id stays on every log line (Principle VII).
         io.vertx.core.Context caller = io.vertx.core.Vertx.currentContext();
-        return admission.admit(() -> onCaller(caller, resolve(version, ig))
-                        .compose(key -> onCaller(caller, registry.snapshot(key)))
+        java.util.concurrent.atomic.AtomicReference<Access> contextAccess = new java.util.concurrent.atomic.AtomicReference<>();
+        return admission.admit(() -> onCaller(caller, resolve(who, version, ig))
+                        .compose(key -> {
+                            // Before any build is admitted, and from memory only (FR-013).
+                            try {
+                                contextAccess.set(checkAccess(who, key, ig));
+                            } catch (ProblemException e) {
+                                return Future.failedFuture(e);
+                            }
+                            return onCaller(caller, registry.snapshot(key));
+                        })
                         .compose(snapshot -> executors.validation().executeBlocking(() -> {
-                            ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries);
+                            ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries)
+                                    .withContextAccess(contextAccess.get());
                             return new Done<>(outcome.result().isSuccessful(), finisher.apply(outcome));
                         }, false)))
                 .onComplete(ar -> {
@@ -123,8 +148,46 @@ public class FhirValidationService {
         return promise.future();
     }
 
-    private Future<SnapshotKey> resolve(SupportedFhirVersion version, IgReference ig) {
-        return ig == null ? Future.succeededFuture(SnapshotKey.base(version)) : ig.resolve(version, catalog);
+    private Future<SnapshotKey> resolve(Caller who, SupportedFhirVersion version, IgReference ig) {
+        return ig == null ? Future.succeededFuture(SnapshotKey.base(version)) : ig.resolve(version, catalog, who);
+    }
+
+    /**
+     * The access rule for the context {@code key} (spec 005 FR-010, research R4, R5): the context and every package it
+     * is built from must be usable by {@code who}. Reads only in-memory state and never takes the registry lock: the
+     * packages of a built base or pinned context come from its snapshot, any other context's from the catalog view
+     * (the same resolution its build uses). A refusal is indistinguishable from "not stored".
+     *
+     * @return the context's access (for FR-020)
+     * @throws ProblemException 404 for an IG (or context) the caller may not use, 424 for a dependency
+     */
+    private Access checkAccess(Caller who, SnapshotKey key, IgReference ig) {
+        PackageCatalogView view = catalog.current();
+        if (key.isBase()) {
+            return Access.systemShared(view.systemShortName());
+        }
+        PinnedAccess pinned = pinnedAccess.apply(key.fhirVersion());
+        List<String> resolved = registry.peekResolvedPackages(key)
+                .orElseGet(() -> ResolvedContext.of(key.igPackage(), view).packages());
+        AccessPolicy.Decision decision = AccessPolicy.canUseContext(who, key, resolved, view, pinned);
+        switch (decision) {
+            case IG_NOT_VISIBLE -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Validator context {} is not visible to {}", key, who.label());
+                }
+                throw ProblemException.igNotStored(ig.label());
+            }
+            case DEPENDENCY_NOT_VISIBLE -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("A dependency of validator context {} is not visible to {}", key, who.label());
+                }
+                throw ProblemException.dependencyUnavailable();
+            }
+            default -> {
+                Access a = pinned.get(key.igPackage());
+                return a != null ? a : view.access(key.igPackage());
+            }
+        }
     }
 
     private static String failureOutcome(Throwable cause) {
@@ -135,8 +198,11 @@ public class FhirValidationService {
                 && nzi.fhir.validator.web.ProblemException.TYPE_UNKNOWN_PROFILE.equals(p.type())) {
             return ServiceMetrics.OUTCOME_UNKNOWN_PROFILE;
         }
+        // A missing dependency and a dependency the caller may not use record the same outcome as a missing package:
+        // /metrics is unauthenticated, so no label may tell a refusal from "not stored" (spec 005 research R5).
         if (cause instanceof nzi.fhir.validator.web.ProblemException p
-                && nzi.fhir.validator.web.ProblemException.TYPE_PACKAGE_NOT_FOUND.equals(p.type())) {
+                && (ProblemException.TYPE_PACKAGE_NOT_FOUND.equals(p.type())
+                || ProblemException.TYPE_DEPENDENCY_NOT_FOUND.equals(p.type()))) {
             return ServiceMetrics.OUTCOME_PACKAGE_NOT_FOUND;
         }
         return ServiceMetrics.OUTCOME_ERROR;

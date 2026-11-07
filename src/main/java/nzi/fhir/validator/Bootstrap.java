@@ -23,11 +23,23 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * Process entry point. The HTTP verticles start first (liveness answers immediately, readiness stays false), then
+ * Process entry point. With a command group as the first argument ({@code org}, {@code key}, {@code package},
+ * {@code snapshot}) it runs the administrative command line and exits (spec 005); otherwise it starts the service. The
+ * HTTP verticles start first (liveness answers immediately, readiness stays false), then
  * the database is migrated (retrying until reachable) and the validators are built from the shared configuration.
  */
 public final class Bootstrap {
-    private static final Logger logger = LogManager.getLogger(Bootstrap.class);
+    /**
+     * Created on first use, not when the class loads: the command line must choose its Log4j configuration (stderr
+     * only) before Log4j initialises (spec 005, contracts/cli.md).
+     */
+    private static final class Log {
+        static final Logger LOGGER = LogManager.getLogger(Bootstrap.class);
+    }
+
+    private static Logger logger() {
+        return Log.LOGGER;
+    }
 
     private final Vertx vertx;
     private final ServiceRegistry services;
@@ -44,6 +56,18 @@ public final class Bootstrap {
     private static volatile Bootstrap running;
 
     public static void main(String[] args) {
+        // Spec 005: "org|key|package|snapshot ..." runs one administrative command instead of the server.
+        if (nzi.fhir.validator.cli.AdminCli.isCommand(args)) {
+            // Before anything logs: stdout must carry only the command's JSON. Whatever else writes to System.out
+            // (libraries, JVM warnings) goes to stderr; the result goes to the real stdout.
+            java.io.PrintStream stdout = System.out;
+            System.setOut(System.err);
+            nzi.fhir.validator.cli.AdminCli.useStderrLogging();
+            int exit = nzi.fhir.validator.cli.AdminCli.run(args, stdout, System.err, ConfigLoader.environment());
+            LogManager.shutdown();
+            System.exit(exit);
+            return;
+        }
         ApplicationConfig config;
         try {
             config = ConfigLoader.load();
@@ -62,10 +86,10 @@ public final class Bootstrap {
         start(vertx, config, meterRegistry)
                 .onSuccess(b -> {
                     running = b;
-                    logger.info("FHIR validation service started ({} HTTP instance(s))", config.httpInstances());
+                    logger().info("FHIR validation service started ({} HTTP instance(s))", config.httpInstances());
                 })
                 .onFailure(err -> {
-                    logger.error("Failed to start FHIR validation service", err);
+                    logger().error("Failed to start FHIR validation service", err);
                     vertx.close().onComplete(v -> System.exit(1));
                 });
     }
@@ -81,7 +105,7 @@ public final class Bootstrap {
                 CountDownLatch stopped = new CountDownLatch(1);
                 b.stop().onComplete(ar -> stopped.countDown());
                 if (!stopped.await(timeoutMs, TimeUnit.MILLISECONDS)) {
-                    logger.warn("Drain did not finish in time");
+                    logger().warn("Drain did not finish in time");
                 }
             }
             // Close Vert.x from this (non-Vert.x) thread: closing it from one of its own callbacks never completes.
@@ -112,21 +136,36 @@ public final class Bootstrap {
         return vertx.deployVerticle(() -> new HttpVerticle(services), new DeploymentOptions().setInstances(config.httpInstances()))
                 .map(id -> {
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
+                            .compose(v -> installSystemOrganisation(services))
                             .compose(v -> installBootstrapKey(services))
                             .compose(v -> services.configSync().start())
-                            .onSuccess(v -> logger.info("Validators initialised: {}", services.validatorRegistry().details().encode()))
-                            .onFailure(err -> logger.error("Validator initialisation failed", err));
+                            .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
+                            .onFailure(err -> logger().error("Validator initialisation failed", err));
                     return new Bootstrap(vertx, services, id, warmUp);
                 });
+    }
+
+    /**
+     * Applies the configured {@code FV_SYSTEM_ORG_*} fields to the system organisation (spec 005 FR-004, research
+     * R10); fields that aren't configured keep their stored values. Logs the field names, never their values.
+     */
+    private static Future<Void> installSystemOrganisation(ServiceRegistry services) {
+        java.util.Map<String, Object> fields = services.config().systemOrganisation();
+        if (fields.isEmpty()) {
+            return Future.succeededFuture();
+        }
+        return services.organisations().applySystemConfig(fields)
+                .onSuccess(o -> logger().info("System organisation configured: {}", fields.keySet()))
+                .mapEmpty();
     }
 
     private static Future<Void> installBootstrapKey(ServiceRegistry services) {
         String key = services.config().bootstrapAdminKey();
         if (key == null || key.isBlank()) {
-            logger.warn("FV_ADMIN_API_KEY is not set: administrative operations are refused");
+            logger().warn("FV_ADMIN_API_KEY is not set: administrative operations are refused");
             return Future.succeededFuture();
         }
-        return services.apiKeys().upsertBootstrap(key).onSuccess(v -> logger.info("Bootstrap admin API key installed"));
+        return services.apiKeys().upsertBootstrap(key).onSuccess(v -> logger().info("Bootstrap admin API key installed"));
     }
 
     private Future<Void> awaitIdle(long deadline) {
@@ -153,7 +192,7 @@ public final class Bootstrap {
     public Future<Void> stop() {
         ApplicationConfig config = services.config();
         services.healthService().setDraining(true);
-        logger.info("drain started ({} request(s) in flight)", services.inFlight().get());
+        logger().info("drain started ({} request(s) in flight)", services.inFlight().get());
         Future<Void> preDrain = config.shutdownPreDrainMs() > 0 ? vertx.timer(config.shutdownPreDrainMs()).mapEmpty() : Future.succeededFuture();
         return preDrain
                 .compose(v -> {
@@ -161,7 +200,7 @@ public final class Bootstrap {
                     services.refusingNewRequests().set(true);
                     return awaitIdle(System.currentTimeMillis() + config.shutdownGraceMs());
                 })
-                .onComplete(ar -> logger.info("drain complete ({} request(s) still in flight)", services.inFlight().get()))
+                .onComplete(ar -> logger().info("drain complete ({} request(s) still in flight)", services.inFlight().get()))
                 .eventually(() -> services.stop())
                 .eventually(() -> vertx.undeploy(deploymentId))
                 .eventually(() -> services.pool().close())

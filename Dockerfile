@@ -58,6 +58,11 @@ COPY --from=builder --chown=root:root --chmod=0444 /build/app.jar /app/app.jar
 # /app/LICENSE.md and /app/licenses/ (files 0444, directories 0555, set in the builder).
 COPY --from=builder --chown=root:root /build/notices/app/ /app/
 
+# fv-admin: the administrative command line (spec 005), the same jar and environment as the service, e.g.
+#   docker compose run --rm validator fv-admin org create --name-short acme --name-long "Acme" --type COMMERCIAL
+RUN printf '#!/bin/sh\nexec java $JAVA_OPTS -jar /app/app.jar "$@"\n' > /usr/local/bin/fv-admin \
+    && chmod 0755 /usr/local/bin/fv-admin
+
 ENV FV_HTTP_PORT=8880 \
     JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 
@@ -68,5 +73,6 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=120s --retries=4 \
     CMD curl -fsS "http://127.0.0.1:${FV_HTTP_PORT}/health/readiness" > /dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-# exec: the JVM replaces the shell, so SIGTERM from tini reaches it directly.
+# exec: the JVM replaces the shell, so SIGTERM from tini reaches it directly. This CMD takes no arguments: run the
+# administrative command line with /usr/local/bin/fv-admin instead (spec 005, contracts/cli.md).
 CMD ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

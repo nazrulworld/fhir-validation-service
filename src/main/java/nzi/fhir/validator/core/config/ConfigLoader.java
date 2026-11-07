@@ -71,8 +71,23 @@ public final class ConfigLoader {
             new Entry("FV_PG_USER", "PG_USER", "pg.user", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_PG_PASSWORD", "PG_PASSWORD", "pg.password", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_PG_POOL_SIZE", "PG_POOL_SIZE", "pg.poolSize", Kind.INT, 1, 200),
-            new Entry("FV_PG_SSL_MODE", "pg.sslMode", Kind.STRING, NO_MIN, NO_MAX)
+            new Entry("FV_PG_SSL_MODE", "pg.sslMode", Kind.STRING, NO_MIN, NO_MAX),
+            // Spec 005 FR-004: fields of the system organisation, applied at every start (research R10).
+            new Entry("FV_SYSTEM_ORG_NAME_SHORT", "systemOrg.nameShort", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_NAME_LONG", "systemOrg.nameLong", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_EMAIL", "systemOrg.email", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_PHONE", "systemOrg.phone", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_WEBSITE", "systemOrg.website", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_COUNTRY", "systemOrg.country", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_POST_CODE", "systemOrg.postCode", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_ADDRESS_LINES", "systemOrg.addressLines", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_NAME", "systemOrg.contactPersonName", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_MOBILE", "systemOrg.contactPersonMobile", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_EMAIL", "systemOrg.contactPersonEmail", Kind.STRING, NO_MIN, NO_MAX)
     );
+
+    /** Prefix of the system-organisation entries (their path is {@code systemOrg.<organisation field>}). */
+    static final String SYSTEM_ORG = "systemOrg";
 
     private static final List<String> SSL_MODES = List.of("disable", "prefer", "require", "verify-full");
 
@@ -84,6 +99,14 @@ public final class ConfigLoader {
      * over environment variables, which is convenient for IDE runs and tests.
      */
     public static ApplicationConfig load() {
+        return load(environment());
+    }
+
+    /**
+     * The process environment with the system properties of the same names applied on top: what {@link #load()}
+     * reads. The command line (spec 005) loads its configuration from it too.
+     */
+    public static Map<String, String> environment() {
         Map<String, String> env = new HashMap<>(System.getenv());
         for (Entry e : ENTRIES) {
             putIfPresent(env, e.env());
@@ -92,7 +115,7 @@ public final class ConfigLoader {
             }
         }
         putIfPresent(env, "FV_CONFIG_FILE");
-        return load(env);
+        return env;
     }
 
     private static void putIfPresent(Map<String, String> env, String name) {
@@ -244,6 +267,35 @@ public final class ConfigLoader {
         String key = section(c, "auth").getString("bootstrapAdminKey");
         if (key != null && !key.isEmpty() && !key.matches("[A-Za-z0-9_-]{32,128}")) {
             throw new IllegalStateException("Invalid FV_ADMIN_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
+        }
+        validateSystemOrganisation(section(c, SYSTEM_ORG));
+    }
+
+    /**
+     * The system-organisation fields follow the organisation rules (spec 005 FR-004, research R10): an invalid value
+     * fails start-up naming the variable, like {@code FV_ADMIN_API_KEY}.
+     */
+    private static void validateSystemOrganisation(JsonObject systemOrg) {
+        for (Entry e : ENTRIES) {
+            if (!e.path().startsWith(SYSTEM_ORG + ".")) {
+                continue;
+            }
+            String field = e.path().substring(SYSTEM_ORG.length() + 1);
+            Object value = systemOrg.getValue(field);
+            if (value == null) {
+                continue;
+            }
+            try {
+                nzi.fhir.validator.core.org.Organisation.empty().with(field, String.valueOf(value))
+                        .validateFields(java.util.Set.of(field));
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalStateException("Invalid " + e.env() + ": " + ex.getMessage());
+            }
+        }
+        for (String field : systemOrg.fieldNames()) {
+            if (ENTRIES.stream().noneMatch(e -> e.path().equals(SYSTEM_ORG + "." + field))) {
+                throw new IllegalStateException("Invalid configuration: unknown systemOrg field '" + field + "'");
+            }
         }
     }
 

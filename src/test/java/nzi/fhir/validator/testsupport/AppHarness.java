@@ -68,6 +68,11 @@ public final class AppHarness {
         return request.putHeader("Authorization", ADMIN_AUTH);
     }
 
+    /** Adds {@code key} as a bearer token to a request (spec 005: keys of other organisations). */
+    public static <T> io.vertx.ext.web.client.HttpRequest<T> as(io.vertx.ext.web.client.HttpRequest<T> request, String key) {
+        return request.putHeader("Authorization", "Bearer " + key);
+    }
+
     public Future<Void> stop() {
         return bootstrap.stop();
     }

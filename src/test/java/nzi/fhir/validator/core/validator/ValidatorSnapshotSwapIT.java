@@ -61,7 +61,7 @@ class ValidatorSnapshotSwapIT extends BaseTestContainer {
 
     private Future<String> classify(String ig, String profile) {
         return core.services().validationService()
-                .validate(SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
+                .validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, IgReference.parse(ig), TestPackages.minimalPatient(), SupportedContentType.JSON,
                         List.of(profile), java.util.function.Function.identity())
                 .map(o -> {
                     boolean constraint = o.result().getMessages().stream().anyMatch(m ->

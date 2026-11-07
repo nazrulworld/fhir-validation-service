@@ -124,8 +124,9 @@ place.
 
 ## Technology Constraints
 
-- Java 17; Maven build producing a shaded fat jar with Main-Verticle
-  `nzi.fhir.validator.web.MainVerticle`.
+- Java 17; Maven build producing a shaded fat jar whose entry point (`Main-Class`) is
+  `nzi.fhir.validator.Bootstrap`. It starts the HTTP verticles by default and dispatches the administrative command
+  line when the first argument is a command group.
 - Vert.x 4.5.x (web, web-openapi, pg-client, config, junit5); HAPI FHIR 8.x; PostgreSQL + Flyway;
   Caffeine for in-process caching; Log4j2 for logging.
 - Container images MUST be built for x86_64 and arm64 and published to GHCR; Maven artifacts are
@@ -173,4 +174,4 @@ None open. The seven deviations recorded at ratification (static `HashMap` regis
 upload limit, no changelog) were resolved by feature `001-service-hardening` (see `CHANGELOG.md`, 1.0.0). New code
 MUST NOT reintroduce them.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-06
+**Version**: 1.1.1 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-07

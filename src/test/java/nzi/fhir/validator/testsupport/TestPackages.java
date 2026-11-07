@@ -170,6 +170,55 @@ public final class TestPackages {
         return new JsonObject().put("resourceType", "Bundle").put("type", "collection").put("entry", list).encode();
     }
 
+    // --- organisation ownership (spec 005) --------------------------------------------------------------------
+
+    private static final String SCHEMA = nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+
+    /** Inserts an active {@code COMMERCIAL} organisation by SQL; completes with its id. */
+    public static io.vertx.core.Future<java.util.UUID> createOrganisation(io.vertx.sqlclient.Pool pool, String nameShort) {
+        return pool.preparedQuery("INSERT INTO " + SCHEMA + ".organisations (name_short, name_long, type) "
+                        + "VALUES ($1, $2, 'COMMERCIAL') RETURNING id")
+                .execute(io.vertx.sqlclient.Tuple.of(nameShort, nameShort + " Ltd"))
+                .map(rows -> rows.iterator().next().getUUID(0));
+    }
+
+    /**
+     * Inserts an API key owned by {@code owner} with {@code role} ({@code ADMIN} or {@code VALIDATE}); completes with
+     * the key (43 random characters, only its SHA-256 hash is stored).
+     */
+    public static io.vertx.core.Future<String> createKey(io.vertx.sqlclient.Pool pool, java.util.UUID owner, String name,
+                                                         String role) {
+        byte[] random = new byte[32];
+        new java.security.SecureRandom().nextBytes(random);
+        String key = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(random);
+        return pool.preparedQuery("INSERT INTO " + SCHEMA + ".api_keys (name, key_hash, role, owner) VALUES ($1, $2, $3, $4)")
+                .execute(io.vertx.sqlclient.Tuple.of(name,
+                        io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.core.security.ApiKeyRepository.hash(key)), role, owner))
+                .map(key);
+    }
+
+    /**
+     * Sets a stored package's owner and sharing flag by plain SQL, bumping the catalog revision and notifying
+     * {@code PACKAGE} in the same transaction, as a real access change does.
+     */
+    public static io.vertx.core.Future<Void> setPackageAccess(io.vertx.sqlclient.Pool pool, String nameAndVersion,
+                                                              java.util.UUID owner, boolean shareable) {
+        int hash = nameAndVersion.indexOf('#');
+        return pool.withTransaction(tx -> tx.preparedQuery("UPDATE " + SCHEMA + ".fhir_implementation_guides "
+                                + "SET owner = $1, is_shareable = $2 WHERE ig_package_id = $3 AND ig_package_version = $4")
+                        .execute(io.vertx.sqlclient.Tuple.of(owner, shareable, nameAndVersion.substring(0, hash),
+                                nameAndVersion.substring(hash + 1)))
+                        .compose(rows -> rows.rowCount() == 1 ? io.vertx.core.Future.succeededFuture()
+                                : io.vertx.core.Future.failedFuture("Package " + nameAndVersion + " is not stored"))
+                        .compose(v -> tx.query("UPDATE " + SCHEMA + ".fhir_package_catalog SET revision = revision + 1 "
+                                + "WHERE id = 1 RETURNING revision").execute())
+                        .compose(rows -> tx.preparedQuery("SELECT pg_notify($1, $2)").execute(io.vertx.sqlclient.Tuple.of(
+                                nzi.fhir.validator.core.service.ConfigRevisionRepository.CHANNEL,
+                                new JsonObject().put("kind", "PACKAGE").put("key", nameAndVersion)
+                                        .put("revision", rows.iterator().next().getLong(0)).encode()))))
+                .mapEmpty();
+    }
+
     /** A Patient without the elements the test profiles require. */
     public static String minimalPatient() {
         return new JsonObject().put("resourceType", "Patient").put("id", "p1").put("active", true).encode();

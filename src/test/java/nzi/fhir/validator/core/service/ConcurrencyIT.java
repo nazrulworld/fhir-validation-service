@@ -98,7 +98,7 @@ class ConcurrencyIT {
             try {
                 List<Future<?>> all = new ArrayList<>();
                 for (int i = 0; i < 8; i++) {
-                    all.add(service.validate(SupportedFhirVersion.R4, "{\"resourceType\":\"Patient\"}", SupportedContentType.JSON, List.of())
+                    all.add(service.validate(nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, "{\"resourceType\":\"Patient\"}", SupportedContentType.JSON, List.of())
                             .map(o -> {
                                 assertTrue(o.result().isSuccessful(), o.result().getMessages().toString());
                                 return o;

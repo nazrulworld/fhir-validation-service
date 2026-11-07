@@ -21,6 +21,7 @@ import ca.uhn.fhir.util.FhirTerser;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import nzi.fhir.validator.core.security.Access;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,12 +34,24 @@ public final class ValidatorSnapshot {
 
     /**
      * Result of one validation.
+     *
+     * @param contextAccess owner and sharing of the context used (spec 005 FR-020); set by the validation service,
+     *                      {@code null} until then
      */
     public record Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
-                          FhirContext fhirContext, String igPackage) {
+                          FhirContext fhirContext, String igPackage, Access contextAccess) {
+        public Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
+                       FhirContext fhirContext, String igPackage) {
+            this(version, result, appliedProfiles, fhirContext, igPackage, null);
+        }
+
         public Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
                        FhirContext fhirContext) {
-            this(version, result, appliedProfiles, fhirContext, null);
+            this(version, result, appliedProfiles, fhirContext, null, null);
+        }
+
+        public Outcome withContextAccess(Access access) {
+            return new Outcome(version, result, appliedProfiles, fhirContext, igPackage, access);
         }
 
         /** {@code name#version} of the IG package, or {@code base}: the {@code X-Validation-Context} header value. */

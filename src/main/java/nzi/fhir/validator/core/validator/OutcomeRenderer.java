@@ -29,8 +29,10 @@ public final class OutcomeRenderer {
                 .put("severity", msg.getSeverity().name())
                 .put("location", msg.getLocationString())
                 .put("message", msg.getMessage())));
+        nzi.fhir.validator.core.security.Access access = outcome.contextAccess();
         return new ValidationResponse(outcome.result().isSuccessful(), messages, outcome.version().name(),
-                outcome.appliedProfiles(), outcome.igPackage()).toJson();
+                outcome.appliedProfiles(), outcome.igPackage(), access == null ? null : access.ownerShortName(),
+                access == null ? null : access.shareable()).toJson();
     }
 
     private static String operationOutcome(ValidatorSnapshot.Outcome outcome, boolean xml) {

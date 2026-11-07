@@ -130,6 +130,11 @@ public class ValidatorRegistry {
     private long reconciledCatalogRevision;
     private volatile Consumer<SupportedFhirVersion> buildFailureListener = v -> { };
     private volatile Events events = Events.NONE;
+    /**
+     * Whether a context may be listed on the unauthenticated health endpoint (spec 005 research R12): its access and
+     * every package's access are shareable. Called under the lock: must be quick and must not call back.
+     */
+    private volatile java.util.function.BiPredicate<SnapshotKey, List<String>> isPublic = (key, packages) -> true;
 
     public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder) {
         this(vertx, builder, DEFAULT_MAX_ON_DEMAND, DEFAULT_BUILD_WAIT_MS, null);
@@ -163,6 +168,10 @@ public class ValidatorRegistry {
         this.catalog = catalog;
     }
 
+    public void setPublicFilter(java.util.function.BiPredicate<SnapshotKey, List<String>> isPublic) {
+        this.isPublic = isPublic == null ? (key, packages) -> true : isPublic;
+    }
+
     public void setEvents(Events events) {
         this.events = events == null ? Events.NONE : events;
     }
@@ -193,6 +202,18 @@ public class ValidatorRegistry {
             }
             return serveable(slot);
         }
+    }
+
+    /**
+     * The packages of a built base or pinned context, without taking the registry lock (spec 005: the access check
+     * runs before every validation, so it must stay off the lock like the hot path itself). Empty for on-demand
+     * contexts and contexts not built yet: the access-ordered on-demand map can't be read without the lock, and the
+     * caller resolves those from the catalog view instead, which gives the same set.
+     */
+    public java.util.Optional<List<String>> peekResolvedPackages(SnapshotKey key) {
+        Slot s = pinned.get(key);
+        ValidatorSnapshot snapshot = s == null ? null : s.snapshot;
+        return snapshot == null ? java.util.Optional.empty() : java.util.Optional.of(snapshot.resolvedPackages());
     }
 
     /** Shorthand for the base context of {@code version}. */
@@ -708,14 +729,30 @@ public class ValidatorRegistry {
             pinned.values().stream()
                     .sorted((a, b) -> a.key.toString().compareTo(b.key.toString()))
                     .forEach(slot -> {
+                        // A private context is counted, never named (spec 005 FR-021): readiness is unauthenticated.
+                        String label = publicLocked(slot) ? label(slot.key) + " validator"
+                                : "a private IG validator context for " + slot.key.fhirVersion().name();
                         if (slot.status == Status.STALE) {
-                            reasons.add(label(slot.key) + " validator is out of date: " + slot.reason);
+                            reasons.add(label + " is out of date" + (publicLocked(slot) ? ": " + slot.reason : ""));
                         } else if (slot.snapshot == null) {
-                            reasons.add(label(slot.key) + " validator is " + slot.status.name().toLowerCase());
+                            reasons.add(label + " is " + slot.status.name().toLowerCase());
                         }
                     });
         }
         return reasons;
+    }
+
+    /** The packages a slot holds or is being built from, for the public filter. */
+    private boolean publicLocked(Slot slot) {
+        if (slot.key.isBase()) {
+            return true;
+        }
+        List<String> packages = slot.snapshot != null ? slot.snapshot.resolvedPackages() : slot.wanted.packages();
+        try {
+            return isPublic.test(slot.key, packages);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private static String label(SnapshotKey key) {
@@ -727,7 +764,9 @@ public class ValidatorRegistry {
     }
 
     /**
-     * Per version: {@code {base: {...}, contexts: [{key, kind, state, ...}]}} (contracts/http-api.md §5).
+     * Per version: {@code {base: {...}, contexts: [{key, kind, state, ...}], privateContexts: {count, states}}}
+     * (contracts/http-api.md §5; spec 005 §8: contexts that aren't fully shareable are only counted, and owners are
+     * never listed).
      */
     public JsonObject details() {
         JsonObject details = new JsonObject();
@@ -738,14 +777,27 @@ public class ValidatorRegistry {
                 pinned.values().stream().filter(s -> s.key.fhirVersion() == version && !s.key.isBase()).forEach(slots::add);
                 onDemand.values().stream().filter(s -> s.key.fhirVersion() == version).forEach(slots::add);
                 slots.sort((a, b) -> a.key.igPackage().compareTo(b.key.igPackage()));
-                slots.forEach(s -> contexts.add(describeSlot(s).put("key", s.key.igPackage())
-                        .put("kind", s.kind == Kind.ON_DEMAND ? "on-demand" : "pinned")));
+                JsonObject privateStates = new JsonObject();
+                for (Status st : Status.values()) {
+                    privateStates.put(st.name(), 0);
+                }
+                int privateCount = 0;
+                for (Slot s : slots) {
+                    if (publicLocked(s)) {
+                        contexts.add(describeSlot(s).put("key", s.key.igPackage())
+                                .put("kind", s.kind == Kind.ON_DEMAND ? "on-demand" : "pinned"));
+                    } else {
+                        privateCount++;
+                        privateStates.put(s.status.name(), privateStates.getInteger(s.status.name()) + 1);
+                    }
+                }
                 VersionState state = versions.get(version);
                 details.put(version.name(), new JsonObject()
                         .put("appliedRevision", state.appliedRevision)
                         .put("latestRevision", state.latestSeenRevision)
                         .put("base", describeSlot(pinned.get(SnapshotKey.base(version))))
-                        .put("contexts", contexts));
+                        .put("contexts", contexts)
+                        .put("privateContexts", new JsonObject().put("count", privateCount).put("states", privateStates)));
             }
         }
         return details;

@@ -6,6 +6,10 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.SqlClient;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
+import nzi.fhir.validator.core.org.Organisations;
+import nzi.fhir.validator.core.security.Access;
+import nzi.fhir.validator.core.security.AccessPolicy;
+import nzi.fhir.validator.core.security.Caller;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -30,23 +34,41 @@ public final class PackageCatalogView {
      * Metadata of one stored package.
      *
      * @param sha256 content hash, or {@code null} for rows stored before hashes were recorded
+     * @param access owner and sharing of the package (spec 005)
      */
     public record Entry(Set<SupportedFhirVersion> declaredFhirVersions, List<String> dependencies, byte[] sha256,
-                        long expandedBytes) {
+                        long expandedBytes, Access access) {
         public Entry {
             declaredFhirVersions = declaredFhirVersions.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(declaredFhirVersions));
             dependencies = List.copyOf(dependencies);
+            access = access == null ? Access.systemShared(Organisations.DEFAULT_SYSTEM_SHORT_NAME) : access;
+        }
+
+        /** A package owned by the system organisation and shareable (the 3.0 behaviour). */
+        public Entry(Set<SupportedFhirVersion> declaredFhirVersions, List<String> dependencies, byte[] sha256,
+                     long expandedBytes) {
+            this(declaredFhirVersions, dependencies, sha256, expandedBytes, null);
         }
     }
 
     public static final PackageCatalogView EMPTY = new PackageCatalogView(0, Map.of());
 
     private final long revision;
+    private final String systemShortName;
     private final Map<String, Entry> packages;
     private final Map<String, Set<String>> versionsByName;
 
     public PackageCatalogView(long revision, Map<String, Entry> packages) {
+        this(revision, packages, Organisations.DEFAULT_SYSTEM_SHORT_NAME);
+    }
+
+    /**
+     * @param systemShortName the system organisation's current short name (spec 005: the owner of the base context);
+     *                        a rename bumps the catalog revision, so every instance's view picks it up
+     */
+    public PackageCatalogView(long revision, Map<String, Entry> packages, String systemShortName) {
         this.revision = revision;
+        this.systemShortName = systemShortName;
         this.packages = Map.copyOf(packages);
         Map<String, Set<String>> byName = new HashMap<>();
         packages.keySet().forEach(key -> {
@@ -58,6 +80,10 @@ public final class PackageCatalogView {
         this.versionsByName = Map.copyOf(frozen);
     }
 
+    public String systemShortName() {
+        return systemShortName;
+    }
+
     public long revision() {
         return revision;
     }
@@ -65,6 +91,30 @@ public final class PackageCatalogView {
     /** The highest stored version of {@code name} by {@link PackageVersionComparator}, the include rule (FR-002). */
     public Optional<String> highest(String name) {
         return PackageVersionComparator.max(versions(name));
+    }
+
+    /**
+     * The highest stored version of {@code name} that {@code caller} may use (spec 005 research R5): a versionless
+     * reference never resolves to, or reveals, a version the caller can't see.
+     */
+    public Optional<String> highestVisible(String name, Caller caller) {
+        Collection<String> all = versions(name);
+        if (caller.system()) {
+            return PackageVersionComparator.max(all);
+        }
+        List<String> visible = new java.util.ArrayList<>(all.size());
+        for (String v : all) {
+            if (AccessPolicy.canUse(caller, access(name + "#" + v))) {
+                visible.add(v);
+            }
+        }
+        return PackageVersionComparator.max(visible);
+    }
+
+    /** Owner and sharing of a stored package, or {@code null} when it isn't stored. */
+    public Access access(String idAndVersion) {
+        Entry e = packages.get(idAndVersion);
+        return e == null ? null : e.access();
     }
 
     public Collection<String> versions(String name) {
@@ -136,11 +186,16 @@ public final class PackageCatalogView {
 
     /** Reads the catalog revision and every package's metadata (never {@code content_raw}). */
     public static Future<PackageCatalogView> load(SqlClient client) {
-        return client.query("SELECT revision FROM " + DB_POSTGRES_SCHEMA_NAME + ".fhir_package_catalog WHERE id = 1").execute()
+        return client.query("SELECT c.revision, (SELECT name_short FROM " + DB_POSTGRES_SCHEMA_NAME + ".organisations WHERE id = '"
+                        + Organisations.SYSTEM_ID + "') FROM " + DB_POSTGRES_SCHEMA_NAME + ".fhir_package_catalog c WHERE c.id = 1").execute()
                 .compose(rev -> {
                     long revision = rev.size() == 0 ? 0 : rev.iterator().next().getLong(0);
-                    return client.query("SELECT ig_package_id, ig_package_version, ig_package_meta, dependencies, content_sha256, "
-                                    + "expanded_bytes FROM " + DB_POSTGRES_SCHEMA_NAME + ".fhir_implementation_guides")
+                    String systemName = rev.size() == 0 || rev.iterator().next().getString(1) == null
+                            ? Organisations.DEFAULT_SYSTEM_SHORT_NAME : rev.iterator().next().getString(1);
+                    return client.query("SELECT g.ig_package_id, g.ig_package_version, g.ig_package_meta, g.dependencies, "
+                                    + "g.content_sha256, g.expanded_bytes, g.owner, o.name_short, g.is_shareable FROM "
+                                    + DB_POSTGRES_SCHEMA_NAME + ".fhir_implementation_guides g JOIN " + DB_POSTGRES_SCHEMA_NAME
+                                    + ".organisations o ON o.id = g.owner")
                             .execute()
                             .map(rows -> {
                                 Map<String, Entry> packages = new HashMap<>();
@@ -153,9 +208,10 @@ public final class PackageCatalogView {
                                             parseDeclaredFhirVersions(meta instanceof JsonObject o ? o : null),
                                             deps == null ? List.of() : List.of(deps),
                                             sha == null ? null : sha.getBytes(),
-                                            expanded == null ? 0 : expanded));
+                                            expanded == null ? 0 : expanded,
+                                            new Access(row.getUUID(6), row.getString(7), row.getBoolean(8))));
                                 }
-                                return new PackageCatalogView(revision, packages);
+                                return new PackageCatalogView(revision, packages, systemName);
                             });
                 });
     }

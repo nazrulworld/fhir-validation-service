@@ -70,11 +70,11 @@ class IgReferenceTest {
         AtomicInteger loads = new AtomicInteger();
         PackageCatalog catalog = catalogOf(db, loads);
         assertEquals(SnapshotKey.of(SupportedFhirVersion.R4, "p#1.0.0"),
-                IgReference.parse("p#1.0.0").resolve(SupportedFhirVersion.R4, catalog).result());
+                IgReference.parse("p#1.0.0").resolve(SupportedFhirVersion.R4, catalog, nzi.fhir.validator.core.security.Caller.system("system")).result());
         assertEquals(SnapshotKey.of(SupportedFhirVersion.R4, "p#2.0.0"),
-                IgReference.parse("p").resolve(SupportedFhirVersion.R4, catalog).result(), "releases outrank pre-releases");
+                IgReference.parse("p").resolve(SupportedFhirVersion.R4, catalog, nzi.fhir.validator.core.security.Caller.system("system")).result(), "releases outrank pre-releases");
         assertEquals(SnapshotKey.of(SupportedFhirVersion.R4, "p#2.0.0"),
-                IgReference.parse("p#latest").resolve(SupportedFhirVersion.R4, catalog).result());
+                IgReference.parse("p#latest").resolve(SupportedFhirVersion.R4, catalog, nzi.fhir.validator.core.security.Caller.system("system")).result());
         assertEquals(0, loads.get(), "known packages resolve from memory");
     }
 
@@ -86,7 +86,7 @@ class IgReferenceTest {
             loads.incrementAndGet();
             return Future.succeededFuture(db.get());
         }, () -> 0L);
-        Future<SnapshotKey> missing = IgReference.parse("missing#1.0.0").resolve(SupportedFhirVersion.R4, catalog);
+        Future<SnapshotKey> missing = IgReference.parse("missing#1.0.0").resolve(SupportedFhirVersion.R4, catalog, nzi.fhir.validator.core.security.Caller.system("system"));
         ProblemException e = assertInstanceOf(ProblemException.class, missing.cause());
         assertEquals(404, e.status());
         assertEquals("package-not-found", e.type());
@@ -97,7 +97,7 @@ class IgReferenceTest {
         db.set(view(Map.of("p#1.0.0", new String[]{"4.0.1"}, "new#1.0.0", new String[]{"4.0.1"})));
         PackageCatalog later = new PackageCatalog(() -> Future.succeededFuture(db.get()), () -> 5_000L);
         assertEquals(SnapshotKey.of(SupportedFhirVersion.R4, "new#1.0.0"),
-                IgReference.parse("new#1.0.0").resolve(SupportedFhirVersion.R4, later).result());
+                IgReference.parse("new#1.0.0").resolve(SupportedFhirVersion.R4, later, nzi.fhir.validator.core.security.Caller.system("system")).result());
     }
 
     @Test
@@ -106,11 +106,68 @@ class IgReferenceTest {
                 "r5only#1.0.0", new String[]{"5.0.0"}, "any#1.0.0", new String[]{})));
         PackageCatalog catalog = catalogOf(db, new AtomicInteger());
         ProblemException e = assertInstanceOf(ProblemException.class,
-                IgReference.parse("r5only").resolve(SupportedFhirVersion.R4, catalog).cause());
+                IgReference.parse("r5only").resolve(SupportedFhirVersion.R4, catalog, nzi.fhir.validator.core.security.Caller.system("system")).cause());
         assertEquals(400, e.status());
         assertEquals("invalid-request", e.type());
         assertTrue(e.detail().contains("r5only#1.0.0") && e.detail().contains("R5"), e.detail());
-        assertTrue(IgReference.parse("any#1.0.0").resolve(SupportedFhirVersion.STU3, catalog).succeeded(),
+        assertTrue(IgReference.parse("any#1.0.0").resolve(SupportedFhirVersion.STU3, catalog, nzi.fhir.validator.core.security.Caller.system("system")).succeeded(),
                 "a package declaring no FHIR version is accepted for every version");
+    }
+
+    // --- spec 005: resolution per caller (research R5) ----------------------------------------------------------
+
+    private static final java.util.UUID ORG_A = java.util.UUID.randomUUID();
+    private static final nzi.fhir.validator.core.security.Caller A = nzi.fhir.validator.core.security.Caller.of(ORG_A, "a",
+            nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE);
+    private static final nzi.fhir.validator.core.security.Caller B = nzi.fhir.validator.core.security.Caller.of(
+            java.util.UUID.randomUUID(), "b", nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE);
+
+    /** {@code p#1.0.0} shareable, {@code p#2.0.0} private to A, {@code r5#1.0.0} an R5 package private to A. */
+    private static PackageCatalogView ownedView() {
+        nzi.fhir.validator.core.security.Access privateA = new nzi.fhir.validator.core.security.Access(ORG_A, "a", false);
+        Map<String, PackageCatalogView.Entry> entries = new java.util.HashMap<>();
+        entries.put("p#1.0.0", new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R4), List.of(), null, 1));
+        entries.put("p#2.0.0", new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R4), List.of(), null, 1, privateA));
+        entries.put("r5#1.0.0", new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R5), List.of(), null, 1, privateA));
+        return new PackageCatalogView(1, entries);
+    }
+
+    @Test
+    void versionlessResolvesToTheHighestVersionTheCallerMayUse() {
+        PackageCatalogView view = ownedView();
+        assertEquals("p#2.0.0", IgReference.parse("p").resolveIn(SupportedFhirVersion.R4, view, A).orElseThrow().igPackage());
+        assertEquals("p#1.0.0", IgReference.parse("p").resolveIn(SupportedFhirVersion.R4, view, B).orElseThrow().igPackage());
+        assertEquals("p#1.0.0", IgReference.parse("p#latest").resolveIn(SupportedFhirVersion.R4, view,
+                nzi.fhir.validator.core.security.Caller.ANONYMOUS).orElseThrow().igPackage());
+    }
+
+    @Test
+    void anInvisibleExactVersionIsAMissNotAnError() {
+        PackageCatalogView view = ownedView();
+        assertTrue(IgReference.parse("p#2.0.0").resolveIn(SupportedFhirVersion.R4, view, B).isEmpty());
+        assertTrue(IgReference.parse("p#2.0.0").resolveIn(SupportedFhirVersion.R4, view, A).isPresent());
+    }
+
+    @Test
+    void theFhirVersionCheckOnlyRunsForVisiblePackages() {
+        PackageCatalogView view = ownedView();
+        assertTrue(IgReference.parse("r5#1.0.0").resolveIn(SupportedFhirVersion.R4, view, B).isEmpty(),
+                "invisible: a miss (404), never the 400 that would reveal the package");
+        ProblemException e = assertThrows(ProblemException.class,
+                () -> IgReference.parse("r5#1.0.0").resolveIn(SupportedFhirVersion.R4, view, A));
+        assertEquals(400, e.status());
+    }
+
+    @Test
+    void anInvisiblePackageRefreshesOnceThenIsNotStored() {
+        AtomicReference<PackageCatalogView> db = new AtomicReference<>(ownedView());
+        AtomicInteger loads = new AtomicInteger();
+        PackageCatalog catalog = catalogOf(db, loads);
+        Future<SnapshotKey> refused = IgReference.parse("p#2.0.0").resolve(SupportedFhirVersion.R4, catalog, B);
+        Future<SnapshotKey> missing = IgReference.parse("q#2.0.0").resolve(SupportedFhirVersion.R4, catalog, B);
+        ProblemException a = assertInstanceOf(ProblemException.class, refused.cause());
+        ProblemException b = assertInstanceOf(ProblemException.class, missing.cause());
+        assertEquals(404, a.status());
+        assertEquals(b.detail().replace("q#2.0.0", "p#2.0.0"), a.detail(), "the same answer as not stored");
     }
 }

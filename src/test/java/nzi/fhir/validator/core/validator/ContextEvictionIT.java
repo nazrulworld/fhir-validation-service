@@ -64,7 +64,7 @@ class ContextEvictionIT extends BaseTestContainer {
     }
 
     private Future<ValidatorSnapshot.Outcome> validate(String ig) {
-        return core.services().validationService().validate(R4, IgReference.parse(ig), TestPackages.minimalPatient(),
+        return core.services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), R4, IgReference.parse(ig), TestPackages.minimalPatient(),
                 SupportedContentType.JSON, List.of(P), Function.identity());
     }
 

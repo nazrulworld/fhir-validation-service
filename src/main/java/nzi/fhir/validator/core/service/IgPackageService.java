@@ -11,6 +11,12 @@ import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.DependencyResolver;
 import nzi.fhir.validator.core.npm.PackageVersionComparator;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
+import nzi.fhir.validator.core.npm.PackageOwnership;
+import nzi.fhir.validator.core.org.Organisations;
+import nzi.fhir.validator.core.security.Access;
+import nzi.fhir.validator.core.security.AccessChange;
+import nzi.fhir.validator.core.security.AccessPolicy;
+import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.web.ProblemException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,6 +99,19 @@ public class IgPackageService {
     static final String STILL_APPLYING_WARNING = "Committed; this instance is still rebuilding its validator, see /health";
 
     public Future<JsonObject> include(SupportedFhirVersion fhirVersion, String name, String requestedVersion) {
+        return include(Caller.system(Organisations.DEFAULT_SYSTEM_SHORT_NAME), fhirVersion, name, requestedVersion,
+                Optional.empty());
+    }
+
+    /**
+     * Includes an IG package for {@code caller} (spec 005 FR-018, research R6). Only packages (and dependencies) the
+     * caller may use can be included; the others are answered like packages that aren't stored. A new context is owned
+     * by the caller's organisation, shareable unless {@code shareable} is false, and only the owner of the IG package
+     * (or the system organisation) may make it private. A context already included, possibly by another organisation,
+     * is left unchanged: the result reports its owner when the caller may use it, otherwise 404.
+     */
+    public Future<JsonObject> include(Caller caller, SupportedFhirVersion fhirVersion, String name, String requestedVersion,
+                                      Optional<Boolean> shareable) {
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
         }
@@ -102,34 +121,60 @@ public class IgPackageService {
                     "igPackageVersion must be 1-64 characters without whitespace"));
         }
         List<String> warnings = new ArrayList<>();
-        return pgPool.withTransaction(tx -> loadCatalog(tx).compose(catalog -> {
-                    Optional<String> concrete = requestedVersion == null || requestedVersion.isBlank()
-                            || "latest".equalsIgnoreCase(requestedVersion)
-                            ? PackageVersionComparator.max(catalog.versions(name))
-                            : catalog.versions(name).contains(requestedVersion) ? Optional.of(requestedVersion) : Optional.empty();
+        // Visibility is decided from data read in this transaction, never from the in-memory view, which may lag.
+        return pgPool.withTransaction(tx -> loadCatalogWithAccess(tx).compose(catalog -> {
+                    boolean latest = requestedVersion == null || requestedVersion.isBlank()
+                            || "latest".equalsIgnoreCase(requestedVersion);
+                    List<String> visible = catalog.catalog().versions(name).stream()
+                            .filter(v -> AccessPolicy.canUse(caller, catalog.access().get(name + "#" + v)))
+                            .toList();
+                    Optional<String> concrete = latest ? PackageVersionComparator.max(visible)
+                            : visible.contains(requestedVersion) ? Optional.of(requestedVersion) : Optional.empty();
                     if (concrete.isEmpty()) {
-                        String label = requestedVersion == null || requestedVersion.isBlank() ? name : name + "#" + requestedVersion;
+                        String label = latest ? name : name + "#" + requestedVersion;
                         return Future.failedFuture(new ProblemException(404, "package-not-found",
                                 "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
                     }
                     String key = name + "#" + concrete.get();
+                    Access packageAccess = catalog.access().get(key);
                     return checkFhirVersion(tx, fhirVersion, name, concrete.get())
                             .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
                         // This key's context only: one IG and its dependencies (FR-021).
-                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog);
+                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog());
                         warnings.addAll(resolution.warnings());
+                        for (String p : resolution.resolved()) {
+                            Access a = catalog.access().get(p);
+                            if (!p.equals(key) && a != null && !AccessPolicy.canUse(caller, a)) {
+                                return Future.failedFuture(ProblemException.dependencyUnavailable());
+                            }
+                        }
                         if (row.included().contains(key)) {
+                            Access existing = row.access().get(key);
+                            if (!AccessPolicy.canUse(caller, existing)) {
+                                return Future.failedFuture(new ProblemException(404, "package-not-found", "IG package " + key
+                                        + " is not stored. Register it first via /igs/upload or /igs/register"));
+                            }
+                            if (shareable.isPresent() && shareable.get() != existing.shareable() && caller.owns(existing.owner())) {
+                                warnings.add(ALREADY_INCLUDED_WARNING);
+                            }
                             return Future.succeededFuture(includeResult(fhirVersion, key, row.revision(), row.included(),
-                                    resolution.resolved()));
+                                    resolution.resolved(), existing));
+                        }
+                        boolean share = shareable.orElse(true);
+                        if (!share && !caller.system() && !caller.owns(packageAccess == null ? null : packageAccess.owner())) {
+                            return Future.failedFuture(new ProblemException(400, "invalid-request",
+                                    PRIVATE_CONTEXT_REFUSED));
                         }
                         Set<String> included = new TreeSet<>(row.included());
                         included.add(key);
                         List<String> includedList = List.copyOf(included);
+                        Access contextAccess = new Access(caller.orgId(), caller.orgShortName(), share);
                         // The new context must fit in this instance's heap (after evicting on-demand contexts).
                         return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild)
                                 .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
-                                        ConfigRevisionRepository.KIND_IG))
-                                .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved()));
+                                        ConfigRevisionRepository.KIND_IG, caller.orgId(), share))
+                                .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved(),
+                                        contextAccess));
                     });
                 }))
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
@@ -142,18 +187,25 @@ public class IgPackageService {
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
-                .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {})", name, requestedVersion, fhirVersion, r.getLong("revision")));
+                .onSuccess(r -> logger.info("Included IG {}#{} in {} (revision {}, owner {}, shareable {}) by {}", name,
+                        requestedVersion, fhirVersion, r.getLong("revision"), r.getString("owner"), r.getBoolean("shareable"),
+                        caller.label()));
     }
 
+    static final String ALREADY_INCLUDED_WARNING = "Already included; change sharing with PATCH /{version}/include-ig";
+    static final String PRIVATE_CONTEXT_REFUSED = "Only the owner of the IG package can make its validator context private";
+
     private static JsonObject includeResult(SupportedFhirVersion fhirVersion, String key, long revision,
-                                            List<String> included, List<String> resolved) {
+                                            List<String> included, List<String> resolved, Access access) {
         return new JsonObject()
                 .put("status", "success")
                 .put("fhirVersion", fhirVersion.name())
                 .put("key", new JsonObject().put("fhirVersion", fhirVersion.name()).put("igPackage", key))
                 .put("revision", revision)
                 .put("included", new JsonArray(List.copyOf(included)))
-                .put("resolved", new JsonArray(resolved));
+                .put("resolved", new JsonArray(resolved))
+                .put("owner", access.ownerShortName())
+                .put("shareable", access.shareable());
     }
 
     /**
@@ -165,6 +217,14 @@ public class IgPackageService {
      * @return {@code {status, fhirVersion, revision, excluded, included, warnings}}
      */
     public Future<JsonObject> exclude(SupportedFhirVersion fhirVersion, String ig) {
+        return exclude(Caller.system(Organisations.DEFAULT_SYSTEM_SHORT_NAME), fhirVersion, ig);
+    }
+
+    /**
+     * Like {@link #exclude(SupportedFhirVersion, String)}, allowed only for the context's owner and the system
+     * organisation; anyone else gets the "not included" answer (spec 005 FR-018).
+     */
+    public Future<JsonObject> exclude(Caller caller, SupportedFhirVersion fhirVersion, String ig) {
         nzi.fhir.validator.core.validator.IgReference ref;
         try {
             ref = nzi.fhir.validator.core.validator.IgReference.parse(ig);
@@ -178,9 +238,8 @@ public class IgPackageService {
         String key = ref.label();
         List<String> warnings = new ArrayList<>();
         return pgPool.withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
-                    if (!row.included().contains(key)) {
-                        return Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
-                                "IG package " + key + " is not included for " + fhirVersion.name()));
+                    if (!row.included().contains(key) || !(caller.system() || caller.owns(row.access().get(key).owner()))) {
+                        return Future.failedFuture(notIncluded(key, fhirVersion));
                     }
                     List<String> remaining = row.included().stream().filter(p -> !p.equals(key)).sorted().toList();
                     return ConfigRevisionRepository.updateIgSet(tx, fhirVersion, remaining, key,
@@ -200,7 +259,93 @@ public class IgPackageService {
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
-                .onSuccess(r -> logger.info("Excluded IG {} in {} (revision {})", key, fhirVersion, r.getLong("revision")));
+                .onSuccess(r -> logger.info("Excluded IG {} in {} (revision {}) by {}", key, fhirVersion, r.getLong("revision"),
+                        caller.label()));
+    }
+
+    private static ProblemException notIncluded(String key, SupportedFhirVersion fhirVersion) {
+        return new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
+                "IG package " + key + " is not included for " + fhirVersion.name());
+    }
+
+    /**
+     * Changes the sharing of, or transfers, a stored IG package (spec 005 FR-019, contracts §5).
+     *
+     * @return {@code {status, name, version, owner, shareable}}
+     */
+    public Future<JsonObject> changePackageAccess(Caller caller, String name, String version, AccessChange change) {
+        return cacheManager.changeAccess(name, version, caller, change)
+                .map(a -> new JsonObject()
+                        .put("status", "success")
+                        .put("name", name)
+                        .put("version", version)
+                        .put("owner", a.ownerShortName())
+                        .put("shareable", a.shareable()));
+    }
+
+    /**
+     * Changes the sharing of, or transfers, an included validator context (spec 005 FR-019, contracts §4), with the
+     * version's configuration row locked: the revision is bumped and {@code IG_ACCESS} notified, so every instance swaps
+     * the context's access without rebuilding it. Check order: 404 (not included, or the caller is neither the owner nor
+     * the system organisation) → 403 (a transfer by a caller that isn't the system organisation) → 400 (body, unknown
+     * or inactive target organisation, or a private context of an IG package the caller doesn't own).
+     *
+     * @param ig an exact {@code name#version}
+     * @return {@code {status, fhirVersion, igPackage, owner, shareable, revision, warnings}}
+     */
+    public Future<JsonObject> changeSnapshotAccess(Caller caller, SupportedFhirVersion fhirVersion, String ig,
+                                                   AccessChange change) {
+        nzi.fhir.validator.core.validator.IgReference ref;
+        try {
+            ref = nzi.fhir.validator.core.validator.IgReference.parse(ig);
+        } catch (ProblemException e) {
+            return Future.failedFuture(e);
+        }
+        if (ref.version() == null) {
+            return Future.failedFuture(new ProblemException(400, "invalid-request",
+                    "An exact name#version is required to change an included IG"));
+        }
+        String key = ref.label();
+        List<String> warnings = new ArrayList<>();
+        return pgPool.withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
+                    Access current = row.included().contains(key) ? row.access().get(key) : null;
+                    if (current == null || !(caller.system() || caller.owns(current.owner()))) {
+                        return Future.failedFuture(notIncluded(key, fhirVersion));
+                    }
+                    if (change.transfers() && !caller.system()) {
+                        return Future.failedFuture(ProblemException.transferForbidden());
+                    }
+                    if (change.invalid() != null) {
+                        return Future.failedFuture(new ProblemException(400, "invalid-request", change.invalid()));
+                    }
+                    Future<Void> privateAllowed = change.shareable().orElse(true) || caller.system()
+                            ? Future.succeededFuture()
+                            : packageAccess(tx, ref.name(), ref.version()).compose(pkg -> pkg.isPresent() && caller.owns(pkg.get().owner())
+                            ? Future.succeededFuture()
+                            : Future.failedFuture(new ProblemException(400, "invalid-request", PRIVATE_CONTEXT_REFUSED)));
+                    return privateAllowed
+                            .compose(v -> PostgresPackageCacheManager.resolveTargetOrganisation(tx, change))
+                            .compose(newOwner -> ConfigRevisionRepository.changeSnapshotAccess(tx, fhirVersion, key, newOwner,
+                                    change.shareable()))
+                            .compose(revision -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)
+                                    .map(after -> new JsonObject()
+                                            .put("status", "success")
+                                            .put("fhirVersion", fhirVersion.name())
+                                            .put("igPackage", key)
+                                            .put("owner", after.access().get(key).ownerShortName())
+                                            .put("shareable", after.access().get(key).shareable())
+                                            .put("revision", revision)));
+                }))
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                                () -> warnings.add(STILL_APPLYING_WARNING))
+                        .recover(err -> {
+                            logger.warn("Access change of IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
+                            warnings.add(NOT_APPLIED_WARNING);
+                            return Future.succeededFuture();
+                        })
+                        .map(v -> result.put("warnings", new JsonArray(warnings))))
+                .onSuccess(r -> logger.info("Changed access of IG {} in {} (owner {}, shareable {}, revision {}) by {}", key,
+                        fhirVersion, r.getString("owner"), r.getBoolean("shareable"), r.getLong("revision"), caller.label()));
     }
 
     /**
@@ -245,6 +390,28 @@ public class IgPackageService {
                 });
     }
 
+    /** The dependency catalog plus each package's access, read in one query (spec 005: include decides visibility). */
+    public record CatalogWithAccess(DependencyResolver.Catalog catalog, Map<String, Access> access) {
+    }
+
+    public static Future<CatalogWithAccess> loadCatalogWithAccess(SqlClient client) {
+        return client.query(("SELECT g.ig_package_id, g.ig_package_version, g.dependencies, g.owner, o.name_short, g.is_shareable "
+                        + "FROM %s.fhir_implementation_guides g JOIN %s.organisations o ON o.id = g.owner")
+                        .formatted(DB_POSTGRES_SCHEMA_NAME, DB_POSTGRES_SCHEMA_NAME))
+                .execute()
+                .map(rows -> {
+                    Map<String, List<String>> packages = new HashMap<>();
+                    Map<String, Access> access = new HashMap<>();
+                    rows.forEach(row -> {
+                        String[] deps = row.getArrayOfStrings(2);
+                        String key = row.getString(0) + "#" + row.getString(1);
+                        packages.put(key, deps == null ? List.of() : List.of(deps));
+                        access.put(key, new Access(row.getUUID(3), row.getString(4), row.getBoolean(5)));
+                    });
+                    return new CatalogWithAccess(DependencyResolver.Catalog.of(packages), access);
+                });
+    }
+
     public static IgPackageService create(Vertx vertx, Pool pgPool) {
         PostgresPackageCacheManager cacheManager = new PostgresPackageCacheManager(vertx, pgPool);
         return new IgPackageService(vertx, pgPool, cacheManager);
@@ -259,7 +426,7 @@ public class IgPackageService {
      *
      * @param downloaded whether the package archive was fetched in this call
      */
-    public record Registration(NpmPackage pkg, boolean downloaded, List<String> warnings) {
+    public record Registration(NpmPackage pkg, boolean downloaded, List<String> warnings, Access access) {
         public Registration {
             warnings = List.copyOf(warnings);
         }
@@ -274,6 +441,22 @@ public class IgPackageService {
      * @return fails with 404 {@code package-not-found} when no source has the package
      */
     public Future<Registration> register(String name, String version, boolean includeDependency) {
+        return register(Caller.system(Organisations.DEFAULT_SYSTEM_SHORT_NAME), name, version, includeDependency, true);
+    }
+
+    /**
+     * Like {@link #register(String, String, boolean)} for {@code caller} (spec 005 FR-016, FR-017): every package newly
+     * stored is owned by the caller's organisation with {@code shareable}; a version already stored keeps its owner and
+     * sharing, and is answered 404 when the caller may not use it.
+     */
+    public Future<Registration> register(Caller caller, String name, String version, boolean includeDependency,
+                                         boolean shareable) {
+        PackageOwnership ownership;
+        try {
+            ownership = PackageOwnership.of(caller, shareable);
+        } catch (IllegalArgumentException e) {
+            return Future.failedFuture(new ProblemException(403, "forbidden", "This API key does not allow this operation"));
+        }
         boolean latest = version == null || version.isBlank() || "latest".equals(version);
         Future<PostgresPackageCacheManager.RegistrationVersion> chosen = latest
                 ? cacheManager.resolveForRegistration(name)
@@ -285,12 +468,20 @@ public class IgPackageService {
             }
             String key = name + "#" + rv.version();
             List<String> warnings = rv.warning() == null ? List.of() : List.of(rv.warning());
-            return cacheManager.isPackageExists(name, rv.version()).compose(stored ->
-                    cacheManager.loadPackage(key, false, includeDependency).compose(pkg -> pkg == null
-                            ? Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
-                            "IG package " + key + " was not found in the configured package registries"))
-                            : Future.succeededFuture(new Registration(pkg, !stored, warnings))));
-        }).onSuccess(r -> logger.info("Registered IG {}#{} (downloaded: {})", r.pkg().name(), r.pkg().version(), r.downloaded()))
+            ProblemException notFound = new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
+                    "IG package " + key + " was not found in the configured package registries");
+            return packageAccess(pgPool, name, rv.version()).compose(stored -> {
+                if (stored.isPresent() && !AccessPolicy.canUse(caller, stored.get())) {
+                    // Stored by another organisation and private: answered like a package no source has (FR-017).
+                    return Future.failedFuture(notFound);
+                }
+                return cacheManager.loadPackage(key, false, includeDependency, ownership)
+                        .compose(pkg -> pkg == null ? Future.failedFuture(notFound)
+                                : packageAccess(pgPool, pkg.name(), pkg.version())
+                                .map(access -> new Registration(pkg, stored.isEmpty(), warnings, access.orElse(null))));
+            });
+        }).onSuccess(r -> logger.info("Registered IG {}#{} (downloaded: {}) by {}", r.pkg().name(), r.pkg().version(),
+                        r.downloaded(), caller.label()))
                 .onFailure(e -> logger.warn("Failed to register IG {}#{}: {}", name, version, e.getMessage()));
     }
 
@@ -321,16 +512,26 @@ public class IgPackageService {
      * @param source {@code UPLOAD} or {@code URL}
      */
     public Future<NpmPackage> registerIg(byte[] igPackageBytes, boolean loadDependencies, String source) {
+        return registerIg(igPackageBytes, loadDependencies, source, PackageOwnership.SYSTEM);
+    }
+
+    /**
+     * Like {@link #registerIg(byte[], boolean, String)}, owned as {@code ownership} says (spec 005 research R7).
+     *
+     * @return fails with 409 {@code conflict} when another organisation stored the same {@code name#version}
+     */
+    public Future<NpmPackage> registerIg(byte[] igPackageBytes, boolean loadDependencies, String source,
+                                         PackageOwnership ownership) {
         if (igPackageBytes == null) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "No package content"));
         }
-        return cacheManager.store(igPackageBytes, source).compose(npmPackage -> {
+        return cacheManager.store(igPackageBytes, source, ownership).compose(npmPackage -> {
             if (!loadDependencies || npmPackage.dependencies() == null || npmPackage.dependencies().isEmpty()) {
                 return Future.succeededFuture(npmPackage);
             }
             List<Future<?>> dependencyFutures = npmPackage.dependencies().stream()
                     .filter(dependency -> !DependencyResolver.isCore(dependency.contains("#") ? dependency.substring(0, dependency.indexOf('#')) : dependency))
-                    .<Future<?>>map(dependency -> cacheManager.loadPackage(dependency, false, true))
+                    .<Future<?>>map(dependency -> cacheManager.loadPackage(dependency, false, true, ownership))
                     .collect(Collectors.toList());
             return Future.join(dependencyFutures)
                     .transform(ar -> {
@@ -349,6 +550,16 @@ public class IgPackageService {
         return cacheManager.storeFile(path, "UPLOAD");
     }
 
+    /** Like {@link #registerUploadedFile(String)}, owned as {@code ownership} says (spec 005 research R7). */
+    public Future<NpmPackage> registerUploadedFile(String path, PackageOwnership ownership) {
+        return cacheManager.storeFile(path, "UPLOAD", ownership);
+    }
+
+    /** Owner and sharing of a stored package (for responses, FR-020). */
+    public Future<Optional<Access>> access(String name, String version) {
+        return packageAccess(pgPool, name, version);
+    }
+
     public Future<NpmPackage> loadIgPackage(String name, String version) {
         if (name == null || version == null) {
             return Future.failedFuture("IG name and version cannot be null");
@@ -359,14 +570,16 @@ public class IgPackageService {
     }
 
     /**
-     * Declared dependencies of a stored package; 404 problem if it is not stored.
+     * Declared dependencies of a stored package; 404 problem if it is not stored, or {@code caller} may not use it
+     * (spec 005: the same answer).
      */
-    public Future<JsonObject> getDependencyGraph(String name, String version) {
-        return pgPool.preparedQuery("SELECT dependencies FROM %s.fhir_implementation_guides ".formatted(DB_POSTGRES_SCHEMA_NAME)
-                        + "WHERE ig_package_id = $1 AND ig_package_version = $2")
+    public Future<JsonObject> getDependencyGraph(Caller caller, String name, String version) {
+        return pgPool.preparedQuery("SELECT dependencies, owner, is_shareable FROM %s.fhir_implementation_guides "
+                                .formatted(DB_POSTGRES_SCHEMA_NAME) + "WHERE ig_package_id = $1 AND ig_package_version = $2")
                 .execute(Tuple.of(name, version))
                 .compose(rows -> {
-                    if (rows.size() == 0) {
+                    if (rows.size() == 0 || !AccessPolicy.canUse(caller, new Access(rows.iterator().next().getUUID(1), null,
+                            rows.iterator().next().getBoolean(2)))) {
                         return Future.failedFuture(notStored(name, version));
                     }
                     String[] deps = rows.iterator().next().getArrayOfStrings(0);
@@ -378,10 +591,13 @@ public class IgPackageService {
     }
 
     /**
-     * File listing of a stored package (the deprecated "conformance" operation); 404 problem if it is not stored.
+     * File listing of a stored package (the deprecated "conformance" operation); 404 problem if it is not stored, or
+     * {@code caller} may not use it (spec 005: the same answer).
      */
-    public Future<JsonObject> listPackageFiles(String name, String version) {
-        return cacheManager.loadRawPackage(name, version)
+    public Future<JsonObject> listPackageFiles(Caller caller, String name, String version) {
+        return packageAccess(pgPool, name, version)
+                .compose(access -> AccessPolicy.canUse(caller, access.orElse(null))
+                        ? cacheManager.loadRawPackage(name, version) : Future.succeededFuture(null))
                 .compose(raw -> raw == null ? Future.failedFuture(notStored(name, version)) : cacheManager.parse(raw.getBytes()))
                 .compose(pkg -> {
                     try {
@@ -393,6 +609,16 @@ public class IgPackageService {
                         return Future.failedFuture(e);
                     }
                 });
+    }
+
+    /** Owner and sharing of a stored package (with the owner's short name), or empty when it isn't stored. */
+    static Future<Optional<Access>> packageAccess(SqlClient client, String name, String version) {
+        return client.preparedQuery("SELECT g.owner, o.name_short, g.is_shareable FROM %s.fhir_implementation_guides g "
+                                .formatted(DB_POSTGRES_SCHEMA_NAME) + "JOIN %s.organisations o ON o.id = g.owner "
+                                .formatted(DB_POSTGRES_SCHEMA_NAME) + "WHERE g.ig_package_id = $1 AND g.ig_package_version = $2")
+                .execute(Tuple.of(name, version))
+                .map(rows -> rows.size() == 0 ? Optional.empty() : Optional.of(new Access(rows.iterator().next().getUUID(0),
+                        rows.iterator().next().getString(1), rows.iterator().next().getBoolean(2))));
     }
 
     private static ProblemException notStored(String name, String version) {

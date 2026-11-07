@@ -61,6 +61,8 @@ public class ProblemException extends RuntimeException {
 
     public static final String TYPE_UNKNOWN_PROFILE = "unknown-profile";
     public static final String TYPE_PACKAGE_NOT_FOUND = "package-not-found";
+    public static final String TYPE_DEPENDENCY_NOT_FOUND = "dependency-not-found";
+    public static final String TYPE_CONFLICT = "conflict";
 
     /** The {@code ig} package of a validation request is not stored (spec 004 FR-003). The name is client input. */
     public static ProblemException igNotStored(String label) {
@@ -68,12 +70,36 @@ public class ProblemException extends RuntimeException {
                 + " is not stored. Register or upload it first via /igs/register or /igs/upload");
     }
 
+    /** A stored package that isn't stored, or that the caller may not see (spec 005: the same answer). */
+    public static ProblemException packageNotStored(String key) {
+        return new ProblemException(404, TYPE_PACKAGE_NOT_FOUND, "IG package " + key + " is not stored");
+    }
+
+    /** A transfer of ownership by a caller that isn't the system organisation (spec 005 FR-019). */
+    public static ProblemException transferForbidden() {
+        return new ProblemException(403, "forbidden", "Only the system organisation can transfer ownership");
+    }
+
     /**
      * A dependency of the chosen IG package is not stored, so its validator context cannot be built (spec 004 FR-017).
      */
     public static ProblemException dependencyNotFound(String missing) {
-        return new ProblemException(424, "dependency-not-found", "A dependency of the requested IG package is not stored: "
+        return new ProblemException(424, TYPE_DEPENDENCY_NOT_FOUND, "A dependency of the requested IG package is not stored: "
                 + missing + ". Register or upload it via /igs/register or /igs/upload");
+    }
+
+    /**
+     * A dependency of the chosen IG package exists but isn't visible to the caller (spec 005 FR-012, research R5). The
+     * text names no package, so the refusal reveals nothing about content the caller may not use.
+     */
+    public static ProblemException dependencyUnavailable() {
+        return new ProblemException(424, TYPE_DEPENDENCY_NOT_FOUND, "A dependency of the requested IG package is not "
+                + "available. Register or upload it via /igs/register or /igs/upload");
+    }
+
+    /** Upload or download of a {@code name#version} another organisation stored (spec 005 FR-017, research R7). */
+    public static ProblemException conflictOwnedElsewhere(String key) {
+        return new ProblemException(409, TYPE_CONFLICT, "IG package " + key + " is already stored by another organisation");
     }
 
     /**

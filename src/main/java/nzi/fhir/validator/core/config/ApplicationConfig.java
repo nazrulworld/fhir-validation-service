@@ -104,6 +104,24 @@ public final class ApplicationConfig {
     public long shutdownPreDrainMs() { return section("shutdown").getLong("preDrainMs"); }
     public long shutdownGraceMs() { return section("shutdown").getLong("graceMs"); }
 
+    /**
+     * The configured fields of the system organisation ({@code FV_SYSTEM_ORG_*}, spec 005 FR-004): organisation field
+     * name → value, only the fields that are set. Address lines ({@code a|b}) are a {@code List<String>}.
+     */
+    public java.util.Map<String, Object> systemOrganisation() {
+        java.util.Map<String, Object> fields = new java.util.LinkedHashMap<>();
+        JsonObject systemOrg = section("systemOrg");
+        for (String field : systemOrg.fieldNames()) {
+            Object value = systemOrg.getValue(field);
+            if (value == null) {
+                continue;
+            }
+            fields.put(field, "addressLines".equals(field)
+                    ? List.of(String.valueOf(value).split("\\|", -1)) : String.valueOf(value));
+        }
+        return fields;
+    }
+
     public String pgHost() { return section("pg").getString("host"); }
     public int pgPort() { return section("pg").getInteger("port"); }
     public String pgDatabase() { return section("pg").getString("database"); }

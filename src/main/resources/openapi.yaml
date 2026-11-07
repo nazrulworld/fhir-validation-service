@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 3.0.0
+  version: 3.1.0
 
 servers:
   - url: http://localhost:8880
@@ -98,6 +98,11 @@ paths:
         dependency of the ig package is not stored) and unknown-profile (a requested profile is not available; see
         UnknownProfileProblem). 503 covers not-ready (including an ig context still being built), overloaded and
         insufficient-capacity; 413 package-too-large means the ig context can never fit on this instance.
+        Organisation ownership (3.1.0): only IG packages and contexts the caller's organisation owns, or that are
+        shareable, can be used; an IG package the caller may not use is answered exactly like one that is not stored
+        (404), and a dependency the caller may not use gives 424 without naming it. 403 forbidden means the API key's
+        organisation is deactivated. X-Validation-Context-Owner and X-Validation-Context-Shareable report the owner
+        (short name) and sharing of the context used.
       parameters:
         - name: version
           in: path
@@ -113,7 +118,9 @@ paths:
             Without a version (or with `latest`) the highest stored version is used; the response reports the
             concrete version. Any stored package that supports this FHIR version can be named: included packages are
             pre-built, others are built on first use from stored packages only (nothing is downloaded). Absent: the
-            core specification only. One value; at most 256 characters.
+            core specification only. One value; at most 256 characters. Only packages your organisation owns or
+            that are shareable can be named. Anonymous callers can name shareable packages only. Without a version,
+            the highest version you may use is chosen.
           schema:
             type: string
             maxLength: 256
@@ -155,6 +162,15 @@ paths:
               description: The IG package (name#version) the result came from, or `base` for the core-only context
               schema:
                 type: string
+            X-Validation-Context-Owner:
+              description: Short name of the organisation owning the validator context (the system organisation for `base`)
+              schema:
+                type: string
+            X-Validation-Context-Shareable:
+              description: Whether the validator context is shareable (`true`/`false`)
+              schema:
+                type: string
+                enum: ['true', 'false']
           content:
             application/json:
               schema:
@@ -172,8 +188,10 @@ paths:
                 description: FHIR OperationOutcome (XML)
         '400':
           $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/PackageNotFound'
         '406':
           $ref: '#/components/responses/Problem'
         '413':
@@ -181,7 +199,13 @@ paths:
         '415':
           $ref: '#/components/responses/Problem'
         '424':
-          $ref: '#/components/responses/Problem'
+          description: >-
+            dependency-not-found: a dependency of the ig package is not stored (named), or exists but is not available
+            to the caller (not named): "A dependency of the requested IG package is not available."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '500':
           $ref: '#/components/responses/Problem'
         '503':
@@ -198,7 +222,10 @@ paths:
         response confirms the committed configuration; other instances apply it within the propagation window. A
         context that would not fit in this instance's heap is refused with 413 package-too-large before it is
         committed. A package whose declared FHIR versions don't include this version is refused with 400
-        invalid-request.
+        invalid-request. Organisation ownership (3.1.0): the new context is owned by the caller's organisation and is
+        shareable unless `shareable` is false; a package (or dependency) the caller may not use is answered 404. When
+        the version is already included (possibly by another organisation) nothing changes and the response reports
+        the existing owner and sharing.
       parameters:
         - name: version
           in: path
@@ -219,6 +246,13 @@ paths:
                 igPackageVersion:
                   type: string
                   default: latest
+                shareable:
+                  type: boolean
+                  default: true
+                  description: >-
+                    Sharing of a newly included context. false is allowed only when your organisation owns the IG
+                    package (or you are the system organisation). Ignored, with a warning, when the context is
+                    already included.
       responses:
         '200':
           description: IG included
@@ -228,8 +262,12 @@ paths:
                 $ref: '#/components/schemas/IncludeResponse'
         '400':
           $ref: '#/components/responses/Problem'
-        '404':
+        '401':
           $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
         '413':
           $ref: '#/components/responses/Problem'
         '500':
@@ -242,7 +280,8 @@ paths:
       description: >-
         Removes one name#version from the included set and propagates to every instance. The package stays stored
         and can still be named in ?ig= on validation (it is then built on demand). Administrative: requires an ADMIN
-        key. 404 package-not-found when that version is not included.
+        key. 404 package-not-found when that version is not included, or when the caller's organisation doesn't own
+        its context and isn't the system organisation (3.1.0).
       parameters:
         - name: version
           in: path
@@ -275,11 +314,63 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+    patch:
+      operationId: validationApiChangeIncludedIgAccess
+      summary: Change sharing or transfer ownership of an included validator context
+      description: >-
+        Administrative (3.1.0). The context's owner or the system organisation may change `shareable`; only the
+        system organisation may transfer ownership (`owner`) to another active organisation. Checks run in this
+        order: 404 (not included, or the caller is neither the owner nor the system organisation), 403 (a transfer by
+        a caller that isn't the system organisation), 400 (body, unknown or inactive target organisation, or a
+        private context of an IG package owned by another organisation). The change takes effect on every instance
+        within the propagation window; the context is not rebuilt.
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/FhirVersion'
+        - name: ig
+          in: query
+          required: true
+          description: The exact included IG package version, name#version (URL-encode `#` as %23); no `latest`
+          schema:
+            type: string
+            maxLength: 256
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessChangeRequest'
+      responses:
+        '200':
+          description: Access changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncludeAccessResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 
   /igs/upload:
     post:
       operationId: igPackageApiUploadIg
       summary: Upload and store an Implementation Guide package
+      description: >-
+        The stored package is owned by the caller's organisation (3.1.0). Uploading a name#version another
+        organisation stored gives 409 conflict, unless the caller is the system organisation; a replacement keeps the
+        stored owner and sharing.
       requestBody:
         required: true
         content:
@@ -293,6 +384,13 @@ paths:
                   type: string
                   format: binary
                   description: The IG package archive (.tgz). Size limit is FV_HTTP_MAX_BODY_MB.
+                shareable:
+                  type: string
+                  enum: ['true', 'false']
+                  default: 'true'
+                  description: >-
+                    Sharing of the stored package (3.1.0). Ignored when the version is already stored: its owner and
+                    sharing are kept.
             encoding:
               file:
                 contentType: application/octet-stream, application/gzip, application/x-gzip, application/x-tar, application/x-compressed-tar
@@ -304,6 +402,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/IgRegistrationResponse'
         '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
           $ref: '#/components/responses/Problem'
         '413':
           $ref: '#/components/responses/Problem'
@@ -324,6 +428,10 @@ paths:
         it is downloaded and stored (with its dependencies when includeDependency is true). If no registry can be
         consulted or none lists the package, the highest stored version is returned with a warning; 404
         package-not-found when nothing is stored. `downloaded` says whether the archive was fetched in this call.
+        Organisation ownership (3.1.0): every package newly stored by the call, downloaded dependencies included, is
+        owned by the caller's organisation with `shareable` from the request (default true; the package licence is
+        not used). A version that is already stored keeps its owner and sharing, and is answered 404 when the caller
+        may not use it. A downloadUrl archive whose name#version another organisation stored gives 409 conflict.
       requestBody:
         required: true
         content:
@@ -342,6 +450,10 @@ paths:
                 includeDependency:
                   type: boolean
                   default: true
+                shareable:
+                  type: boolean
+                  default: true
+                  description: Sharing of every package newly stored by this call (3.1.0)
       responses:
         '200':
           description: IG package stored
@@ -351,7 +463,13 @@ paths:
                 $ref: '#/components/schemas/IgRegistrationResponse'
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '409':
           $ref: '#/components/responses/Problem'
         '413':
           $ref: '#/components/responses/Problem'
@@ -360,6 +478,51 @@ paths:
         '500':
           $ref: '#/components/responses/Problem'
         '503':
+          $ref: '#/components/responses/Problem'
+
+  /igs/{name}/{version}:
+    patch:
+      operationId: igPackageApiChangeAccess
+      summary: Change sharing or transfer ownership of a stored IG package
+      description: >-
+        Administrative (3.1.0). The package's owner or the system organisation may change `shareable`; only the
+        system organisation may transfer ownership (`owner`) to another active organisation. Checks run in this
+        order: 404 (not stored, or the caller is neither the owner nor the system organisation), 403 (a transfer by a
+        caller that isn't the system organisation), 400 (body, unknown or inactive target organisation). The change
+        takes effect on every instance within the propagation window; no validator context is rebuilt.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessChangeRequest'
+      responses:
+        '200':
+          description: Access changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IgAccessResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '500':
           $ref: '#/components/responses/Problem'
 
   /igs/{name}/{version}/dependencies:
@@ -431,7 +594,7 @@ paths:
                     items:
                       type: string
         '404':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/PackageNotFound'
         '500':
           $ref: '#/components/responses/Problem'
 
@@ -441,13 +604,30 @@ components:
       type: http
       scheme: bearer
       description: >-
-        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig, exclude-ig) always
-        require an ADMIN key. Validation and read operations require a VALIDATE or ADMIN key
+        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig, exclude-ig,
+        and the PATCH operations that change sharing or ownership) always require an ADMIN key. Every key belongs to
+        an organisation (3.1.0); a key of a deactivated organisation gets 403. Validation and read operations require a VALIDATE or ADMIN key
         only when FV_AUTH_ANONYMOUS_VALIDATE=false. Enforced by the service (see contracts/http-api.md).
 
   responses:
     Problem:
       description: Error (RFC 9457 problem details)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PackageNotFound:
+      description: >-
+        package-not-found. Also returned when the package or context is owned by another organisation and isn't
+        shareable; the two cases can't be told apart.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: >-
+        forbidden: the API key's role doesn't allow this operation, the key's organisation is deactivated, or
+        (transfers) the caller isn't a system organisation administrator.
       content:
         application/problem+json:
           schema:
@@ -477,8 +657,10 @@ components:
           description: >-
             Per FHIR version: appliedRevision, latestRevision, `base` (the core-only context: state, packages,
             packageBytes) and `contexts` (every IG context on this instance: key name#version, kind pinned|on-demand,
-            state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason). Readiness
-            counts the base and pinned contexts only.
+            state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason). Since
+            3.1.0 `contexts` lists only contexts that are shareable and whose packages are all shareable; the others
+            are summarised in `privateContexts` {count, states {ACTIVE, BUILDING, STALE, ABSENT}}. Owners are never
+            listed. Readiness counts the base and pinned contexts only.
         reasons:
           type: array
           items:
@@ -586,6 +768,12 @@ components:
           type: string
           nullable: true
           description: The concrete IG package (name#version) the result came from; null when the base context was used.
+        igOwner:
+          type: string
+          description: Short name of the organisation owning the validator context (the system organisation for base, 3.1.0)
+        igShareable:
+          type: boolean
+          description: Whether the validator context is shareable (true for base, 3.1.0)
 
     OperationOutcome:
       type: object
@@ -623,6 +811,11 @@ components:
           type: array
           items:
             type: string
+        owner:
+          type: string
+          description: Short name of the organisation owning the context (may be another organisation when it was already included)
+        shareable:
+          type: boolean
         warnings:
           type: array
           items:
@@ -664,7 +857,70 @@ components:
         downloaded:
           type: boolean
           description: True when the archive was fetched in this call
+        owner:
+          type: string
+          description: Short name of the organisation owning the stored package (3.1.0)
+        shareable:
+          type: boolean
+          description: The stored package's sharing; unchanged when the version was already stored (3.1.0)
         warnings:
           type: array
           items:
             type: string
+
+    OwnershipFields:
+      type: object
+      properties:
+        owner:
+          type: string
+          description: Short name of the owning organisation.
+        shareable:
+          type: boolean
+          description: True when every caller may use it; false when only the owner (and the system organisation) may.
+
+    AccessChangeRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        shareable:
+          type: boolean
+        owner:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{2,32}$'
+          description: >-
+            Transfer to this organisation (short name). System organisation administrators only; the target must exist
+            and be active.
+
+    IncludeAccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/OwnershipFields'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum: [success]
+            fhirVersion:
+              type: string
+            igPackage:
+              type: string
+            revision:
+              type: integer
+              format: int64
+            warnings:
+              type: array
+              items:
+                type: string
+
+    IgAccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/OwnershipFields'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum: [success]
+            name:
+              type: string
+            version:
+              type: string

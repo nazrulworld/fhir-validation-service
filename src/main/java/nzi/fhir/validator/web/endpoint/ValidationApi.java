@@ -12,6 +12,8 @@ import nzi.fhir.validator.core.model.MediaTypes;
 import nzi.fhir.validator.core.model.MediaTypes.RequestFormat;
 import nzi.fhir.validator.core.model.MediaTypes.ResponseFormat;
 import nzi.fhir.validator.core.model.ValidationRequestOptions;
+import nzi.fhir.validator.core.security.Access;
+import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.service.FhirValidationService;
 import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.core.validator.IgReference;
@@ -63,6 +65,9 @@ public class ValidationApi {
         // Method: DELETE, Path: "/:version/include-ig?ig=name#version"
         routerBuilder.operation("validationApiExcludeIg")
                 .handler(this::handleExcludeImplementationGuide);
+        // Method: PATCH, Path: "/:version/include-ig?ig=name#version" (spec 005: sharing and ownership)
+        routerBuilder.operation("validationApiChangeIncludedIgAccess")
+                .handler(this::handleChangeIncludedIgAccess);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -109,8 +114,9 @@ public class ValidationApi {
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         Future<Rendered> rendered = validationService
-                .validate(version, ig, ctx.body().asString(), contentType, profiles,
-                        outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel()))
+                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles,
+                        outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel(),
+                                outcome.contextAccess()))
                 .recover(err -> {
                     if (err instanceof DataFormatException) {
                         return Future.failedFuture(invalidResource(err.getMessage()));
@@ -122,17 +128,29 @@ public class ValidationApi {
                     }
                     return Future.failedFuture(err);
                 });
-        ErrorResponder.respond(ctx, rendered, (rc, result) -> rc.response()
-                .setStatusCode(200)
-                .putHeader("Content-Type", responseFormat.mimeType())
-                .putHeader(VALIDATION_CONTEXT_HEADER, result.context())
-                .end(result.body()));
+        ErrorResponder.respond(ctx, rendered, (rc, result) -> {
+            rc.response()
+                    .setStatusCode(200)
+                    .putHeader("Content-Type", responseFormat.mimeType())
+                    .putHeader(VALIDATION_CONTEXT_HEADER, result.context());
+            if (result.access() != null) {
+                rc.response()
+                        .putHeader(VALIDATION_CONTEXT_OWNER_HEADER, result.access().ownerShortName())
+                        .putHeader(VALIDATION_CONTEXT_SHAREABLE_HEADER, String.valueOf(result.access().shareable()));
+            }
+            rc.response().end(result.body());
+        });
     }
+
+    /** The short name of the organisation owning the validator context of a 200 result (spec 005 FR-020). */
+    public static final String VALIDATION_CONTEXT_OWNER_HEADER = "X-Validation-Context-Owner";
+    /** Whether the validator context of a 200 result is shareable, {@code true} or {@code false} (spec 005 FR-020). */
+    public static final String VALIDATION_CONTEXT_SHAREABLE_HEADER = "X-Validation-Context-Shareable";
 
     /** Names the validator context a 200 result came from: the IG package {@code name#version}, or {@code base}. */
     public static final String VALIDATION_CONTEXT_HEADER = "X-Validation-Context";
 
-    private record Rendered(String body, String context) {
+    private record Rendered(String body, String context, Access access) {
     }
 
     /**
@@ -196,8 +214,37 @@ public class ValidationApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "igPackageId is required"));
             return;
         }
-        ErrorResponder.respond(ctx, igPackageService.include(version, body.getString("igPackageId"),
-                body.getString("igPackageVersion", "latest")));
+        Object shareable = body.getValue("shareable");
+        if (shareable != null && !(shareable instanceof Boolean)) {
+            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
+            return;
+        }
+        ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
+                body.getString("igPackageId"), body.getString("igPackageVersion", "latest"),
+                java.util.Optional.ofNullable((Boolean) shareable)));
+    }
+
+    /** {@code PATCH /{version}/include-ig?ig=name#version} (spec 005 FR-019, contracts §4). */
+    private void handleChangeIncludedIgAccess(RoutingContext ctx) {
+        SupportedFhirVersion version;
+        List<String> values = ctx.queryParam("ig");
+        try {
+            version = version(ctx);
+            if (values == null || values.size() != 1) {
+                throw new ProblemException(400, "invalid-request", "Exactly one ig=name#version is required");
+            }
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
+        JsonObject body;
+        try {
+            body = ctx.body().asJsonObject();
+        } catch (RuntimeException e) {
+            body = null;
+        }
+        ErrorResponder.respond(ctx, igPackageService.changeSnapshotAccess(ApiKeyAuthHandler.caller(ctx), version,
+                values.get(0), nzi.fhir.validator.core.security.AccessChange.parse(body)));
     }
 
     /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/include-ig?ig=name#version}. */
@@ -213,6 +260,6 @@ public class ValidationApi {
             ErrorResponder.fail(ctx, e);
             return;
         }
-        ErrorResponder.respond(ctx, igPackageService.exclude(version, values.get(0)));
+        ErrorResponder.respond(ctx, igPackageService.exclude(ApiKeyAuthHandler.caller(ctx), version, values.get(0)));
     }
 }

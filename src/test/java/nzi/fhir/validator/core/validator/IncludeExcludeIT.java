@@ -101,7 +101,7 @@ class IncludeExcludeIT extends BaseTestContainer {
     }
 
     private Future<ValidatorSnapshot.Outcome> validate(String ig, String profile) {
-        return services().validationService().validate(R4, IgReference.parse(ig), TestPackages.minimalPatient(),
+        return services().validationService().validate(nzi.fhir.validator.core.security.Caller.system("system"), R4, IgReference.parse(ig), TestPackages.minimalPatient(),
                 SupportedContentType.JSON, List.of(profile), Function.identity());
     }
 

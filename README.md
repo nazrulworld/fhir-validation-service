@@ -364,28 +364,65 @@ have it pre-built.
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
-### API keys
+### Organisations and API keys
 
-`FV_ADMIN_API_KEY` installs the bootstrap administrator key at startup. There is no API for other keys in 1.x: manage
-them in the `fhir_validator_schema.api_keys` table, which stores only the SHA-256 of each key. Roles are `ADMIN` and
-`VALIDATE` (validation and the package read endpoints, needed when `FV_AUTH_ANONYMOUS_VALIDATE=false`).
+Since 3.1.0 every API key, IG package and included IG belongs to an **organisation**. A built-in **system
+organisation** owns everything that existed before the upgrade, and `FV_ADMIN_API_KEY` (the bootstrap administrator key)
+belongs to it. Organisations and keys are managed with the command line in the service jar and image (no SQL needed):
 
 ```bash
-KEY=$(openssl rand -hex 32)      # give this to the client; it is not stored
-psql "$DB_URL" -v key="$KEY" <<'SQL'
--- add (or replace) a key
-INSERT INTO fhir_validator_schema.api_keys (name, key_hash, role)
-VALUES ('reporting-service', sha256(convert_to(:'key', 'UTF8')), 'VALIDATE')
-ON CONFLICT (name) DO UPDATE SET key_hash = EXCLUDED.key_hash, role = EXCLUDED.role, revoked_at = NULL;
-SQL
-
-# revoke
-psql "$DB_URL" -c "UPDATE fhir_validator_schema.api_keys SET revoked_at = now() WHERE name = 'reporting-service'"
+APP="docker compose run --rm validator fv-admin"     # or: java -jar target/fhir-validation-service-*.jar
+$APP org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL --country DK
+$APP org create --file beta.json --email ops@beta.example      # a JSON file, with flags overriding its fields
+$APP org update --name-short acme --phone "+45 12 34 56 78"   # only the given fields change
+$APP key create --org acme --name acme-ci --role VALIDATE      # prints the key once; only its hash is stored
+$APP key list --org acme                                        # never shows keys or hashes
+$APP key revoke --name acme-ci
+$APP org deactivate --name-short acme                           # its keys get 403 within FV_AUTH_CACHE_TTL_MS
+$APP org activate --name-short acme
 ```
 
-To rotate a key without downtime, add the new one under a second name, switch the client over, then revoke the old one.
-Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so a revoked key keeps working for up to that
-long. Don't use the name `bootstrap`: that row is overwritten from `FV_ADMIN_API_KEY` at every start.
+Commands print one JSON document on stdout, write errors to stderr as `error: <code>: <message>`, and exit with 0
+(ok), 2 (usage or invalid value), 3 (not found), 4 (conflict) or 1 (anything else). They use the same `FV_PG_*`
+settings as the service and apply migrations first. The full reference is
+[`specs/005-organisation-ownership/contracts/cli.md`](specs/005-organisation-ownership/contracts/cli.md).
+
+Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints, needed when
+`FV_AUTH_ANONYMOUS_VALIDATE=false`). To rotate a key without downtime, create the new one under a second name, switch
+the client over, then revoke the old one. Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so
+revocations and organisation deactivations take effect within that time. The name `bootstrap` is reserved for
+`FV_ADMIN_API_KEY`.
+
+#### Who may use what
+
+- **IG packages** stored by register, upload or URL download belong to the caller's organisation, dependencies
+  included. They are **shareable** unless the request says `"shareable": false` (upload: form field `shareable=false`).
+  The package licence is not used.
+- **Included IGs** (validator contexts) belong to the organisation that included them, shareable by default
+  (`"shareable": false` in the include body). Only the owner of the IG package can include it as private.
+- A caller may use content its organisation owns, content that is shareable, and (the system organisation) everything.
+  Anonymous callers may use shareable content only. A validation context is usable only when it and every package it
+  is built from are usable.
+- Content you may not use is answered exactly like content that isn't stored: 404 `package-not-found`, or 424
+  `dependency-not-found` without naming the dependency. Uploading a `name#version` another organisation stored answers
+  409 `conflict`.
+- Validation responses report the context's owner and sharing: `igOwner`/`igShareable` in the JSON body and the
+  `X-Validation-Context-Owner`/`X-Validation-Context-Shareable` headers.
+
+Change sharing, or (system organisation only) transfer ownership, over HTTP or with the command line:
+
+```bash
+curl -H "Authorization: Bearer $ACME_ADMIN" -X PATCH -H 'Content-Type: application/json' \
+  --data '{"shareable": false}' http://127.0.0.1:8880/igs/acme.core/1.0.0
+curl -H "Authorization: Bearer $FV_ADMIN_API_KEY" -X PATCH -H 'Content-Type: application/json' \
+  --data '{"owner": "beta"}' 'http://127.0.0.1:8880/R4/include-ig?ig=acme.core%231.0.0'
+$APP package share --ig acme.core#1.0.0 --shareable true
+$APP snapshot transfer --fhir-version R4 --ig acme.core#1.0.0 --to beta
+```
+
+The owner (or the system organisation) may change `shareable`; another organisation gets 404, and an owner that
+isn't the system organisation gets 403 for a transfer. Changes reach every instance within seconds and never rebuild a
+validator.
 
 ### Database connection security
 
@@ -424,6 +461,10 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_IG_BUILD_WAIT_MS`                                                        | min(10000, request timeout / 2)                                 | how long a request waits for an on-demand IG build before 503     |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |
 | `FV_CORS_ALLOWED_ORIGINS`                                                    | *(none)*                                                        | browser origins allowed to call the API                           |
+| `FV_SYSTEM_ORG_NAME_SHORT`, `FV_SYSTEM_ORG_NAME_LONG`                        | `system`, `FHIR Validation Service`                             | the system organisation's names, applied at every start (3.1.0)   |
+| `FV_SYSTEM_ORG_EMAIL`, `_PHONE`, `_WEBSITE`, `_COUNTRY`, `_POST_CODE`        | *(unset)*                                                       | the system organisation's contact details (3.1.0)                 |
+| `FV_SYSTEM_ORG_ADDRESS_LINES`                                                | *(unset)*                                                       | address lines separated by `\|` (3.1.0)                           |
+| `FV_SYSTEM_ORG_CONTACT_PERSON_NAME`, `_MOBILE`, `_EMAIL`                     | *(unset)*                                                       | the system organisation's contact person (3.1.0)                  |
 
 ## Development
 

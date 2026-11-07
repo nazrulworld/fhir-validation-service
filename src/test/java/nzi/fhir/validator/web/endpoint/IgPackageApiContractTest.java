@@ -88,6 +88,9 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     // Spec 004 FR-030: every registration response says whether an archive was downloaded.
                     assertEquals(Boolean.TRUE, r.bodyAsJsonObject().getBoolean("downloaded"), "a URL registration downloads the archive");
                     assertEquals(new io.vertx.core.json.JsonArray(), r.bodyAsJsonObject().getJsonArray("warnings"));
+                    // Spec 005 FR-020: the stored package's owner and sharing.
+                    assertEquals("system", r.bodyAsJsonObject().getString("owner"));
+                    assertEquals(Boolean.TRUE, r.bodyAsJsonObject().getBoolean("shareable"));
                     ctx.completeNow();
                 })));
     }
@@ -246,6 +249,47 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     JsonObject body = r.bodyAsJsonObject();
                     assertNotNull(body.getLong("revision"));
                     assertTrue(body.getJsonArray("warnings").encode().contains("still rebuilding"), body.encode());
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 005 contracts §6: the upload form's shareable field, and its response fields. */
+    @Test
+    void uploadReportsOwnerAndSharingAndRefusesABadFlag(VertxTestContext ctx) throws java.io.IOException {
+        java.nio.file.Path tgz = java.nio.file.Files.createTempFile("private", ".tgz");
+        java.nio.file.Files.write(tgz, TestPackages.npmPackage("contract.private", "1.0.0", Map.of(), List.of()));
+        AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/upload")).timeout(10_000)
+                .sendMultipartForm(io.vertx.ext.web.multipart.MultipartForm.create().attribute("shareable", "false")
+                        .binaryFileUpload("file", "private.tgz", tgz.toString(), "application/gzip"))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertEquals("system", r.bodyAsJsonObject().getString("owner"));
+                        assertEquals(Boolean.FALSE, r.bodyAsJsonObject().getBoolean("shareable"));
+                    });
+                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/igs/upload")).timeout(10_000)
+                            .sendMultipartForm(io.vertx.ext.web.multipart.MultipartForm.create().attribute("shareable", "maybe")
+                                    .binaryFileUpload("file", "private.tgz", tgz.toString(), "application/gzip"));
+                })
+                .compose(r -> {
+                    ctx.verify(() -> assertProblem(r, 400, "invalid-request"));
+                    // uploadOverTheCompressedLimitIsRefusedBeforeReading counts UPLOAD rows in the shared schema.
+                    return app.bootstrap().services().igPackageService().cacheManager().removePackage("contract.private", "1.0.0");
+                })
+                .onComplete(ctx.succeedingThenComplete());
+    }
+
+    /** Spec 005 contracts §5: the package PATCH answers IgAccessResponse. */
+    @Test
+    void packageAccessChangeResponseShape(VertxTestContext ctx) {
+        app.bootstrap().services().igPackageService()
+                .registerIg(TestPackages.npmPackage("contract.patch", "1.0.0", Map.of(), List.of()), false, "URL")
+                .compose(p -> AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/igs/contract.patch/1.0.0"))
+                        .timeout(10_000).sendJsonObject(new JsonObject().put("shareable", false)))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    assertEquals(new JsonObject().put("status", "success").put("name", "contract.patch").put("version", "1.0.0")
+                            .put("owner", "system").put("shareable", false), r.bodyAsJsonObject());
                     ctx.completeNow();
                 })));
     }

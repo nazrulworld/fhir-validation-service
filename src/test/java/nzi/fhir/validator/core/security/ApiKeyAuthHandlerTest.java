@@ -57,4 +57,69 @@ class ApiKeyAuthHandlerTest {
             ctx.completeNow();
         })));
     }
+
+    /** Spec 005 research R3: every authorised request carries its {@link Caller}; anonymous requests the anonymous one. */
+    @Test
+    void callerIsPutIntoTheContext(Vertx vertx, VertxTestContext ctx) {
+        java.util.UUID org = java.util.UUID.randomUUID();
+        String key = "acme-key-0123456789abcdefghijklmnopqrstu";
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        when(repository.findActive(anyString())).thenReturn(Future.succeededFuture(Optional.empty()));
+        when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.of(
+                new ApiKeyRepository.KeyInfo(java.util.UUID.randomUUID(), ApiKeyRepository.Role.VALIDATE, org, "acme", true))));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, true, MAX_CACHED);
+
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.post("/R4/validate").handler(rc -> {
+            Caller c = ApiKeyAuthHandler.caller(rc);
+            rc.response().end(c.anonymous() ? "anonymous" : c.orgId() + "|" + c.orgShortName() + "|" + c.role() + "|" + c.system());
+        });
+        ErrorResponder.install(router);
+
+        vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
+            WebClient client = WebClient.create(vertx);
+            return Future.all(
+                    client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + key).send(),
+                    client.post(server.actualPort(), "localhost", "/R4/validate").send());
+        }).onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+            HttpResponse<Buffer> keyed = cf.resultAt(0);
+            HttpResponse<Buffer> anonymous = cf.resultAt(1);
+            assertEquals(org + "|acme|VALIDATE|false", keyed.bodyAsString());
+            assertEquals("anonymous", anonymous.bodyAsString());
+            ctx.completeNow();
+        })));
+    }
+
+    /** Spec 005 FR-014: a valid key of a deactivated organisation is refused with 403. */
+    @Test
+    void keyOfAnInactiveOrganisationIsForbidden(Vertx vertx, VertxTestContext ctx) {
+        String key = "acme-key-0123456789abcdefghijklmnopqrstu";
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.of(new ApiKeyRepository.KeyInfo(
+                java.util.UUID.randomUUID(), ApiKeyRepository.Role.ADMIN, java.util.UUID.randomUUID(), "acme", false))));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, true, MAX_CACHED);
+
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.route().handler(rc -> rc.response().end("ok"));
+        ErrorResponder.install(router);
+
+        vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
+            WebClient client = WebClient.create(vertx);
+            return Future.all(
+                    client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + key).send(),
+                    client.post(server.actualPort(), "localhost", "/R4/include-ig").putHeader("Authorization", "Bearer " + key).send(),
+                    client.patch(server.actualPort(), "localhost", "/igs/a/1.0.0").putHeader("Authorization", "Bearer " + key).send());
+        }).onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+            for (int i = 0; i < 3; i++) {
+                HttpResponse<Buffer> r = cf.resultAt(i);
+                assertEquals(403, r.statusCode(), r.bodyAsString());
+                assertTrue(r.bodyAsString().contains("deactivated"));
+            }
+            ctx.completeNow();
+        })));
+    }
 }

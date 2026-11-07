@@ -57,6 +57,7 @@ class ApiKeyAuthIT extends BaseTestContainer {
         HttpRequest<Buffer> r = switch (method) {
             case "GET" -> app.client().get(app.port(), "localhost", path);
             case "DELETE" -> app.client().delete(app.port(), "localhost", path);
+            case "PATCH" -> app.client().patch(app.port(), "localhost", path);
             default -> app.client().post(app.port(), "localhost", path);
         };
         r.timeout(5_000);
@@ -158,5 +159,68 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 .compose(v -> Await.until(vertx, 5_000, "revoked key is refused",
                         () -> validate(VALIDATE_KEY).map(r -> r.statusCode() == 401)))
                 .onComplete(ctx.succeedingThenComplete());
+    }
+
+    /**
+     * Spec 005 FR-014, SC-005: a key of a deactivated organisation gets 403 on validation and administrative paths
+     * within the auth-cache TTL, and works again after reactivation.
+     */
+    @Test
+    void keysOfADeactivatedOrganisationAreForbiddenUntilReactivated(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.atomic.AtomicReference<java.util.UUID> org = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> validateKey = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> adminKey = new java.util.concurrent.atomic.AtomicReference<>();
+        start(vertx, new JsonObject().put("cacheTtlMs", 200).put("anonymousValidate", false))
+                .compose(a -> TestPackages.createOrganisation(a.bootstrap().services().pool(), "acme"))
+                .compose(id -> {
+                    org.set(id);
+                    return TestPackages.createKey(app.bootstrap().services().pool(), id, "acme-val", "VALIDATE");
+                })
+                .compose(k -> {
+                    validateKey.set(k);
+                    return TestPackages.createKey(app.bootstrap().services().pool(), org.get(), "acme-admin", "ADMIN");
+                })
+                .compose(k -> {
+                    adminKey.set(k);
+                    return validate(validateKey.get());
+                })
+                .compose(active -> {
+                    ctx.verify(() -> assertEquals(200, active.statusCode(), active.bodyAsString()));
+                    return app.bootstrap().services().organisations().setActive(org.get(), false);
+                })
+                .compose(v -> Await.until(vertx, 5_000, "a deactivated organisation's key is refused",
+                        () -> validate(validateKey.get()).map(r -> r.statusCode() == 403)))
+                .compose(v -> Future.all(validate(validateKey.get()),
+                        req("POST", "/R4/include-ig", adminKey.get()).sendJsonObject(new JsonObject().put("igPackageId", "x"))))
+                .compose(refused -> {
+                    ctx.verify(() -> refused.<HttpResponse<Buffer>>list().forEach(r -> {
+                        assertProblem(r, 403, "forbidden");
+                        assertTrue(r.bodyAsJsonObject().getString("detail").contains("deactivated"), r.bodyAsString());
+                    }));
+                    return app.bootstrap().services().organisations().setActive(org.get(), true);
+                })
+                .compose(v -> Await.until(vertx, 5_000, "a reactivated organisation's key works again",
+                        () -> validate(validateKey.get()).map(r -> r.statusCode() == 200)))
+                .onComplete(ctx.succeedingThenComplete());
+    }
+
+    /** Spec 005 contracts §5: PATCH /igs/{name}/{version} is administrative (every method on the path needs ADMIN). */
+    @Test
+    void packageAccessChangeNeedsAnAdminKey(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, new JsonObject())
+                .compose(a -> app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE))
+                .compose(v -> Future.all(
+                        req("PATCH", "/igs/a/1.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
+                        req("PATCH", "/igs/a/1.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false)),
+                        req("PATCH", "/R4/include-ig?ig=a%231.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
+                        req("PATCH", "/R4/include-ig?ig=a%231.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false))))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    List<HttpResponse<Buffer>> r = cf.list();
+                    assertProblem(r.get(0), 401, "unauthorized");
+                    assertProblem(r.get(1), 403, "forbidden");
+                    assertProblem(r.get(2), 401, "unauthorized");
+                    assertProblem(r.get(3), 403, "forbidden");
+                    ctx.completeNow();
+                })));
     }
 }

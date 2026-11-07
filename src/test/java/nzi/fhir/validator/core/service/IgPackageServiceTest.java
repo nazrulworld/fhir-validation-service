@@ -100,7 +100,7 @@ class IgPackageServiceTest extends BaseTestContainer {
         byte[] packageContent = loadUsCorePackage();
 
         igPackageService.registerIg(packageContent)
-                .compose(v -> igPackageService.getDependencyGraph(PACKAGE_NAME, PACKAGE_VERSION))
+                .compose(v -> igPackageService.getDependencyGraph(nzi.fhir.validator.core.security.Caller.system("system"), PACKAGE_NAME, PACKAGE_VERSION))
                 .onComplete(ar -> {
                     assertTrue(ar.succeeded());
                     JsonObject graph = ar.result();
@@ -121,7 +121,7 @@ class IgPackageServiceTest extends BaseTestContainer {
         byte[] packageContent = loadUsCorePackage();
 
         igPackageService.registerIg(packageContent)
-                .compose(v -> igPackageService.listPackageFiles(PACKAGE_NAME, PACKAGE_VERSION))
+                .compose(v -> igPackageService.listPackageFiles(nzi.fhir.validator.core.security.Caller.system("system"), PACKAGE_NAME, PACKAGE_VERSION))
                 .onComplete(ar -> {
                     assertTrue(ar.succeeded(), String.valueOf(ar.cause()));
                     JsonObject report = ar.result();
