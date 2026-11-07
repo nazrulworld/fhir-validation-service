@@ -188,6 +188,13 @@ paths:
                 description: FHIR OperationOutcome (XML)
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          description: >-
+            unauthorized: FV_AUTH_ANONYMOUS_VALIDATE=false and no valid API key was sent (WWW-Authenticate: Bearer)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
