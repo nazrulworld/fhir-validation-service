@@ -533,6 +533,8 @@ paths:
           $ref: '#/components/responses/PackageNotFound'
         '500':
           $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 
   /igs/{name}/{version}/dependencies:
     get:
@@ -565,8 +567,12 @@ paths:
                     type: array
                     items:
                       type: string
-        '404':
+        '401':
           $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
         '500':
           $ref: '#/components/responses/Problem'
 
@@ -602,6 +608,10 @@ paths:
                     type: array
                     items:
                       type: string
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/PackageNotFound'
         '500':
