@@ -8,9 +8,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [3.2.1] - 2026-11-08
 
-Fixes to IG package version resolution after 3.2.0 (spec 006 FR-019 to FR-023). No contract shape or status code
-changes, and no migration or configuration change. Included contexts with a dependency declared as a version series
-are rebuilt once after the upgrade, because that dependency now resolves.
+Fixes to IG package version resolution after 3.2.0 (spec 006 FR-019 to FR-024). No contract shape or status code
+changes, and no migration or configuration change. Included contexts with a dependency declared as a version series,
+or whose highest floating dependency version is private to another organisation, are rebuilt once after the upgrade,
+because that dependency now resolves differently.
 
 ### Fixed
 
