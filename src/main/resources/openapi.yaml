@@ -476,6 +476,7 @@ paths:
                 version:
                   type: string
                   default: latest
+                  maxLength: 64
                   description: >-
                     An exact version, `latest`, or a version series: `N.x`, `N.x.x` or `N.N.x` (for example `1.2.x`;
                     `x` or `X`). A series is resolved to the highest matching version listed by the configured package
