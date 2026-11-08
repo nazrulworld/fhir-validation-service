@@ -356,3 +356,9 @@ Task: "T015 [US2] include contract tests in src/test/java/nzi/fhir/validator/web
 - Commit after each task or logical group, with conventional commit messages (for example
   `feat(igs): resolve version series on register`).
 - Don't change `latest` semantics. Its stored fallback without access filtering is a known difference (research R4) and out of scope.
+
+---
+
+## Phase 8: Convergence
+
+- [X] T033 Add `maxLength: 64` to the `version` property of the `POST /igs/register` request body in `src/main/resources/openapi.yaml` (between `default: latest` and `description`), as contracts/http-api.md §1 and T013 call for, matching the existing 1-64 character check in `IgPackageApi.handleRegisterIg`; then re-run `./mvnw test -Dtest='IgPackageApiContractTest,RegisterSeriesIT,RegisterLatestIT'` per FR-017 (partial)
