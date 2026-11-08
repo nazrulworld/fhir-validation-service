@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-06
 
-**Status**: Draft
+**Status**: Implemented (released in v3.1.0, 2026-11-07; convergence fixes in #52 and #53)
 
 **Input**: User description: "@var/specify_instruction_organisation_ownership.md". In summary: introduce
 organisations as the owner of everything the service stores. Each API key belongs to one organisation. Each stored
