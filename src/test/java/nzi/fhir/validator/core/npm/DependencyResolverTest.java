@@ -165,4 +165,41 @@ class DependencyResolverTest {
             assertEquals(List.of("dep#1.0.10", "parent#1.0.0"), r.resolved());
         }
     }
+
+    // --- spec 006 FR-024: floating dependency versions are chosen among selectable versions only -------------------
+
+    @Test
+    void floatingDependencyVersionsSkipVersionsThatAreNotSelectable() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("series#1.0.x", "latest#latest", "current#current", "bare"),
+                "series#1.0.3", List.of(), "series#1.0.5", List.of(),
+                "latest#1.0.0", List.of(), "latest#2.0.0", List.of(),
+                "current#1.0.0", List.of(), "current#2.0.0", List.of(),
+                "bare#1.0.0", List.of(), "bare#2.0.0", List.of()));
+        java.util.Set<String> privateElsewhere = java.util.Set.of("series#1.0.5", "latest#2.0.0", "current#2.0.0", "bare#2.0.0");
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> !privateElsewhere.contains(p));
+        assertEquals(List.of("bare#1.0.0", "current#1.0.0", "latest#1.0.0", "parent#1.0.0", "series#1.0.3"), r.resolved());
+        assertTrue(r.missing().isEmpty(), r.missing().toString());
+    }
+
+    @Test
+    void exactDependencyVersionsAndRootsIgnoreSelectability() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#2.0.0"),
+                "dep#1.0.0", List.of(), "dep#2.0.0", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> false);
+        assertEquals(List.of("dep#2.0.0", "parent#1.0.0"), r.resolved(),
+                "an exact version is used as declared; include then checks the caller may use it (424 otherwise)");
+    }
+
+    @Test
+    void aFloatingDependencyWithNoSelectableVersionIsMissing() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#1.0.x"),
+                "dep#1.0.5", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> !p.equals("dep#1.0.5"));
+        assertEquals(List.of("parent#1.0.0"), r.resolved());
+        assertEquals(List.of("dep#1.0.x"), r.missing());
+        assertTrue(r.warnings().stream().noneMatch(w -> w.contains("1.0.5")), r.warnings().toString());
+    }
 }

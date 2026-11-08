@@ -38,6 +38,17 @@ public final class AccessPolicy {
     }
 
     /**
+     * Whether a stored package version with access {@code a} may be chosen for a dependency of a context owned by
+     * {@code owner} that is declared without an explicit version (spec 006 FR-024): it is shareable or owned by
+     * {@code owner}. Unlike {@link #canUse}, the system organisation gets no exception, so a shareable system-owned
+     * context never resolves to a version other organisations can't use. Depends only on shared state, so every
+     * instance chooses the same version.
+     */
+    public static boolean selectableFor(java.util.UUID owner, Access a) {
+        return a != null && (a.shareable() || (owner != null && owner.equals(a.owner())));
+    }
+
+    /**
      * Whether {@code caller} may validate against the context {@code key}.
      *
      * @param resolvedPackages the context's packages ({@code name#version}, the named IG included); packages no longer

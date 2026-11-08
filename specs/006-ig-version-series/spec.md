@@ -59,6 +59,11 @@ works on the concrete `name#version` exactly as before.
 - Q: The `latest` registration fallback picked the highest stored version without checking access, so a private
   version of another organisation caused a 404 although a usable lower version was stored. → A: A defect. The
   fallback uses only versions the caller may use, like the series fallback (FR-023, US3 scenario 4).
+- Q: Dependency resolution picked the highest stored version regardless of who owns it. When that version was private
+  to another organisation, include (and `?ig=` on demand) failed with 424, even though a lower usable version was
+  stored. → A: A defect. A dependency declared without an explicit version is chosen only among versions the
+  context's owner may use: shareable ones, or the owner's own (FR-024, US5 scenarios 6 and 7). Exact versions keep
+  their meaning. Dependency versions stay unpinned, as spec 004 research R3 decided.
 - These ship as a patch release (3.2.1). The contract shape doesn't change.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -200,6 +205,12 @@ stored; skipped", so validation ran without it.
    contains `dep#1.0.3` and the warnings don't say the dependency is not stored.
 5. **Given** `parent` declares a malformed series dependency such as `dep#1.x.3`, **When** `parent` is registered,
    **Then** registration succeeds, the dependency is skipped with a logged warning, and nothing is stored for it.
+6. **Given** `parent#1.0.0` (shareable) depends on `dep#1.0.x`, a shareable `dep#1.0.3` is stored and organisation B
+   has stored a private `dep#1.0.5`, **When** organisation A includes `parent#1.0.0`, **Then** the context resolves
+   `dep#1.0.3` on every instance, the include succeeds, and `1.0.5` and organisation B are named nowhere. When
+   organisation B includes it instead, its context resolves `dep#1.0.5`.
+7. **Given** the same packages with `parent#1.0.0` owned by organisation A, **When** any caller validates with
+   `?ig=parent#1.0.0` on demand, **Then** the context resolves `dep#1.0.3` and validation answers 200, not 424.
 
 ---
 
@@ -305,8 +316,8 @@ stored; skipped", so validation ran without it.
   the highest stored version. Exact dependency versions MUST behave as before.
 - **FR-021**: Dependency resolution for include, on-demand validation contexts and snapshot builds MUST resolve a
   dependency series to the highest matching stored version, by the FR-004 ordering. This choice MUST NOT depend on
-  the caller, so every instance resolves the same context. The existing include check that the caller may use every
-  resolved dependency still applies afterwards.
+  the caller, so every instance resolves the same context; it is restricted by FR-024. The existing include check
+  that the caller may use every resolved dependency still applies afterwards.
 - **FR-022**: A dependency series that is malformed (FR-002) MUST be treated as unresolvable: registration logs a
   warning and skips it, and dependency resolution reports it as missing. It MUST NOT fail the request with 400,
   because the value comes from package metadata, not from the client.
@@ -314,6 +325,13 @@ stored; skipped", so validation ran without it.
   highest stored version the caller may use, with the same warning. It answers 404 `package-not-found` only when the
   caller may use no stored version. This amends spec 004 FR-029 and aligns `latest` with the series fallback (FR-009).
   Versions the caller may not use MUST NOT be named.
+- **FR-024**: Wherever a context is resolved (include, builds on every instance, on-demand contexts, and the access
+  check before validation), a dependency declared as a series, `latest`, `current` or without a version MUST be chosen
+  only among stored versions that are shareable or owned by the **context's owner**: the included context's owner
+  (the caller, for a new include), or the IG package's owner for an on-demand context. The system organisation gets
+  no exception here. The owner is shared state, so every instance still resolves the same context. A dependency
+  declared with an exact version MUST be used as declared, and the caller's access to it is checked as before (424).
+  When a package's owner or sharing changes, contexts whose choice changes are resolved again and rebuilt.
 
 ### Key Entities
 
@@ -344,6 +362,9 @@ stored; skipped", so validation ran without it.
 - **SC-008**: In every test case, a dependency declared with a valid series is stored by registration (when a
   matching version exists) and appears in the resolved context of the package that declares it.
 - **SC-009**: Registration of `latest` never answers 404 while a stored version the caller may use exists.
+- **SC-010**: In multi-organisation tests, include and on-demand validation never fail with 424 because of another
+  organisation's private version of a dependency declared without an explicit version, while a usable matching version
+  is stored.
 
 ## Assumptions
 

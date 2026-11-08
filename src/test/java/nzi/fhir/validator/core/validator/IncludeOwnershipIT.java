@@ -275,4 +275,53 @@ class IncludeOwnershipIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    // --- spec 006 FR-024: a floating dependency never resolves to another organisation's private version ----------
+
+    /** inc.fparent (shareable, A) declares inc.fdep#1.0.x and inc.flat#latest; the highest of each is private to B. */
+    private Future<Void> floatingDependencies() {
+        Pool pool = core.services().pool();
+        return TestPackages.storePackage(core.services(), TestPackages.profilePackage("inc.fdep", "1.0.3"))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.profilePackage("inc.fdep", "1.0.5")))
+                .compose(v -> TestPackages.setPackageAccess(pool, "inc.fdep#1.0.5", b.orgId(), false))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.profilePackage("inc.flat", "1.0.0")))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.profilePackage("inc.flat", "2.0.0")))
+                .compose(v -> TestPackages.setPackageAccess(pool, "inc.flat#2.0.0", b.orgId(), false))
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.igPackage("inc.fparent", "1.0.0",
+                        java.util.List.of("4.0.1"), java.util.Map.of("inc.fdep", "1.0.x", "inc.flat", "latest"))))
+                .compose(v -> TestPackages.setPackageAccess(pool, "inc.fparent#1.0.0", a.orgId(), true))
+                .compose(v -> core.services().configSync().syncCatalogNow());
+    }
+
+    @Test
+    void floatingDependenciesSkipAnotherOrganisationsPrivateVersions(VertxTestContext ctx) {
+        floatingDependencies()
+                .compose(v -> service().include(a, R4, "inc.fparent", "1.0.0", Optional.empty()))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    java.util.List<Object> resolved = r.getJsonArray("resolved").getList();
+                    assertTrue(resolved.contains("inc.fdep#1.0.3"), resolved.toString());
+                    assertTrue(resolved.contains("inc.flat#1.0.0"), resolved.toString());
+                    assertFalse(r.encode().contains("1.0.5") || r.encode().contains("2.0.0") || r.encode().contains("orgb"), r.encode());
+                    SnapshotKey key = SnapshotKey.of(R4, "inc.fparent#1.0.0");
+                    assertEquals(ValidatorRegistry.Status.ACTIVE, core.services().validatorRegistry().status(key));
+                    java.util.List<String> built = core.services().validatorRegistry().peekResolvedPackages(key).orElseThrow();
+                    assertTrue(built.contains("inc.fdep#1.0.3") && built.contains("inc.flat#1.0.0"),
+                            "every instance builds what include reported: " + built);
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void theOwnerOfThePrivateVersionsResolvesToThem(VertxTestContext ctx) {
+        floatingDependencies()
+                .compose(v -> service().include(b, R4, "inc.fparent", "1.0.0", Optional.empty()))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    java.util.List<Object> resolved = r.getJsonArray("resolved").getList();
+                    assertTrue(resolved.contains("inc.fdep#1.0.5") && resolved.contains("inc.flat#2.0.0"), resolved.toString());
+                    java.util.List<String> built = core.services().validatorRegistry()
+                            .peekResolvedPackages(SnapshotKey.of(R4, "inc.fparent#1.0.0")).orElseThrow();
+                    assertTrue(built.contains("inc.fdep#1.0.5"), "the context is resolved as its owner, B: " + built);
+                    ctx.completeNow();
+                })));
+    }
 }

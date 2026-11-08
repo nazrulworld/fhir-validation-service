@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -150,8 +151,11 @@ public class IgPackageService {
                     Access packageAccess = catalog.access().get(key);
                     return checkFhirVersion(tx, fhirVersion, name, concrete.get())
                             .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
-                        // This key's context only: one IG and its dependencies (FR-021).
-                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog());
+                        // This key's context only: one IG and its dependencies (FR-021), resolved as the context's
+                        // owner (spec 006 FR-024), exactly as every instance will build it.
+                        UUID contextOwner = row.included().contains(key) ? row.access().get(key).owner() : caller.orgId();
+                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog(),
+                                p -> AccessPolicy.selectableFor(contextOwner, catalog.access().get(p)));
                         warnings.addAll(resolution.warnings());
                         for (String p : resolution.resolved()) {
                             Access a = catalog.access().get(p);

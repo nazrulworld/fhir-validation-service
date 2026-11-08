@@ -24,6 +24,13 @@ are rebuilt once after the upgrade, because that dependency now resolves.
     the upgrade by the existing reconciliation.
 - **Dependencies declared as `latest`, `current` or without a version resolve from the registries first** during
   registration, like a top-level `latest` (FR-020). A stored older version no longer hides a newer release.
+- **Another organisation's private dependency version no longer blocks an IG** (FR-024). A dependency declared as a
+  series, `latest`, `current` or without a version is now chosen among stored versions that are shareable or owned by
+  the context's owner (the organisation that included it, or the IG package's owner for `?ig=` on demand). Before, the
+  highest stored version was chosen whoever owned it, so include and `?ig=` failed with 424 when it was private to
+  another organisation, even though a lower usable version was stored. Dependencies with an exact version are
+  unchanged. Changing a dependency's sharing, or transferring an included context, can now rebuild contexts whose
+  choice changes.
 - **The `latest` registration fallback only uses stored versions the caller may use** (FR-023). When the highest
   stored version was private to another organisation, `POST /igs/register` answered 404 even though a lower usable
   version was stored; it now returns that version with the usual warning.

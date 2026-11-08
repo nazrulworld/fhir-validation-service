@@ -429,3 +429,15 @@ organisation B returns A's highest usable version.
 **Dependencies**: T034 → T038 → T039; T035 → T040; T037 → T040; T036 → T041 (T041 uses the T038 `RegistryResult`); T042–T044 last.
 
 **Checkpoint**: `./mvnw -q test -Dtest='DependencyResolverTest,RegisterDependencySeriesIT,RegisterLatestIT,RegisterSeriesIT,IncludeSeriesIT'` is green.
+
+---
+
+## Phase 10: Floating dependencies resolve as the context's owner (FR-024, US5 scenarios 6–7, research R13)
+
+- [X] T045 [P] [US5] Failing unit tests in `DependencyResolverTest`: floating versions (series, `latest`, `current`, bare) skip versions that aren't selectable; exact versions ignore selectability; no selectable version → missing, without naming the skipped version.
+- [X] T046 [P] [US5] Failing unit test in `AccessPolicyTest` for `selectableFor`: own private and any shareable are selectable; another organisation's private isn't, also for a system-owned context; `null` access isn't.
+- [X] T047 [P] [US5] Failing cases in `IncludeOwnershipIT`: org A includes `inc.fparent#1.0.0` (declaring `inc.fdep#1.0.x` and `inc.flat#latest`, highest of each private to org B) → 200, `resolved` and the built context contain `inc.fdep#1.0.3` and `inc.flat#1.0.0`, and nothing names `1.0.5`, `2.0.0` or `orgb`; org B including it resolves its own private versions.
+- [X] T048 [P] [US5] Failing case in `OwnershipValidationIT`: `?ig=own.fuser#1.0.0` (owned by A, declaring `own.fdep#1.0.x`; `1.0.5` private to B) → 200 for both organisations, and the on-demand resolution contains `own.fdep#1.0.3`.
+- [X] T049 [US5] `DependencyResolver.resolve(roots, catalog, Predicate<String> selectable)`: filter only floating versions; the 2-argument overload accepts everything. `AccessPolicy.selectableFor(UUID owner, Access a)`.
+- [X] T050 [US5] `ResolvedContext.of(ig, view, owner)`, `of(ig, view)` resolving as the IG package's owner, and `forKey(ig, view, pinned)`. Use `forKey` in `ConfigSync.resolveAll` (now taking `PinnedAccess`, at start-up and in `runSync`) and in `FhirValidationService.checkAccess`. In `IgPackageService.include`, resolve as the existing context owner or the caller.
+- [X] T051 CHANGELOG **Fixed** entry; full suite green (531 tests).
