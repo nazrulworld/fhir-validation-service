@@ -324,4 +324,61 @@ class IncludeOwnershipIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    // --- spec 006 FR-024 (T054): sharing changes and transfers re-resolve and rebuild contexts ---------------------
+
+    @Test
+    void sharingADependencyVersionReResolvesIncludedAndOnDemandContexts(VertxTestContext ctx) {
+        SnapshotKey pinned = SnapshotKey.of(R4, "inc.fparent#1.0.0");
+        SnapshotKey onDemand = SnapshotKey.of(R4, "inc.fparent2#1.0.0");
+        floatingDependencies()
+                .compose(v -> TestPackages.storePackage(core.services(), TestPackages.igPackage("inc.fparent2", "1.0.0",
+                        java.util.List.of("4.0.1"), java.util.Map.of("inc.fdep", "1.0.x"))))
+                .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "inc.fparent2#1.0.0", a.orgId(), true))
+                .compose(v -> core.services().configSync().syncCatalogNow())
+                .compose(v -> service().include(a, R4, "inc.fparent", "1.0.0", Optional.empty()))
+                .compose(v -> core.services().validatorRegistry().snapshot(onDemand))
+                .compose(v -> {
+                    ctx.verify(() -> {
+                        assertTrue(core.services().validatorRegistry().peekResolvedPackages(pinned).orElseThrow()
+                                .contains("inc.fdep#1.0.3"));
+                        assertEquals(ValidatorRegistry.Kind.ON_DEMAND, core.services().validatorRegistry().kind(onDemand));
+                    });
+                    // B shares its 1.0.5: now the highest version A's contexts may select.
+                    return service().changePackageAccess(b, "inc.fdep", "1.0.5",
+                            nzi.fhir.validator.core.security.AccessChange.parse(new io.vertx.core.json.JsonObject().put("shareable", true)));
+                })
+                .compose(v -> core.services().configSync().syncCatalogNow())
+                .onComplete(ctx.succeeding(v -> ctx.verify(() -> {
+                    java.util.List<String> rebuilt = core.services().validatorRegistry().peekResolvedPackages(pinned).orElseThrow();
+                    assertTrue(rebuilt.contains("inc.fdep#1.0.5") && !rebuilt.contains("inc.fdep#1.0.3"),
+                            "the included context is resolved again and rebuilt: " + rebuilt);
+                    assertEquals(ValidatorRegistry.Status.ACTIVE, core.services().validatorRegistry().status(pinned));
+                    assertEquals(ValidatorRegistry.Status.ABSENT, core.services().validatorRegistry().status(onDemand),
+                            "the on-demand context built from 1.0.3 is dropped, so the next request rebuilds it");
+                    assertTrue(ResolvedContext.of("inc.fparent2#1.0.0", core.services().configSync().catalog().current())
+                            .packages().contains("inc.fdep#1.0.5"));
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void transferringAnIncludedContextResolvesItAsTheNewOwner(VertxTestContext ctx) {
+        SnapshotKey key = SnapshotKey.of(R4, "inc.fparent#1.0.0");
+        floatingDependencies()
+                .compose(v -> service().include(a, R4, "inc.fparent", "1.0.0", Optional.empty()))
+                .compose(v -> {
+                    ctx.verify(() -> assertTrue(core.services().validatorRegistry().peekResolvedPackages(key).orElseThrow()
+                            .contains("inc.fdep#1.0.3")));
+                    return service().changeSnapshotAccess(system, R4, "inc.fparent#1.0.0",
+                            nzi.fhir.validator.core.security.AccessChange.parse(new io.vertx.core.json.JsonObject().put("owner", "orgb")));
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals("orgb", r.getString("owner"));
+                    java.util.List<String> rebuilt = core.services().validatorRegistry().peekResolvedPackages(key).orElseThrow();
+                    assertTrue(rebuilt.contains("inc.fdep#1.0.5") && rebuilt.contains("inc.flat#2.0.0"),
+                            "resolved as B, the new owner, which may use its private versions: " + rebuilt);
+                    ctx.completeNow();
+                })));
+    }
 }

@@ -55,6 +55,20 @@ There's no schema change and no new shared state.
 - The validation hot path changes only by one string check in `IgReference.parse` for `?ig=`. The expected impact is
   negligible: p95 stays under 200 ms and throughput is within run-to-run noise of the baseline. Because it's on the
   hot path, the PR attaches a before/after `perf/validate.js` k6 result (constitution VI; tasks T032).
+- **3.2.1 dependency resolution (FR-019 to FR-024)**:
+  - **Registration:** a dependency declared as a series or `latest` adds one parallel listing fetch per configured
+    registry per such dependency.
+  - **Validation path:** `FhirValidationService.checkAccess` resolves an on-demand or not-yet-built context with the
+    owner-based filter on every request. That adds one in-memory access lookup per stored candidate version: no I/O,
+    no allocation beyond the existing resolution, and no new cache, so no memory impact.
+  - **Measured (T052, v3.2.0 vs v3.2.1 images, k6 8 VUs × 60 s, `latest` dependency, same resolved set):**
+
+    | IG | v3.2.0 | v3.2.1 |
+    |---|---|---|
+    | included | 243.5 req/s, p95 44.9 ms | 257.6 req/s, p95 38.5 ms |
+    | on demand | 252.3 req/s, p95 40.9 ms | 260.2 req/s, p95 38.0 ms |
+
+    Within run-to-run noise, with 0 failures. Full results are in the #60 comment.
 
 **Constraints**:
 
