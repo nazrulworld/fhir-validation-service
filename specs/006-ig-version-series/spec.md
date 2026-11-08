@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-07
 
-**Status**: Draft
+**Status**: Implemented (released in v3.2.0, 2026-11-08; dependency and access fixes in v3.2.1, 2026-11-08; convergence follow-ups in #59 and #62)
 
 **Input**: User description: "@var/specify_instruction_ig_version_wildcard.md" (GitHub issue #56). In summary: let
 clients ask for an IG package by version series instead of an exact version. `POST /igs/register` resolves a series
