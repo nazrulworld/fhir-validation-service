@@ -66,6 +66,8 @@ class OwnershipValidationIT extends BaseTestContainer {
      *     <li>{@code own.p#1.0.0} shareable and {@code own.p#2.0.0} private, both owned by A;</li>
      *     <li>{@code own.r5#1.0.0}: an R5 package private to A;</li>
      *     <li>{@code own.user#1.0.0}: shareable, owned by A, depending on {@code own.dep#1.0.0}, private to B.</li>
+     *     <li>{@code own.fuser#1.0.0}: shareable, owned by A, depending on {@code own.fdep#1.0.x}; {@code own.fdep#1.0.3}
+     *     is shareable and {@code own.fdep#1.0.5} private, both owned by B (spec 006 FR-024).</li>
      * </ul>
      */
     private Future<Void> setUpData() {
@@ -93,7 +95,12 @@ class OwnershipValidationIT extends BaseTestContainer {
                             .compose(x -> store("own.dep", "1.0.0", b, false))
                             .compose(x -> TestPackages.storePackage(services, TestPackages.igPackage("own.user", "1.0.0",
                                     List.of("4.0.1"), Map.of("own.dep", "1.0.0"), TestPackages.requiredPatientElements(P, "gender"))))
-                            .compose(x -> TestPackages.setPackageAccess(pool, "own.user#1.0.0", a, true));
+                            .compose(x -> TestPackages.setPackageAccess(pool, "own.user#1.0.0", a, true))
+                            .compose(x -> store("own.fdep", "1.0.3", b, true))
+                            .compose(x -> store("own.fdep", "1.0.5", b, false))
+                            .compose(x -> TestPackages.storePackage(services, TestPackages.igPackage("own.fuser", "1.0.0",
+                                    List.of("4.0.1"), Map.of("own.fdep", "1.0.x"), TestPackages.requiredPatientElements(P, "gender"))))
+                            .compose(x -> TestPackages.setPackageAccess(pool, "own.fuser#1.0.0", a, true));
                 })
                 // The local store listener refreshes this instance's catalog; the access updates arrive by notification.
                 .compose(v -> services.configSync().syncCatalogNow());
@@ -261,6 +268,27 @@ class OwnershipValidationIT extends BaseTestContainer {
                     assertFalse(metrics.contains("access"), "no metric reveals access decisions");
                     assertFalse(metrics.contains("own.a") || metrics.contains("orga") || metrics.contains("own.dep"),
                             "no metric names private content or organisations");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Spec 006 FR-024: an on-demand context resolves a floating dependency as the IG package's owner, so another
+     * organisation's private highest match is never chosen and the request isn't refused with 424.
+     */
+    @Test
+    void aFloatingDependencySkipsAPrivateVersionOnDemand(VertxTestContext ctx) {
+        Future.all(validate("R4", "own.fuser#1.0.0", keyA), validate("R4", "own.fuser#1.0.0", keyB))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    HttpResponse<Buffer> a = cf.resultAt(0);
+                    HttpResponse<Buffer> b = cf.resultAt(1);
+                    assertEquals(200, a.statusCode(), a.bodyAsString());
+                    assertEquals(200, b.statusCode(), b.bodyAsString());
+                    assertEquals("own.fuser#1.0.0", a.getHeader(ValidationApi.VALIDATION_CONTEXT_HEADER));
+                    // An on-demand context's packages: the same resolution its build and the access check use.
+                    java.util.List<String> built = nzi.fhir.validator.core.validator.ResolvedContext.of("own.fuser#1.0.0",
+                            app.bootstrap().services().configSync().catalog().current()).packages();
+                    assertTrue(built.contains("own.fdep#1.0.3") && !built.contains("own.fdep#1.0.5"), built.toString());
                     ctx.completeNow();
                 })));
     }

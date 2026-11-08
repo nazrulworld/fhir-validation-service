@@ -150,4 +150,17 @@ class AccessPolicyTest {
         assertEquals("1.0.0", view.highestVisible("p", ANON).orElseThrow());
         assertTrue(view(Map.of("p#2.0.0", A_PRIVATE), Map.of()).highestVisible("p", OTHER).isEmpty());
     }
+
+    /** Spec 006 FR-024: which stored versions a floating dependency of a context owned by A may resolve to. */
+    @Test
+    void selectableForIsShareableOrOwnedWithoutASystemException() {
+        assertTrue(AccessPolicy.selectableFor(A, A_PRIVATE), "the owner's own private version");
+        assertTrue(AccessPolicy.selectableFor(A, B_SHARED), "any shareable version");
+        assertFalse(AccessPolicy.selectableFor(A, B_PRIVATE), "another organisation's private version");
+        assertFalse(AccessPolicy.selectableFor(Organisations.SYSTEM_ID, B_PRIVATE),
+                "a system-owned context is shared, so it never resolves to a private version of another organisation");
+        assertFalse(AccessPolicy.selectableFor(null, A_PRIVATE));
+        assertTrue(AccessPolicy.selectableFor(null, A_SHARED));
+        assertFalse(AccessPolicy.selectableFor(A, null), "not stored");
+    }
 }

@@ -25,12 +25,14 @@ import org.hl7.fhir.utilities.npm.NpmPackage;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -149,8 +151,11 @@ public class IgPackageService {
                     Access packageAccess = catalog.access().get(key);
                     return checkFhirVersion(tx, fhirVersion, name, concrete.get())
                             .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
-                        // This key's context only: one IG and its dependencies (FR-021).
-                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog());
+                        // This key's context only: one IG and its dependencies (FR-021), resolved as the context's
+                        // owner (spec 006 FR-024), exactly as every instance will build it.
+                        UUID contextOwner = row.included().contains(key) ? row.access().get(key).owner() : caller.orgId();
+                        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog(),
+                                p -> AccessPolicy.selectableFor(contextOwner, catalog.access().get(p)));
                         warnings.addAll(resolution.warnings());
                         for (String p : resolution.resolved()) {
                             Access a = catalog.access().get(p);
@@ -444,8 +449,8 @@ public class IgPackageService {
 
     /**
      * Registers {@code name} from the package registries (spec 004 FR-027 to FR-031). With no version or
-     * {@code latest}, the registries' highest release is used, falling back to the highest stored version with a
-     * warning when no registry can decide. A version that is already stored is returned without downloading it again;
+     * {@code latest}, the registries' highest release is used, falling back to the highest stored version the caller
+     * may use with a warning when no registry can decide (spec 006 FR-023). A version that is already stored is returned without downloading it again;
      * a new one is downloaded and stored, with its dependencies when {@code includeDependency}.
      *
      * @return fails with 404 {@code package-not-found} when no source has the package
@@ -479,7 +484,7 @@ public class IgPackageService {
             chosen = resolveSeriesForRegistration(caller, name, series);
         } else {
             chosen = latest
-                    ? cacheManager.resolveForRegistration(name)
+                    ? resolveLatestForRegistration(caller, name)
                     : Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(version, false, null));
         }
         return chosen.compose(rv -> {
@@ -507,28 +512,44 @@ public class IgPackageService {
     }
 
     /**
+     * The concrete version {@code latest} registers (spec 004 FR-027 to FR-029, spec 006 FR-023, research R11): the
+     * registries' highest release, else the highest stored version {@code caller} may use, with the registries'
+     * warning. Completes with {@code null} (answered 404) when the caller may use no stored version.
+     */
+    private Future<PostgresPackageCacheManager.RegistrationVersion> resolveLatestForRegistration(Caller caller, String name) {
+        return cacheManager.resolveForRegistration(name).compose(result -> result.version() != null
+                ? Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(result.version(), true, null))
+                : storedFallback(caller, name, PackageVersionComparator::max, result.warning())
+                .map(v -> v.orElse(null)));
+    }
+
+    /**
      * The concrete version a series registers (spec 006 FR-006, FR-009, research R4): the highest match listed by the
      * registries, else the highest stored match {@code caller} may use, with the registries' warning. A stored version
      * of another organisation that is private is never a fallback candidate. Fails with 404 when nothing matches.
      */
     private Future<PostgresPackageCacheManager.RegistrationVersion> resolveSeriesForRegistration(Caller caller, String name,
                                                                                               VersionSeries series) {
-        return cacheManager.resolveSeriesFromRegistries(name, series).compose(result -> {
-            if (result.version() != null) {
-                return Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(result.version(), true, null));
-            }
-            return storedVersionsWithAccess(pgPool, name).compose(stored -> {
-                List<String> usable = stored.entrySet().stream()
+        return cacheManager.resolveSeriesFromRegistries(name, series).compose(result -> result.version() != null
+                ? Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(result.version(), true, null))
+                : storedFallback(caller, name, series::highest, result.warning())
+                .compose(v -> v.map(Future::succeededFuture).orElseGet(() -> Future.failedFuture(new ProblemException(404,
+                        ProblemException.TYPE_PACKAGE_NOT_FOUND, "IG package " + name + " has no version in series "
+                        + series.raw() + " in the configured package registries and none is stored")))));
+    }
+
+    /**
+     * The stored fallback shared by {@code latest} and series registration (spec 006 FR-009, FR-023, research R11):
+     * {@code pick} applied to the stored versions of {@code name} that {@code caller} may use, so another
+     * organisation's private version is never chosen or named.
+     */
+    private Future<Optional<PostgresPackageCacheManager.RegistrationVersion>> storedFallback(Caller caller, String name,
+            Function<Collection<String>, Optional<String>> pick, String warning) {
+        return storedVersionsWithAccess(pgPool, name).map(stored -> pick.apply(stored.entrySet().stream()
                         .filter(e -> AccessPolicy.canUse(caller, e.getValue()))
                         .map(Map.Entry::getKey)
-                        .toList();
-                return series.highest(usable)
-                        .map(v -> Future.succeededFuture(new PostgresPackageCacheManager.RegistrationVersion(v, false, result.warning())))
-                        .orElseGet(() -> Future.failedFuture(new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
-                                "IG package " + name + " has no version in series " + series.raw()
-                                        + " in the configured package registries and none is stored")));
-            });
-        });
+                        .toList())
+                .map(v -> new PostgresPackageCacheManager.RegistrationVersion(v, false, warning)));
     }
 
     /** Every stored version of {@code name} with its owner and sharing (spec 006 research R4). */

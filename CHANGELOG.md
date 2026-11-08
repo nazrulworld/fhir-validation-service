@@ -6,6 +6,29 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dependencies declared with a version series are resolved** (spec 006 US5, FR-019, FR-021, FR-022). A package
+  whose `package.json` declares a dependency such as `"dep": "1.0.x"` had that dependency fetched as the literal
+  version `1.0.x` during registration, which failed and was dropped, and include reported it as "not stored;
+  skipped". Registration now stores the highest match the registries list (else uses the highest stored match), and
+  include, on-demand and snapshot builds resolve it to the highest stored match. A malformed dependency series is
+  skipped with a warning; it never fails the request.
+  - Included contexts whose series dependency was reported as missing now resolve it, so they are rebuilt once after
+    the upgrade by the existing reconciliation.
+- **Dependencies declared as `latest`, `current` or without a version resolve from the registries first** during
+  registration, like a top-level `latest` (FR-020). A stored older version no longer hides a newer release.
+- **Another organisation's private dependency version no longer blocks an IG** (FR-024). A dependency declared as a
+  series, `latest`, `current` or without a version is now chosen among stored versions that are shareable or owned by
+  the context's owner (the organisation that included it, or the IG package's owner for `?ig=` on demand). Before, the
+  highest stored version was chosen whoever owned it, so include and `?ig=` failed with 424 when it was private to
+  another organisation, even though a lower usable version was stored. Dependencies with an exact version are
+  unchanged. Changing a dependency's sharing, or transferring an included context, can now rebuild contexts whose
+  choice changes.
+- **The `latest` registration fallback only uses stored versions the caller may use** (FR-023). When the highest
+  stored version was private to another organisation, `POST /igs/register` answered 404 even though a lower usable
+  version was stored; it now returns that version with the usual warning.
+
 ## [3.2.0] - 2026-11-08
 
 IG versions can be requested as a series such as `1.2.x` on `POST /igs/register` and `POST /{version}/include-ig`

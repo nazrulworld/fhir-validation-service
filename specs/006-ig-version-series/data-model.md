@@ -47,6 +47,9 @@ length of a request.
 | `POST /igs/register`, fallback | Stored versions of `name` that the caller may use | Packages table joined with organisations (`storedVersionsWithAccess`) |
 | `POST /{version}/include-ig` | Stored versions of `name` that the caller may use | The same catalog-with-access read in the include transaction (`visible`) |
 | `POST /{version}/validate?ig=` | None. A series is rejected with 400 (FR-018) | n/a |
+| `POST /igs/register` `latest`, fallback (3.2.1, FR-023) | Stored versions of `name` that the caller may use | `storedVersionsWithAccess`, the same as the series fallback |
+| Registration dependency walk, dependency declared as a series or `latest`/`current`/no version (3.2.1, FR-019, FR-020) | The versions the registries list, else every stored version of the dependency (not caller-filtered; a stored dependency is only read) | Registry listings, then the packages table |
+| Context resolution (`DependencyResolver`: include, on-demand, snapshot builds), dependency declared as a series or `latest`/`current`/no version (3.2.1, FR-021, FR-024) | Stored versions of the dependency that are shareable or owned by the context's owner (the included context's owner, or the IG package's owner on demand). Not caller-filtered, so every instance agrees. Include then checks the caller may use each resolved dependency | The catalog read for the resolution, with each package's access |
 
 ## 3. Resolution outcome
 

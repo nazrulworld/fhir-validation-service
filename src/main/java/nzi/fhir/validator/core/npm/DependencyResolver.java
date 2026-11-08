@@ -1,6 +1,7 @@
 package nzi.fhir.validator.core.npm;
 
 import nzi.fhir.validator.core.enums.FhirCoreIgPackageType;
+import nzi.fhir.validator.web.ProblemException;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 /**
  * Deterministic, version-aware IG dependency resolution (research R6):
@@ -21,6 +23,11 @@ import java.util.TreeSet;
  *     <li>core packages ({@code hl7.fhir.rX.core}) are skipped;</li>
  *     <li>an explicit version is used exactly;</li>
  *     <li>a missing, {@code current} or {@code latest} version resolves to the highest stored release;</li>
+ *     <li>a version series ({@code 1.0.x}) resolves to the highest matching stored version, a malformed series to
+ *     nothing, so the dependency is reported missing (spec 006 FR-021, FR-022); never filtered by caller, so every
+ *     instance resolves the same context;</li>
+ *     <li>a missing, {@code current}, {@code latest} or series version is chosen only among the versions
+ *     {@code selectable} accepts (spec 006 FR-024: those the context's owner may use); an explicit version is not;</li>
  *     <li>if a package is reached with different versions, the highest wins (with a warning) and only the
  *     winner's dependencies are followed;</li>
  *     <li>cycles terminate.</li>
@@ -75,6 +82,15 @@ public final class DependencyResolver {
     }
 
     public static Resolution resolve(Collection<String> roots, Catalog catalog) {
+        return resolve(roots, catalog, p -> true);
+    }
+
+    /**
+     * @param selectable whether a stored {@code name#version} may be chosen for a dependency declared without an
+     *                   explicit version (missing, {@code current}, {@code latest} or a series); it must depend only on
+     *                   shared state, so every instance resolves the same context
+     */
+    public static Resolution resolve(Collection<String> roots, Catalog catalog, Predicate<String> selectable) {
         Set<String> warnings = new TreeSet<>();
         Set<String> missing = new TreeSet<>();
         List<String> sortedRoots = roots.stream().distinct().sorted().toList();
@@ -93,7 +109,7 @@ public final class DependencyResolver {
             if (isCore(spec[0])) {
                 continue;
             }
-            Optional<String> version = concrete(spec[0], spec[1], catalog);
+            Optional<String> version = concrete(spec[0], spec[1], catalog, selectable);
             if (version.isEmpty()) {
                 warnings.add(missingMessage(spec[0], spec[1], item[1]));
                 missing.add(spec[1] == null || spec[1].isBlank() || spec[1].equals("latest") || spec[1].equals("current")
@@ -145,12 +161,23 @@ public final class DependencyResolver {
         return new Resolution(List.copyOf(resolved), List.copyOf(warnings), List.copyOf(missing));
     }
 
-    private static Optional<String> concrete(String name, String requested, Catalog catalog) {
+    private static Optional<String> concrete(String name, String requested, Catalog catalog, Predicate<String> selectable) {
         Collection<String> stored = catalog.versions(name);
         if (requested == null || requested.isBlank() || requested.equals("latest") || requested.equals("current")) {
-            return PackageVersionComparator.max(stored);
+            return PackageVersionComparator.max(selectableVersions(name, stored, selectable));
+        }
+        if (VersionSeries.isSeries(requested)) {
+            try {
+                return VersionSeries.parse(requested).highest(selectableVersions(name, stored, selectable));
+            } catch (ProblemException e) {
+                return Optional.empty();
+            }
         }
         return stored.contains(requested) ? Optional.of(requested) : Optional.empty();
+    }
+
+    private static List<String> selectableVersions(String name, Collection<String> stored, Predicate<String> selectable) {
+        return stored.stream().filter(v -> selectable.test(name + "#" + v)).toList();
     }
 
     private static String missingMessage(String name, String version, String requiredBy) {

@@ -8,6 +8,7 @@ import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
+import io.vertx.sqlclient.Pool;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import nzi.fhir.validator.testsupport.AppHarness;
 import nzi.fhir.validator.testsupport.StubRegistry;
@@ -17,8 +18,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
@@ -216,6 +219,88 @@ class RegisterLatestIT extends BaseTestContainer {
                     assertEquals("2.0.0", r.bodyAsJsonObject().getString("version"), "the registry's latest release");
                     assertTrue(r.bodyAsJsonObject().getBoolean("downloaded"));
                     assertEquals(List.of(), r.bodyAsJsonObject().getJsonArray("warnings").getList());
+                    ctx.completeNow();
+                })));
+    }
+
+    // --- spec 006 FR-023: the latest fallback uses only stored versions the caller may use ---------------------------
+
+    private Pool pool() {
+        return app.bootstrap().services().pool();
+    }
+
+    private Future<HttpResponse<Buffer>> registerLatestAs(String key, String name) {
+        return AppHarness.as(app.client().post(app.port(), "localhost", "/igs/register").timeout(30_000), key)
+                .sendJsonObject(new JsonObject().put("name", name).put("version", "latest"));
+    }
+
+    /** keys[0] = organisation A's admin key, keys[1] = organisation B's; lat.p#2.0.0 (and lat.q#2.0.0) private to B. */
+    private Future<List<String>> twoOrganisationsWithAPrivateHighest() {
+        List<String> keys = new ArrayList<>();
+        return Future.all(TestPackages.createOrganisation(pool(), "orga"), TestPackages.createOrganisation(pool(), "orgb"))
+                .compose(orgs -> {
+                    UUID orgA = orgs.resultAt(0);
+                    UUID orgB = orgs.resultAt(1);
+                    return TestPackages.createKey(pool(), orgA, "a-admin", "ADMIN")
+                            .compose(key -> {
+                                keys.add(key);
+                                return TestPackages.createKey(pool(), orgB, "b-admin", "ADMIN");
+                            })
+                            .compose(key -> {
+                                keys.add(key);
+                                return storeLocally("lat.p", "1.0.0");
+                            })
+                            .compose(v -> storeLocally("lat.p", "2.0.0"))
+                            .compose(v -> TestPackages.setPackageAccess(pool(), "lat.p#2.0.0", orgB, false))
+                            .compose(v -> storeLocally("lat.q", "2.0.0"))
+                            .compose(v -> TestPackages.setPackageAccess(pool(), "lat.q#2.0.0", orgB, false));
+                })
+                .map(v -> keys);
+    }
+
+    @Test
+    void latestFallbackSkipsAnotherOrganisationsPrivateVersion(Vertx vertx, VertxTestContext ctx) {
+        List<String> keys = new ArrayList<>();
+        start(vertx, false)
+                .compose(a -> twoOrganisationsWithAPrivateHighest())
+                .compose(k -> {
+                    keys.addAll(k);
+                    return registerLatestAs(keys.get(0), "lat.p");
+                })
+                .compose(a -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, a.statusCode(), a.bodyAsString());
+                        assertEquals("1.0.0", a.bodyAsJsonObject().getString("version"));
+                        assertFalse(a.bodyAsJsonObject().getBoolean("downloaded"));
+                        assertEquals(List.of(NO_REGISTRY), a.bodyAsJsonObject().getJsonArray("warnings").getList());
+                        assertFalse(a.bodyAsString().contains("2.0.0"), a.bodyAsString());
+                        assertFalse(a.bodyAsString().contains("orgb"), a.bodyAsString());
+                    });
+                    return registerLatestAs(keys.get(0), "lat.q");
+                })
+                .compose(nothingUsable -> {
+                    ctx.verify(() -> {
+                        JsonObject problem = assertProblem(nothingUsable, 404, "package-not-found");
+                        assertFalse(problem.encode().contains("orgb"), problem.encode());
+                    });
+                    return registerLatestAs(keys.get(1), "lat.p");
+                })
+                .onComplete(ctx.succeeding(owner -> ctx.verify(() -> {
+                    assertEquals(200, owner.statusCode(), owner.bodyAsString());
+                    assertEquals("2.0.0", owner.bodyAsJsonObject().getString("version"), "the owner still gets its own version");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void notListedLatestFallbackSkipsAnotherOrganisationsPrivateVersion(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, true)
+                .compose(a -> twoOrganisationsWithAPrivateHighest())
+                .compose(keys -> registerLatestAs(keys.get(0), "lat.p"))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    assertEquals("1.0.0", r.bodyAsJsonObject().getString("version"));
+                    assertEquals(List.of(NOT_LISTED), r.bodyAsJsonObject().getJsonArray("warnings").getList());
                     ctx.completeNow();
                 })));
     }

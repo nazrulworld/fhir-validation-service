@@ -114,7 +114,8 @@ public class ConfigSync {
                         if (row != null) {
                             pinnedAccess.put(version, row.access());
                         }
-                        builds.add(registry.applyPinned(version, revision, resolveAll(included, view))
+                        PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.access();
+                        builds.add(registry.applyPinned(version, revision, resolveAll(included, view, access))
                                 .recover(err -> Future.succeededFuture()));
                     }
                     return Future.join(builds).mapEmpty();
@@ -124,11 +125,14 @@ public class ConfigSync {
         return initial.mapEmpty();
     }
 
-    /** Each included IG's context, resolved against {@code view} (research R3). */
-    static Map<String, ResolvedContext> resolveAll(List<String> included, PackageCatalogView view) {
+    /**
+     * Each included IG's context, resolved against {@code view} (research R3) as the context's owner (spec 006
+     * FR-024). The owner comes from the shared configuration, so every instance resolves the same context.
+     */
+    static Map<String, ResolvedContext> resolveAll(List<String> included, PackageCatalogView view, PinnedAccess access) {
         Map<String, ResolvedContext> contexts = new LinkedHashMap<>();
         for (String key : included) {
-            contexts.put(key, ResolvedContext.of(key, view));
+            contexts.put(key, ResolvedContext.forKey(key, view, access));
         }
         return contexts;
     }
@@ -256,7 +260,7 @@ public class ConfigSync {
                     Future<PackageCatalogView> view = unknown
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
-                    return view.compose(v -> registry.applyPinned(version, row.revision(), resolveAll(row.included(), v)));
+                    return view.compose(v -> registry.applyPinned(version, row.revision(), resolveAll(row.included(), v, row.access())));
                 });
     }
 

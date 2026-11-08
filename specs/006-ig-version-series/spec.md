@@ -48,6 +48,24 @@ works on the concrete `name#version` exactly as before.
     reacted to that 404 by registering the package would also have failed, because registering `1.2.x` as a
     literal version was itself a 404 before this feature.
 
+### Session 2026-11-08 (2): follow-up fixes after 3.2.0
+
+- Q: A package's manifest can declare a dependency as a series (`hl7.terminology.r4#1.0.x`). Registration fetched it
+  literally and dropped it, and include reported it as "not stored". Is that in scope? → A: Yes, it's a defect.
+  A dependency series resolves like a top-level series (US5, FR-019, FR-021, FR-022).
+- Q: A dependency declared as `latest`, `current` or without a version resolved to the highest **stored** version
+  during registration, while top-level `latest` asks the registries first. Should they match? → A: Yes. A dependency
+  goes to the registries first, like top-level `latest` (FR-020).
+- Q: The `latest` registration fallback picked the highest stored version without checking access, so a private
+  version of another organisation caused a 404 although a usable lower version was stored. → A: A defect. The
+  fallback uses only versions the caller may use, like the series fallback (FR-023, US3 scenario 4).
+- Q: Dependency resolution picked the highest stored version regardless of who owns it. When that version was private
+  to another organisation, include (and `?ig=` on demand) failed with 424, even though a lower usable version was
+  stored. → A: A defect. A dependency declared without an explicit version is chosen only among versions the
+  context's owner may use: shareable ones, or the owner's own (FR-024, US5 scenarios 6 and 7). Exact versions keep
+  their meaning. Dependency versions stay unpinned, as spec 004 research R3 decided.
+- These ship as a patch release (3.2.1). The contract shape doesn't change.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register the newest release of a version series (Priority: P1)
@@ -132,6 +150,9 @@ shareable `1.2.4` stored, and check that `1.2.4` is chosen and that `1.2.9` appe
 3. **Given** the registries list `1.2.9` as the highest `1.2` release and organisation B has stored it privately,
    **When** organisation A registers `1.2.x`, **Then** the request is answered as today for a registration of
    `1.2.9` by a caller who may not use it (404), without naming organisation B.
+4. **Given** registries are disabled (or none lists the package), a shareable `1.0.0` is stored and organisation B
+   has stored a private `2.0.0`, **When** organisation A registers `latest`, **Then** `1.0.0` is returned with the
+   no-registry (or not-listed) warning, and `2.0.0` and organisation B are named nowhere (FR-023).
 
 ---
 
@@ -154,6 +175,42 @@ registry call and no change to stored or included packages.
    `invalid-request` saying `ig` needs an exact version, and nothing is validated.
 3. **Given** any package, **When** a client registers or includes an exact version (`1.2.3`) or `latest`, **Then**
    the behaviour is exactly as before this feature.
+
+---
+
+### User Story 5 - Dependencies declared with a series or `latest` are resolved (Priority: P2)
+
+A package's manifest declares a dependency by series (for example `"dep": "1.0.x"`) or as `latest`/`current`. When
+the administrator registers the package with its dependencies, the service resolves each such dependency the way it
+resolves a top-level registration and stores the concrete version. When the package is later included (or built on
+demand), the dependency resolves to the matching stored version, so the validator context contains it.
+
+**Why this priority**: Many published IGs declare dependencies as a series. Before this fix the dependency was
+fetched as the literal label `1.0.x`, failed with 404 and was silently dropped, and include reported it as "not
+stored; skipped", so validation ran without it.
+
+**Independent Test**: The registry lists `dep` `1.0.0`, `1.0.3` and `1.1.0`, and `parent#1.0.0` depends on
+`dep#1.0.x`. Register `parent#1.0.0` and check that `dep#1.0.3` is stored. Include `parent#1.0.0` and check that
+`resolved` contains `dep#1.0.3`, with no "not stored; skipped" warning.
+
+**Acceptance Scenarios**:
+
+1. **Given** the registries list `dep` `1.0.0`, `1.0.3` and `1.1.0`, **When** `parent` (depending on `dep#1.0.x`) is
+   registered with its dependencies, **Then** `dep#1.0.3` is downloaded and stored, and `1.1.0` isn't.
+2. **Given** registries are disabled and `dep#1.0.2` is stored, **When** `parent` is registered, **Then** the stored
+   `dep#1.0.2` is used and nothing is downloaded.
+3. **Given** `dep#1.0.0` is stored and the registries list `1.1.0`, **When** `parent` depends on `dep` with
+   `latest` (or `current`, or no version) and is registered, **Then** `dep#1.1.0` is downloaded and stored.
+4. **Given** `parent#1.0.0` and `dep#1.0.3` are stored, **When** `parent#1.0.0` is included, **Then** `resolved`
+   contains `dep#1.0.3` and the warnings don't say the dependency is not stored.
+5. **Given** `parent` declares a malformed series dependency such as `dep#1.x.3`, **When** `parent` is registered,
+   **Then** registration succeeds, the dependency is skipped with a logged warning, and nothing is stored for it.
+6. **Given** `parent#1.0.0` (shareable) depends on `dep#1.0.x`, a shareable `dep#1.0.3` is stored and organisation B
+   has stored a private `dep#1.0.5`, **When** organisation A includes `parent#1.0.0`, **Then** the context resolves
+   `dep#1.0.3` on every instance, the include succeeds, and `1.0.5` and organisation B are named nowhere. When
+   organisation B includes it instead, its context resolves `dep#1.0.5`.
+7. **Given** the same packages with `parent#1.0.0` owned by organisation A, **When** any caller validates with
+   `?ig=parent#1.0.0` on demand, **Then** the context resolves `dep#1.0.3` and validation answers 200, not 424.
 
 ---
 
@@ -237,8 +294,9 @@ registry call and no change to stored or included packages.
 
 **Unchanged behaviour and contract**
 
-- **FR-016**: Exact versions and `latest` MUST behave exactly as before on both endpoints. Validation requests and
-  include never download packages.
+- **FR-016**: Exact versions and `latest` MUST behave exactly as before on both endpoints, except for the 3.2.1
+  fixes in FR-020 (dependency `latest`) and FR-023 (access-aware `latest` fallback). Validation requests and include
+  never download packages.
 - **FR-017**: The HTTP contract MUST document the series form on the `version` field of registration and the
   `igPackageVersion` field of include, the 400 response for a malformed series, the 400 response for a series in the validation request's `ig` parameter,
   and the new response field for the
@@ -247,6 +305,33 @@ registry call and no change to stored or included packages.
   version is a series (for example `?ig=name#1.2.x`) MUST be rejected with 400 `invalid-request`, with a message
   saying that `ig` needs an exact version (the one reported by include). Nothing is validated, and no snapshot
   lookup or build happens.
+
+**Dependencies and the `latest` fallback (3.2.1 fixes, Session 2026-11-08 (2))**
+
+- **FR-019**: When registration loads dependencies (`includeDependency` true), a dependency whose declared version is
+  a series MUST resolve as FR-006 and FR-009 do: the highest match listed by the registries that answered, else the
+  highest matching stored version. It MUST NOT be fetched as a literal version label.
+- **FR-020**: When registration loads dependencies, a dependency declared as `latest`, `current` or without a version
+  MUST resolve as spec 004 FR-027 and FR-029 do for a top-level `latest`: the registries' highest release first, else
+  the highest stored version. Exact dependency versions MUST behave as before.
+- **FR-021**: Dependency resolution for include, on-demand validation contexts and snapshot builds MUST resolve a
+  dependency series to the highest matching stored version, by the FR-004 ordering. This choice MUST NOT depend on
+  the caller, so every instance resolves the same context; it is restricted by FR-024. The existing include check
+  that the caller may use every resolved dependency still applies afterwards.
+- **FR-022**: A dependency series that is malformed (FR-002) MUST be treated as unresolvable: registration logs a
+  warning and skips it, and dependency resolution reports it as missing. It MUST NOT fail the request with 400,
+  because the value comes from package metadata, not from the client.
+- **FR-023**: When registration of `latest` falls back to stored versions (spec 004 FR-029), it MUST choose the
+  highest stored version the caller may use, with the same warning. It answers 404 `package-not-found` only when the
+  caller may use no stored version. This amends spec 004 FR-029 and aligns `latest` with the series fallback (FR-009).
+  Versions the caller may not use MUST NOT be named.
+- **FR-024**: Wherever a context is resolved (include, builds on every instance, on-demand contexts, and the access
+  check before validation), a dependency declared as a series, `latest`, `current` or without a version MUST be chosen
+  only among stored versions that are shareable or owned by the **context's owner**: the included context's owner
+  (the caller, for a new include), or the IG package's owner for an on-demand context. The system organisation gets
+  no exception here. The owner is shared state, so every instance still resolves the same context. A dependency
+  declared with an exact version MUST be used as declared, and the caller's access to it is checked as before (424).
+  When a package's owner or sharing changes, contexts whose choice changes are resolved again and rebuilt.
 
 ### Key Entities
 
@@ -274,6 +359,12 @@ registry call and no change to stored or included packages.
 - **SC-006**: All existing tests for exact versions and `latest` on both endpoints still pass unchanged.
 - **SC-007**: In multi-organisation tests, a version the caller may not use is never chosen and never named in a
   response or error.
+- **SC-008**: In every test case, a dependency declared with a valid series is stored by registration (when a
+  matching version exists) and appears in the resolved context of the package that declares it.
+- **SC-009**: Registration of `latest` never answers 404 while a stored version the caller may use exists.
+- **SC-010**: In multi-organisation tests, include and on-demand validation never fail with 424 because of another
+  organisation's private version of a dependency declared without an explicit version, while a usable matching version
+  is stored.
 
 ## Assumptions
 
@@ -286,8 +377,10 @@ registry call and no change to stored or included packages.
   series and `latest` agree when every version is in one series.
 - Registration falls back to stored versions with a warning when no registry can decide, the same as `latest`
   today (spec 004 FR-029). This keeps registration usable when registries are disabled or unreachable.
-- Resolving dependencies that a package's manifest declares with a wildcard (for example `4.0.x`) is out of scope.
-  Dependency resolution stays as it is today.
+- Dependencies that a package's manifest declares with a series (for example `4.0.x`) are resolved (US5, FR-019 to
+  FR-022). The dependency walk during registration doesn't filter by caller: a dependency that is already stored is
+  only read, never re-owned, exactly as for exact dependency versions before. A dependency newly downloaded is owned
+  like the package that declares it.
 - Upload and download-URL registrations are out of scope. They take the version from the package archive.
 - Memory impact is negligible: a series is resolved per request from version lists the service already reads, and
   nothing new is cached or stored. No schema change is needed.

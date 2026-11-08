@@ -355,10 +355,89 @@ Task: "T015 [US2] include contract tests in src/test/java/nzi/fhir/validator/web
 - Each story ends at a checkpoint with a single `mvn -q test -Dtest=…` command.
 - Commit after each task or logical group, with conventional commit messages (for example
   `feat(igs): resolve version series on register`).
-- Don't change `latest` semantics. Its stored fallback without access filtering is a known difference (research R4) and out of scope.
+- `latest`'s stored fallback without access filtering was a known gap in 3.2.0 (research R4). Phase 9 fixes it (FR-023, R11).
 
 ---
 
 ## Phase 8: Convergence
 
 - [X] T033 Add `maxLength: 64` to the `version` property of the `POST /igs/register` request body in `src/main/resources/openapi.yaml` (between `default: latest` and `description`), as contracts/http-api.md §1 and T013 call for, matching the existing 1-64 character check in `IgPackageApi.handleRegisterIg`; then re-run `./mvnw test -Dtest='IgPackageApiContractTest,RegisterSeriesIT,RegisterLatestIT'` per FR-017 (partial)
+
+---
+
+## Phase 9: 3.2.1 fixes: dependency series and `latest`, access-aware `latest` fallback (US5, US3 scenario 4)
+
+**Purpose**: The follow-up fixes in spec.md Session 2026-11-08 (2): FR-019 to FR-023, research R10–R12.
+
+**Independent Test**: The registry lists `dep` `1.0.0`, `1.0.3` and `1.1.0`, and `parent#1.0.0` declares
+`"dep": "1.0.x"`. Registering `parent#1.0.0` stores `dep#1.0.3`, and including it resolves `dep#1.0.3`. With
+registries disabled, organisation A's `latest` registration of a package whose highest stored version is private to
+organisation B returns A's highest usable version.
+
+### Tests for Phase 9 ⚠️
+
+- [X] T034 [P] [US3] Add failing cases to `src/test/java/nzi/fhir/validator/core/npm/RegisterLatestIT.java` (FR-023, SC-009). Use `TestPackages.createOrganisation`, `createKey` and `setPackageAccess`:
+  - (a) Registries disabled. `lat.p#1.0.0` stored shareable by the system org, `lat.p#2.0.0` stored private to org B. Org A registers `latest` → 200, `version` `1.0.0`, `downloaded` false, `warnings` = [`NO_REGISTRY_WARNING`], and the body contains neither `2.0.0` nor org B's short name.
+  - (b) The registry is enabled but doesn't list `lat.p` (404) → the same, with `NOT_LISTED_WARNING`.
+  - (c) Only `lat.q#2.0.0`, private to org B, is stored, and registries are disabled → org A gets 404 `package-not-found`, and org B's short name isn't in the body.
+  - (d) Org B registers `lat.p` `latest` with registries disabled → `2.0.0`.
+- [X] T035 [P] [US5] Add failing unit tests to `src/test/java/nzi/fhir/validator/core/npm/DependencyResolverTest.java` (FR-021, FR-022):
+  - root `parent#1.0.0` → `dep#1.0.x`, with `dep` stored as `1.0.0`, `1.0.3`, `1.10.0`, `1.1.0` → `resolved` contains `dep#1.0.3` and `missing` is empty;
+  - `dep#1.0.x` with only `dep#1.1.0` stored → `missing` = [`dep#1.0.x`] with the "not stored; skipped" warning;
+  - `dep#1.x.3` (malformed) → `missing` = [`dep#1.x.3`], no exception;
+  - a series dependency and an exact dependency on the same package (`1.0.x` and `1.0.1`) → the highest wins, with the existing "required in versions" warning;
+  - the same result for shuffled catalog and root order (FR-005).
+- [X] T036 [P] [US5] Create a failing integration test `src/test/java/nzi/fhir/validator/core/npm/RegisterDependencySeriesIT.java`, modelled on `RegisterSeriesIT` (`StubRegistry` + `AppHarness`). Registry: `dep` `1.0.0`, `1.0.3`, `1.1.0`; `parent#1.0.0` → `dep#1.0.x`; `parentl#1.0.0` → `dep#latest`; `parentc#1.0.0` → `dep#current`; `parentn#1.0.0` → `dep` (no version); `parentbad#1.0.0` → `dep#1.x.3`.
+  - (a) Register `parent#1.0.0` → `dep#1.0.3` stored, `dep#1.1.0` not stored, and the archive for `dep/1.0.x` is never requested (`registry.requests()`).
+  - (b) Registries disabled, with `parent#1.0.0` and `dep#1.0.2` stored locally → 200 and `dep#1.0.2` used. Nothing is downloaded.
+  - (c) `dep#1.0.0` stored locally; register `parentl#1.0.0` → `dep#1.1.0` downloaded (FR-020). The same for `parentc` and `parentn`.
+  - (d) Register `parentbad#1.0.0` → 200, no `dep` version stored, and the registry got no archive request for `dep`.
+  - (e) `includeDependency:false` → no `dep` stored.
+  - (f) A dependency newly stored is owned by the registering organisation with the requested `shareable` (`IgPackageService.access`).
+- [X] T037 [P] [US5] Add a failing case to `src/test/java/nzi/fhir/validator/core/validator/IncludeSeriesIT.java`: store `incd.parent#1.0.0` (declaring `incd.dep#1.0.x`), `incd.dep#1.0.1` and `incd.dep#1.0.3`. Include R4 `incd.parent` `1.0.0` → `resolved` contains `incd.dep#1.0.3`, and no warning contains `not stored`.
+
+### Implementation for Phase 9
+
+- [X] T038 [US3] In `src/main/java/nzi/fhir/validator/core/npm/PostgresPackageCacheManager.java`, rename `SeriesRegistryResult` to `RegistryResult(String version, String warning)` and change `resolveForRegistration(name)` to return `Future<RegistryResult>` with no stored fallback:
+  - registries disabled or none configured → `(null, NO_REGISTRY_WARNING)`;
+  - the highest release across the answering registries → `(v, null)`;
+  - none lists the package → `(null, NOT_LISTED_WARNING)`; every registry failed → `(null, NO_REGISTRY_WARNING)`.
+
+  Delete the private `storedFallback`. Keep `RegistrationVersion` (used by `IgPackageService`).
+- [X] T039 [US3] In `src/main/java/nzi/fhir/validator/core/service/IgPackageService.java`, add `private Future<RegistrationVersion> storedFallback(Caller caller, String name, Function<Collection<String>, Optional<String>> pick, String warning, Supplier<ProblemException> notFound)`. It reads `storedVersionsWithAccess(pgPool, name)`, keeps the versions where `AccessPolicy.canUse(caller, …)`, applies `pick`, and returns `RegistrationVersion(v, false, warning)` or fails with `notFound`. Use it in `resolveSeriesForRegistration` (`pick = series::highest`) and on the `latest` path (`pick = PackageVersionComparator::max`, `notFound` = the existing "was not found in the configured package registries and is not stored" 404). Makes T034 pass. `RegisterLatestIT` and `RegisterSeriesIT` must stay green.
+- [X] T040 [US5] In `src/main/java/nzi/fhir/validator/core/npm/DependencyResolver.java` `concrete`: when `VersionSeries.isSeries(requested)`, return `VersionSeries.parse(requested).highest(stored)`, catching `ProblemException` → `Optional.empty()`. Update the class Javadoc rules (series → highest stored match; malformed → missing). Makes T035 and T037 pass.
+- [X] T041 [US5] In `PostgresPackageCacheManager.java`:
+  - add `storedVersions(String name)` → `Future<List<String>>`, and rebuild `getLatestVersionFromCache` on the same query;
+  - add a private `resolveDependencyVersion(String name, String requested, boolean cacheOnly)` (R10):
+    - exact → as given;
+    - series → parse (malformed → log at warn and return `null`), then `resolveSeriesFromRegistries` when `!cacheOnly && registryEnabled`, else or when it has no version, `series.highest(storedVersions)`;
+    - `null`/blank/`latest`/`current` → `resolveForRegistration(name).version()` when `!cacheOnly && registryEnabled`, else or when it's `null`, the highest stored.
+  - Use it in the private recursive `loadPackage(…, visited, ownership)` in place of `resolveVersion`.
+  - Keep the public `resolveVersion` unchanged (`RegistryFallbackTest`, `PackageLatestResolutionIT`, `PostgresPackageCacheManagerTest`).
+
+  Makes T036 pass.
+- [X] T042 Append to `src/main/resources/openapi.yaml` the `version` description text from contracts/http-api.md §1 (3.2.1). No shape change. Run `IgPackageApiContractTest`.
+- [X] T043 Add a `### Fixed` entry to `CHANGELOG.md` `[Unreleased]`:
+  - dependencies declared with a version series are resolved during registration and in validator contexts (they were fetched literally and dropped);
+  - dependencies declared as `latest`/`current`/no version are resolved from the registries first during registration, like a top-level `latest`;
+  - the `latest` registration fallback only uses stored versions the caller may use (was 404 when the highest stored version was private to another organisation);
+  - note: included contexts with a series dependency are rebuilt once after upgrade, now that the dependency resolves.
+
+  The 3.2.1 version bump in `pom.xml` and `openapi.yaml` `info.version` happens in the release PR.
+- [X] T044 Run the full suite (`./mvnw -q test`). `RegisterLatestIT`, `RegisterSeriesIT`, `IncludeSeriesIT`, `IncludeOwnershipIT`, `RegistryFallbackTest`, `PackageLatestResolutionIT`, `PostgresPackageCacheManagerTest` and `IgScopedValidationIT` must be green. Walk through quickstart.md §4.
+
+**Dependencies**: T034 → T038 → T039; T035 → T040; T037 → T040; T036 → T041 (T041 uses the T038 `RegistryResult`); T042–T044 last.
+
+**Checkpoint**: `./mvnw -q test -Dtest='DependencyResolverTest,RegisterDependencySeriesIT,RegisterLatestIT,RegisterSeriesIT,IncludeSeriesIT'` is green.
+
+---
+
+## Phase 10: Floating dependencies resolve as the context's owner (FR-024, US5 scenarios 6–7, research R13)
+
+- [X] T045 [P] [US5] Failing unit tests in `DependencyResolverTest`: floating versions (series, `latest`, `current`, bare) skip versions that aren't selectable; exact versions ignore selectability; no selectable version → missing, without naming the skipped version.
+- [X] T046 [P] [US5] Failing unit test in `AccessPolicyTest` for `selectableFor`: own private and any shareable are selectable; another organisation's private isn't, also for a system-owned context; `null` access isn't.
+- [X] T047 [P] [US5] Failing cases in `IncludeOwnershipIT`: org A includes `inc.fparent#1.0.0` (declaring `inc.fdep#1.0.x` and `inc.flat#latest`, highest of each private to org B) → 200, `resolved` and the built context contain `inc.fdep#1.0.3` and `inc.flat#1.0.0`, and nothing names `1.0.5`, `2.0.0` or `orgb`; org B including it resolves its own private versions.
+- [X] T048 [P] [US5] Failing case in `OwnershipValidationIT`: `?ig=own.fuser#1.0.0` (owned by A, declaring `own.fdep#1.0.x`; `1.0.5` private to B) → 200 for both organisations, and the on-demand resolution contains `own.fdep#1.0.3`.
+- [X] T049 [US5] `DependencyResolver.resolve(roots, catalog, Predicate<String> selectable)`: filter only floating versions; the 2-argument overload accepts everything. `AccessPolicy.selectableFor(UUID owner, Access a)`.
+- [X] T050 [US5] `ResolvedContext.of(ig, view, owner)`, `of(ig, view)` resolving as the IG package's owner, and `forKey(ig, view, pinned)`. Use `forKey` in `ConfigSync.resolveAll` (now taking `PinnedAccess`, at start-up and in `runSync`) and in `FhirValidationService.checkAccess`. In `IgPackageService.include`, resolve as the existing context owner or the caller.
+- [X] T051 CHANGELOG **Fixed** entry; full suite green (531 tests).

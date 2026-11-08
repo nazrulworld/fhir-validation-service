@@ -104,4 +104,102 @@ class DependencyResolverTest {
         }
         assertEquals(List.of("q#2.0.0", "r1#1.0.0", "r2#2.0.0", "w#2.0.0", "x#1.1.0", "y#1.0.0", "z#1.0.0"), expected.resolved());
     }
+
+    // --- spec 006 FR-021, FR-022: dependencies declared with a version series ------------------------------------
+
+    @Test
+    void seriesDependencyResolvesToTheHighestStoredMatch() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#1.0.x"),
+                "dep#1.0.0", List.of(), "dep#1.0.3", List.of(), "dep#1.10.0", List.of(), "dep#1.1.0", List.of(),
+                "dep#1.0.4-ballot", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat);
+        assertEquals(List.of("dep#1.0.3", "parent#1.0.0"), r.resolved());
+        assertTrue(r.missing().isEmpty(), r.missing().toString());
+        assertTrue(r.warnings().isEmpty(), r.warnings().toString());
+    }
+
+    @Test
+    void seriesDependencyWithoutAStoredMatchIsMissing() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#1.0.x"),
+                "dep#1.1.0", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat);
+        assertEquals(List.of("parent#1.0.0"), r.resolved());
+        assertEquals(List.of("dep#1.0.x"), r.missing());
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("dep#1.0.x") && w.contains("not stored")), r.warnings().toString());
+    }
+
+    @Test
+    void malformedSeriesDependencyIsMissingNotAnError() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#1.x.3"),
+                "dep#1.0.3", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat);
+        assertEquals(List.of("parent#1.0.0"), r.resolved());
+        assertEquals(List.of("dep#1.x.3"), r.missing());
+    }
+
+    @Test
+    void seriesAndExactDependencyOnTheSamePackageKeepTheHighest() {
+        var cat = catalog(Map.of(
+                "root#1.0.0", List.of("x#1.0.0", "y#1.0.0"),
+                "x#1.0.0", List.of("dep#1.0.x"),
+                "y#1.0.0", List.of("dep#1.0.1"),
+                "dep#1.0.1", List.of(), "dep#1.0.3", List.of()));
+        var r = DependencyResolver.resolve(List.of("root#1.0.0"), cat);
+        assertEquals(List.of("dep#1.0.3", "root#1.0.0", "x#1.0.0", "y#1.0.0"), r.resolved());
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("required in versions")), r.warnings().toString());
+    }
+
+    @Test
+    void seriesResolutionIsIndependentOfCatalogOrder() {
+        List<String> versions = new ArrayList<>(List.of("1.0.0", "1.0.3", "1.0.2", "1.1.0", "1.0.10"));
+        Random random = new Random(42);
+        for (int i = 0; i < 10; i++) {
+            Collections.shuffle(versions, random);
+            Map<String, List<String>> packages = new java.util.LinkedHashMap<>();
+            packages.put("parent#1.0.0", List.of("dep#1.0.X"));
+            versions.forEach(v -> packages.put("dep#" + v, List.of()));
+            var r = DependencyResolver.resolve(List.of("parent#1.0.0"), catalog(packages));
+            assertEquals(List.of("dep#1.0.10", "parent#1.0.0"), r.resolved());
+        }
+    }
+
+    // --- spec 006 FR-024: floating dependency versions are chosen among selectable versions only -------------------
+
+    @Test
+    void floatingDependencyVersionsSkipVersionsThatAreNotSelectable() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("series#1.0.x", "latest#latest", "current#current", "bare"),
+                "series#1.0.3", List.of(), "series#1.0.5", List.of(),
+                "latest#1.0.0", List.of(), "latest#2.0.0", List.of(),
+                "current#1.0.0", List.of(), "current#2.0.0", List.of(),
+                "bare#1.0.0", List.of(), "bare#2.0.0", List.of()));
+        java.util.Set<String> privateElsewhere = java.util.Set.of("series#1.0.5", "latest#2.0.0", "current#2.0.0", "bare#2.0.0");
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> !privateElsewhere.contains(p));
+        assertEquals(List.of("bare#1.0.0", "current#1.0.0", "latest#1.0.0", "parent#1.0.0", "series#1.0.3"), r.resolved());
+        assertTrue(r.missing().isEmpty(), r.missing().toString());
+    }
+
+    @Test
+    void exactDependencyVersionsAndRootsIgnoreSelectability() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#2.0.0"),
+                "dep#1.0.0", List.of(), "dep#2.0.0", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> false);
+        assertEquals(List.of("dep#2.0.0", "parent#1.0.0"), r.resolved(),
+                "an exact version is used as declared; include then checks the caller may use it (424 otherwise)");
+    }
+
+    @Test
+    void aFloatingDependencyWithNoSelectableVersionIsMissing() {
+        var cat = catalog(Map.of(
+                "parent#1.0.0", List.of("dep#1.0.x"),
+                "dep#1.0.5", List.of()));
+        var r = DependencyResolver.resolve(List.of("parent#1.0.0"), cat, p -> !p.equals("dep#1.0.5"));
+        assertEquals(List.of("parent#1.0.0"), r.resolved());
+        assertEquals(List.of("dep#1.0.x"), r.missing());
+        assertTrue(r.warnings().stream().noneMatch(w -> w.contains("1.0.5")), r.warnings().toString());
+    }
 }

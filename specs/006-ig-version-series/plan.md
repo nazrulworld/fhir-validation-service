@@ -25,6 +25,13 @@ The work is:
 
 There's no schema change and no new shared state.
 
+**3.2.1 follow-up (Session 2026-11-08 (2), FR-019 to FR-023, research R10–R12)**:
+
+- dependencies declared with a series or `latest`/`current` are resolved during registration (registries first,
+  then stored) and by `DependencyResolver` at include and build time (highest stored match);
+- the `latest` registration fallback only considers stored versions the caller may use, through one fallback helper
+  shared with the series path.
+
 ## Technical Context
 
 **Language/Version**: Java (project toolchain, as in `pom.xml`, version 3.1.0)
@@ -104,10 +111,13 @@ src/main/java/nzi/fhir/validator/
 ├── core/npm/
 │   ├── VersionSeries.java                 # NEW: detect, parse (400), matches, highest  (R1, R2)
 │   ├── PackageVersionComparator.java      # + releaseParts(String) accessor             (R1)
-│   └── PostgresPackageCacheManager.java   # fetchListings refactor; resolveSeriesFromRegistries (R3)
+│   ├── PostgresPackageCacheManager.java   # fetchListings refactor; resolveSeriesFromRegistries (R3)
+│   │                                      # 3.2.1: RegistryResult; resolveDependencyVersion (R10, R11)
+│   └── DependencyResolver.java            # 3.2.1: series branch in concrete()               (R10)
 ├── core/service/
 │   └── IgPackageService.java              # register(): series branch + access-aware fallback;
 │                                          # include(): series resolution; storedVersionsWithAccess (R4, R5)
+│                                          # 3.2.1: storedFallback shared by latest and series (R11)
 ├── core/validator/
 │   └── IgReference.java                   # parse(): reject a series with 400                (R6)
 └── web/endpoint/
@@ -121,6 +131,9 @@ pom.xml                                    # version 3.2.0 at release time
 src/test/java/nzi/fhir/validator/
 ├── core/npm/VersionSeriesTest.java        # NEW (unit)
 ├── core/npm/RegisterSeriesIT.java         # NEW (StubRegistry + AppHarness, modelled on RegisterLatestIT)
+├── core/npm/RegisterDependencySeriesIT.java # NEW 3.2.1 (US5)
+├── core/npm/DependencyResolverTest.java   # + series dependencies (3.2.1)
+├── core/npm/RegisterLatestIT.java         # + access-aware fallback (3.2.1)
 ├── core/validator/IncludeSeriesIT.java    # NEW (modelled on IncludeExcludeIT)
 ├── core/validator/IncludeOwnershipIT.java # + series ownership cases
 ├── core/validator/IgReferenceTest.java    # + series rejected
@@ -142,6 +155,11 @@ to the version ordering it builds on. The endpoint changes are limited to respon
    another organisation.
 5. **`requestedVersion`** in both handlers, plus the contract tests.
 6. **`openapi.yaml`** (with step 5 at the latest), CHANGELOG, and the version bump.
+7. **3.2.1: access-aware `latest` fallback** (R11): `RegistryResult`, `IgPackageService.storedFallback`; new
+   `RegisterLatestIT` ownership cases first.
+8. **3.2.1: dependency series and `latest`** (R10): `DependencyResolver.concrete` series branch
+   (`DependencyResolverTest` first), then `resolveDependencyVersion` in the registration walk
+   (`RegisterDependencySeriesIT`), then the include check in `IncludeSeriesIT`. CHANGELOG **Fixed** and 3.2.1.
 
 Steps 1–3 deliver US2 and US4 independently of the registry work. Step 4 delivers US1. US3 is covered across
 steps 3 and 4.

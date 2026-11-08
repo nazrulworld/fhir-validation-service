@@ -374,6 +374,11 @@ public class PostgresPackageCacheManager {
      * or {@code null}.
      */
     public static Future<String> getLatestVersionFromCache(Pool pgPool, String packageId) {
+        return storedVersions(pgPool, packageId).map(versions -> PackageVersionComparator.max(versions).orElse(null));
+    }
+
+    /** Every stored version of a package, in no particular order (not filtered by owner). */
+    public static Future<List<String>> storedVersions(Pool pgPool, String packageId) {
         return pgPool.preparedQuery("SELECT ig_package_version FROM " + TABLE + " WHERE ig_package_id = $1")
                 .execute(Tuple.of(packageId))
                 .map(rows -> {
@@ -381,7 +386,7 @@ public class PostgresPackageCacheManager {
                     for (Row row : rows) {
                         versions.add(row.getString(0));
                     }
-                    return PackageVersionComparator.max(versions).orElse(null);
+                    return versions;
                 });
     }
 
@@ -421,7 +426,7 @@ public class PostgresPackageCacheManager {
                                            PackageOwnership ownership) {
         String name = idAndVersion.contains("#") ? idAndVersion.substring(0, idAndVersion.indexOf('#')) : idAndVersion;
         String requested = idAndVersion.contains("#") ? idAndVersion.substring(idAndVersion.indexOf('#') + 1) : null;
-        return resolveVersion(name, requested, cacheOnly).compose(version -> {
+        return resolveDependencyVersion(name, requested, cacheOnly).compose(version -> {
             if (version == null || !visited.add(name + "#" + version)) {
                 return Future.succeededFuture(null);
             }
@@ -471,6 +476,42 @@ public class PostgresPackageCacheManager {
         });
     }
 
+    /**
+     * The version {@link #loadPackage(String, boolean, boolean, PackageOwnership)} loads, for a root or a declared
+     * dependency (spec 006 FR-019, FR-020, FR-022, research R10):
+     * <ul>
+     *     <li>an exact version is used as given;</li>
+     *     <li>a version series resolves to the highest match the registries list, else the highest stored match; a
+     *     malformed series resolves to {@code null} (skipped, with a warning);</li>
+     *     <li>{@code null}, {@code latest} or {@code current} resolves to the registries' highest release, else the
+     *     highest stored version.</li>
+     * </ul>
+     * With {@code cacheOnly} or registries disabled, only stored versions are considered. Stored versions are not
+     * filtered by caller: a stored package is only read here, never re-owned.
+     */
+    private Future<String> resolveDependencyVersion(String name, String requested, boolean cacheOnly) {
+        boolean askRegistries = !cacheOnly && registryEnabled;
+        if (VersionSeries.isSeries(requested)) {
+            VersionSeries series;
+            try {
+                series = VersionSeries.parse(requested);
+            } catch (ProblemException e) {
+                logger.warn("Package {}#{} has a malformed version series; skipped", name, requested);
+                return Future.succeededFuture(null);
+            }
+            return (askRegistries ? resolveSeriesFromRegistries(name, series).map(RegistryResult::version)
+                    : Future.<String>succeededFuture(null))
+                    .compose(listed -> listed != null ? Future.succeededFuture(listed)
+                            : storedVersions(pgPool, name).map(stored -> series.highest(stored).orElse(null)));
+        }
+        if (requested != null && !requested.isBlank() && !requested.equals("latest") && !requested.equals("current")) {
+            return Future.succeededFuture(requested);
+        }
+        return (askRegistries ? resolveForRegistration(name).map(RegistryResult::version)
+                : Future.<String>succeededFuture(null))
+                .compose(listed -> listed != null ? Future.succeededFuture(listed) : getLatestVersionFromCache(pgPool, name));
+    }
+
     private Future<NpmPackage> fetchFromRegistries(String name, String version, PackageOwnership ownership) {
         if (registryUrls.isEmpty()) {
             return Future.succeededFuture(null);
@@ -499,7 +540,8 @@ public class PostgresPackageCacheManager {
     }
 
     /**
-     * Version chosen by {@code POST /igs/register} for {@code latest} (spec 004 FR-027 to FR-029).
+     * Version chosen by {@code POST /igs/register}: exact, {@code latest} or a version series (spec 004 FR-027 to FR-029,
+     * spec 006 FR-006, FR-009, FR-023).
      *
      * @param fromRegistry the registries' highest release, rather than a fallback to the highest stored version
      * @param warning      curated text when the registries could not decide, else {@code null}
@@ -523,13 +565,14 @@ public class PostgresPackageCacheManager {
     }
 
     /**
-     * Version chosen by {@code POST /igs/register} for a version series (spec 006 FR-006, FR-009).
+     * What the registries decide for {@code POST /igs/register} with {@code latest} or a version series (spec 004
+     * FR-027, spec 006 FR-006).
      *
-     * @param version the highest matching version listed by the registries that answered, or {@code null} when none
-     *                could decide (the caller then falls back to the stored versions it may use)
+     * @param version the highest (matching) version listed by the registries that answered, or {@code null} when none
+     *                could decide (the caller then falls back to stored versions, FR-009, FR-023)
      * @param warning curated text saying why the registries could not decide, else {@code null}
      */
-    public record SeriesRegistryResult(String version, String warning) {
+    public record RegistryResult(String version, String warning) {
     }
 
     /**
@@ -561,27 +604,26 @@ public class PostgresPackageCacheManager {
     }
 
     /**
-     * The registries' highest released version of {@code name} (the {@link #latestFromListing} rule). When every
-     * registry fails or registries are disabled, or when none lists the package, falls back to the highest stored
-     * version with a warning saying which; completes with {@code null} when nothing is stored either. Unlike
-     * {@link #resolveVersion}, a stored version never hides a newer release.
+     * The registries' highest released version of {@code name} (the {@link #latestFromListing} rule). Does not look
+     * at stored packages: when registries are disabled, every registry fails or none lists the package, the result
+     * has no version and a warning saying which, and the caller falls back to the stored versions it may use (spec
+     * 004 FR-029, amended by spec 006 FR-023). Unlike {@link #resolveVersion}, a stored version never hides a newer
+     * release. Never fails.
      */
-    public Future<RegistrationVersion> resolveForRegistration(String name) {
+    public Future<RegistryResult> resolveForRegistration(String name) {
         if (!registryEnabled || registryUrls.isEmpty()) {
-            return storedFallback(name, NO_REGISTRY_WARNING);
+            return Future.succeededFuture(new RegistryResult(null, NO_REGISTRY_WARNING));
         }
-        return fetchListings(name).compose(listings -> {
+        return fetchListings(name).map(listings -> {
             List<String> versions = new ArrayList<>();
             for (Listing l : listings) {
                 if (l.outcome() == ListingOutcome.LISTED) {
                     PackageVersionComparator.max(l.versions()).ifPresent(versions::add);
                 }
             }
-            Optional<String> latest = PackageVersionComparator.max(versions);
-            if (latest.isPresent()) {
-                return Future.succeededFuture(new RegistrationVersion(latest.get(), true, null));
-            }
-            return storedFallback(name, anyAnswered(listings) ? NOT_LISTED_WARNING : NO_REGISTRY_WARNING);
+            return PackageVersionComparator.max(versions)
+                    .map(v -> new RegistryResult(v, null))
+                    .orElseGet(() -> new RegistryResult(null, anyAnswered(listings) ? NOT_LISTED_WARNING : NO_REGISTRY_WARNING));
         });
     }
 
@@ -591,10 +633,10 @@ public class PostgresPackageCacheManager {
      * registry could be consulted or none lists a matching version, and the caller falls back to the stored versions
      * it may use (FR-009). Never fails.
      */
-    public Future<SeriesRegistryResult> resolveSeriesFromRegistries(String name, VersionSeries series) {
+    public Future<RegistryResult> resolveSeriesFromRegistries(String name, VersionSeries series) {
         String noRegistry = String.format(SERIES_NO_REGISTRY_WARNING, series.raw());
         if (!registryEnabled || registryUrls.isEmpty()) {
-            return Future.succeededFuture(new SeriesRegistryResult(null, noRegistry));
+            return Future.succeededFuture(new RegistryResult(null, noRegistry));
         }
         return fetchListings(name).map(listings -> {
             List<String> pooled = listings.stream()
@@ -604,16 +646,11 @@ public class PostgresPackageCacheManager {
                     .toList();
             Optional<String> highest = series.highest(pooled);
             if (highest.isPresent()) {
-                return new SeriesRegistryResult(highest.get(), null);
+                return new RegistryResult(highest.get(), null);
             }
-            return new SeriesRegistryResult(null, anyAnswered(listings)
+            return new RegistryResult(null, anyAnswered(listings)
                     ? String.format(SERIES_NOT_LISTED_WARNING, series.raw()) : noRegistry);
         });
-    }
-
-    private Future<RegistrationVersion> storedFallback(String name, String warning) {
-        return getLatestVersionFromCache(pgPool, name)
-                .map(stored -> stored == null ? null : new RegistrationVersion(stored, false, warning));
     }
 
     private Future<String> latestFromRegistries(String name) {
