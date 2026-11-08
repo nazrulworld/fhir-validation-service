@@ -24,6 +24,15 @@ version:
     rejected with 400 invalid-request.
 ```
 
+**3.2.1 (description only, no shape change)**: the `latest` fallback also uses only stored versions the caller may
+use (FR-023). With `includeDependency`, dependencies declared with a series or `latest` are resolved like a
+top-level registration (FR-019, FR-020). Proposed text appended to the `version` description:
+
+```yaml
+    With `latest`, the fallback to stored versions also uses only versions the caller may use (3.2.1).
+    Dependencies declared with a version series or `latest` are resolved the same way (3.2.1).
+```
+
 ### Description (append)
 
 > Version series (3.2.0): `1.2.x` / `1.x.x` resolve to the highest matching registry release, then behave exactly

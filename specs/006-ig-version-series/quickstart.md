@@ -55,3 +55,21 @@ Use two test packages, `p` and `q` (for example from `TestPackages`):
 3. As organisation A, include `p` with `1.2.x`. Expected: `p#1.2.4`, and `1.2.9` appears nowhere in the response.
 4. As organisation A, include `q` with `1.2.x`. Expected: 404 `package-not-found` naming `q#1.2.x`, with no mention
    of `1.2.9` or organisation B.
+
+## 4. Dependencies declared with a series, and the `latest` fallback (3.2.1)
+
+Automated:
+
+```bash
+mvn -q test -Dtest='DependencyResolverTest,RegisterDependencySeriesIT,IncludeSeriesIT,RegisterLatestIT'
+```
+
+Manual, with test packages and a registry (or `StubRegistry`):
+
+1. The registry lists `dep` `1.0.0`, `1.0.3`, `1.1.0`. `parent#1.0.0` declares `"dep": "1.0.x"`.
+2. `POST /igs/register` `{"name":"parent","version":"1.0.0"}`. Expected: `GET /igs/dep/1.0.3/dependencies` is 200
+   (stored), and `dep#1.1.0` isn't stored.
+3. `POST /R4/include-ig` `{"igPackageId":"parent","igPackageVersion":"1.0.0"}`. Expected: `resolved` contains
+   `dep#1.0.3`, and no warning says `dep#1.0.x` is not stored.
+4. With registries disabled, a shareable `p#1.0.0` and organisation B's private `p#2.0.0`, register `p` `latest` as
+   organisation A. Expected: 200 with `version` `1.0.0` and the no-registry warning, and no mention of `2.0.0`.

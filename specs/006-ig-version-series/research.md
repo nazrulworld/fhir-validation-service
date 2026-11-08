@@ -98,8 +98,8 @@ Once a concrete version is chosen, the existing register code path runs unchange
 in the fallback (SC-007). When the registry picks a version that another organisation has stored privately, the
 answer is the same 404 as today (US3 scenario 3).
 
-**Note**: `latest`'s fallback today picks the highest stored version without checking access, then answers 404
-when it isn't usable. This feature leaves that unchanged. Aligning it is a separate fix.
+**Note**: In 3.2.0, `latest`'s fallback picked the highest stored version without checking access, then answered
+404 when it wasn't usable. 3.2.1 aligns it with the series fallback: see R11 (FR-023).
 
 ## R5. Include with a series
 
@@ -171,3 +171,53 @@ recorded as a behaviour change, not treated as breaking. See the Constitution Ch
 
 **Rationale**: Constitution V. Persistence and access paths run against real PostgreSQL, and the registry is
 stubbed with the existing `StubRegistry`.
+
+## R10. Dependencies declared with a series or `latest` (3.2.1, FR-019 to FR-022)
+
+**Decision**: Fix the two places that resolve a dependency's declared version.
+
+- **Registration walk** (`PostgresPackageCacheManager.loadPackage(…, visited, ownership)`): resolve each version
+  with a new private `resolveDependencyVersion(name, requested, cacheOnly)` instead of `resolveVersion`.
+  - Series → `VersionSeries.parse`. A malformed series is logged and skipped (`null`). Otherwise
+    `resolveSeriesFromRegistries`, then `series.highest(stored versions)` when the registries can't decide.
+  - `null`/`latest`/`current` → the registries' highest release (the same listing rule as top-level `latest`),
+    then the highest stored version.
+  - Exact → unchanged.
+  - With `cacheOnly` (or registries disabled), only stored versions are used.
+- **Context resolution** (`DependencyResolver.concrete`, used by include, on-demand contexts and snapshot builds via
+  `ResolvedContext.of`): a series resolves to `series.highest(stored)`. A malformed series resolves to nothing, so
+  the dependency is reported as missing under its literal label.
+
+The public `resolveVersion` keeps its stored-first meaning: other callers and tests (`RegistryFallbackTest`,
+`PackageLatestResolutionIT`, `PostgresPackageCacheManagerTest`) rely on it.
+
+**Rationale**: Registration and context resolution must agree, or a dependency stored by registration would still be
+"missing" at include. `DependencyResolver` isn't caller-aware on purpose: `ResolvedContext.of` runs on every instance
+without a caller, and it must give the same package list everywhere (constitution II, III). The include's
+existing per-dependency access check (`IgPackageService.include`) still runs on the result, so a private dependency
+of another organisation is refused, as it is for `latest` dependencies today.
+
+**Note**: Contexts already included whose series dependency was reported as missing resolve to a different package
+list after the upgrade. The existing reconciliation (`ResolvedContext.sameAs`) rebuilds them. This is recorded in
+the CHANGELOG.
+
+**Alternatives considered**: a caller-filtered catalog in `DependencyResolver`. Rejected because snapshot builds on
+other instances have no caller, so the context would differ between instances.
+
+## R11. Access-aware `latest` fallback (3.2.1, FR-023)
+
+**Decision**: `PostgresPackageCacheManager.resolveForRegistration(name)` returns a registry-only result,
+`RegistryResult(version, warning)`, the same shape that series resolution uses (`SeriesRegistryResult` is renamed
+`RegistryResult`). The stored fallback moves to `IgPackageService`, as one helper shared by `latest` and series:
+`storedFallback(caller, name, pick, warning)`. It reads `storedVersionsWithAccess`, keeps the versions where
+`AccessPolicy.canUse`, and applies `pick` (`PackageVersionComparator::max` for `latest`, `series::highest` for a
+series). The warning texts and the 404 messages don't change.
+
+**Rationale**: One fallback rule for both paths. A private version of another organisation is no longer a candidate,
+so the caller gets their highest usable version instead of 404, and nothing about the private version leaks.
+
+## R12. Versioning for the fixes
+
+**Decision**: Patch release 3.2.1, CHANGELOG **Fixed**. No field, status code or path changes. Only the `version`
+description in `openapi.yaml` is clarified ("the caller may use" for the `latest` fallback, and dependencies resolve
+series).
