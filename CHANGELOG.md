@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-11-08
+
+Fixes to IG package version resolution after 3.2.0 (spec 006 FR-019 to FR-024). No contract shape or status code
+changes, and no migration or configuration change. Included contexts with a dependency declared as a version series,
+or whose highest floating dependency version is private to another organisation, are rebuilt once after the upgrade,
+because that dependency now resolves differently.
+
 ### Fixed
 
 - **Dependencies declared with a version series are resolved** (spec 006 US5, FR-019, FR-021, FR-022). A package

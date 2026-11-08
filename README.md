@@ -363,7 +363,8 @@ curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.dk.co
 A request validates against the IG it names, its dependencies and the core specification; no other stored or included
 package contributes. A version series is `N.x`, `N.x.x` or `N.N.x`; versions are compared part by part, so `1.2.x`
 never matches `1.20.0`, and a release wins over a pre-release. `?ig=` on validation needs an exact version (or none):
-a series there is 400. `/igs/register` stores the dependencies too (unless `"includeDependency": false`); a package
+a series there is 400. `/igs/register` stores the dependencies too (unless `"includeDependency": false`), resolving a
+dependency declared as a series (`"1.0.x"`) or as `latest` the same way as the package itself (3.2.1); a package
 uploaded through `/igs/upload` needs its dependencies stored before it can be built on demand. To use your own
 profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`, `fhirVersions`
 and `dependencies`, plus the `.json` resources under `package/`), then upload it and name it in `ig`, or include it to
