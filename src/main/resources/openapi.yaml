@@ -483,7 +483,9 @@ paths:
                     registries (a release before a pre-release). If no registry can be consulted or none lists a
                     matching version, the highest matching stored version the caller may use is returned with a
                     warning; 404 package-not-found when there is none. Any other value containing an `x` part is
-                    rejected with 400 invalid-request.
+                    rejected with 400 invalid-request. With `latest`, the fallback to stored versions also uses only
+                    versions the caller may use (3.2.1). Dependencies declared with a version series or `latest` are
+                    resolved the same way (3.2.1).
                 includeDependency:
                   type: boolean
                   default: true

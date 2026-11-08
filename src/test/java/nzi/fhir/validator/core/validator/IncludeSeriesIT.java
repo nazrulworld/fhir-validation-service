@@ -206,4 +206,24 @@ class IncludeSeriesIT extends BaseTestContainer {
             ctx.completeNow();
         })));
     }
+
+    // --- US5: a dependency declared with a series resolves to the stored match (FR-021) -------------------------------
+
+    @Test
+    void aSeriesDependencyResolvesToTheHighestStoredMatch(VertxTestContext ctx) {
+        TestPackages.storePackage(services(), TestPackages.npmPackage("incd.parent", "1.0.0", Map.of("incd.dep", "1.0.x"), List.of()))
+                .compose(v -> TestPackages.storePackage(services(), TestPackages.npmPackage("incd.dep", "1.0.1", Map.of(), List.of())))
+                .compose(v -> TestPackages.storePackage(services(), TestPackages.npmPackage("incd.dep", "1.0.3", Map.of(), List.of())))
+                .compose(v -> TestPackages.storePackage(services(), TestPackages.npmPackage("incd.dep", "1.1.0", Map.of(), List.of())))
+                .compose(v -> include("incd.parent", "1.0.0"))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), r.bodyAsString());
+                    List<Object> resolved = r.bodyAsJsonObject().getJsonArray("resolved").getList();
+                    assertTrue(resolved.contains("incd.dep#1.0.3"), resolved.toString());
+                    assertFalse(resolved.contains("incd.dep#1.1.0"), resolved.toString());
+                    assertTrue(r.bodyAsJsonObject().getJsonArray("warnings").stream().noneMatch(w -> w.toString().contains("not stored")),
+                            r.bodyAsString());
+                    ctx.completeNow();
+                })));
+    }
 }

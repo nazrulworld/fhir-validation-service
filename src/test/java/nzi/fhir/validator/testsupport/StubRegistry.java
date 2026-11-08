@@ -22,6 +22,7 @@ public final class StubRegistry {
     private final Map<String, String> latestTags = new LinkedHashMap<>();
     private final AtomicInteger requests = new AtomicInteger();
     private final AtomicInteger archiveDownloads = new AtomicInteger();
+    private final java.util.List<String> paths = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile Mode mode = Mode.NORMAL;
     private HttpServer server;
 
@@ -44,6 +45,7 @@ public final class StubRegistry {
     public Future<StubRegistry> start(Vertx vertx) {
         server = vertx.createHttpServer().requestHandler(req -> {
             requests.incrementAndGet();
+            paths.add(req.path());
             if (mode == Mode.DROP) {
                 req.connection().close();
                 return;
@@ -86,6 +88,11 @@ public final class StubRegistry {
 
     public int archiveDownloads() {
         return archiveDownloads.get();
+    }
+
+    /** Every request path received, in arrival order (for example {@code /dep/1.0.3}). */
+    public java.util.List<String> paths() {
+        return java.util.List.copyOf(paths);
     }
 
     public Future<Void> stop() {
