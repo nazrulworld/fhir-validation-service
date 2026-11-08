@@ -441,3 +441,13 @@ organisation B returns A's highest usable version.
 - [X] T049 [US5] `DependencyResolver.resolve(roots, catalog, Predicate<String> selectable)`: filter only floating versions; the 2-argument overload accepts everything. `AccessPolicy.selectableFor(UUID owner, Access a)`.
 - [X] T050 [US5] `ResolvedContext.of(ig, view, owner)`, `of(ig, view)` resolving as the IG package's owner, and `forKey(ig, view, pinned)`. Use `forKey` in `ConfigSync.resolveAll` (now taking `PinnedAccess`, at start-up and in `runSync`) and in `FhirValidationService.checkAccess`. In `IgPackageService.include`, resolve as the existing context owner or the caller.
 - [X] T051 CHANGELOG **Fixed** entry; full suite green (531 tests).
+
+---
+
+## Phase 11: Convergence
+
+- [X] T052 CRITICAL: Benchmark the validation request path changed by FR-024 (`FhirValidationService.checkAccess` resolves on-demand and not-yet-built contexts with `ResolvedContext.forKey` on every request): run `perf/validate.js` (`VUS=8`, `DURATION=60s`) against v3.2.0 and v3.2.1 with `-e IG=` set to an included IG and to an on-demand IG that has a floating dependency, and record `http_reqs`, `http_req_duration p(95)` and `http_req_failed` for all four runs as a comment on #60 (expected: p95 < 200 ms, failures 0, throughput within run-to-run noise) per Constitution VI (contradicts)
+- [X] T053 Add the latency and memory impact of FR-024 (owner-scoped dependency selection in the access check and in context resolution) to the Performance Goals in `specs/006-ig-version-series/plan.md`, citing the T052 results, per Constitution VI (partial)
+- [X] T054 Add an integration test showing that changing a dependency's sharing re-resolves and rebuilds affected contexts: with `inc.fparent#1.0.0` included by org A resolving `inc.fdep#1.0.3`, org B makes `inc.fdep#1.0.5` shareable (`PATCH /igs/{name}/{version}` or `changePackageAccess`) → after the catalog sync the pinned context resolves `inc.fdep#1.0.5` (`peekResolvedPackages`), and an on-demand context of the same IG is rebuilt; also transfer the included context to org B (system caller) → it resolves as B per FR-024 (partial)
+- [X] T055 Add a `RegisterDependencySeriesIT` case for a dependency declared without a version (`TestPackages.npmPackage` with an empty version value): registering the parent downloads the registries' highest release `dep#1.1.0` while `dep#1.0.0` is stored per FR-020, US5/AC3 (partial)
+- [X] T056 Strengthen `RegisterDependencySeriesIT.seriesDependencyWithRegistriesDisabledUsesAStoredMatch` to assert that `dep#1.0.2` is the version used (for example by including `parent#1.0.0` afterwards and asserting `resolved` contains `dep#1.0.2`) per US5/AC2 (partial)

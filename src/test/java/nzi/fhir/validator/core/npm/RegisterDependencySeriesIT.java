@@ -44,6 +44,7 @@ class RegisterDependencySeriesIT extends BaseTestContainer {
                 .add("parent", "1.0.0", pkg("parent", "1.0.0", Map.of("dep", "1.0.x")))
                 .add("parentl", "1.0.0", pkg("parentl", "1.0.0", Map.of("dep", "latest")))
                 .add("parentc", "1.0.0", pkg("parentc", "1.0.0", Map.of("dep", "current")))
+                .add("parentn", "1.0.0", pkg("parentn", "1.0.0", Map.of("dep", "")))
                 .add("parentbad", "1.0.0", pkg("parentbad", "1.0.0", Map.of("dep", "1.x.3")))
                 .add("parentx", "1.0.0", pkg("parentx", "1.0.0", Map.of("depx", "1.0.x")));
         registry.start(vertx).onComplete(ctx.succeedingThenComplete());
@@ -131,11 +132,22 @@ class RegisterDependencySeriesIT extends BaseTestContainer {
         start(vertx, false)
                 .compose(a -> storeLocally("parent", "1.0.0", Map.of("dep", "1.0.x")))
                 .compose(v -> storeLocally("dep", "1.0.2", Map.of()))
+                .compose(v -> storeLocally("dep", "1.1.0", Map.of()))
                 .compose(v -> register("parent"))
-                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
-                    assertEquals(200, r.statusCode(), r.bodyAsString());
-                    assertFalse(r.bodyAsJsonObject().getBoolean("downloaded"));
-                    assertEquals(0, registry.requests(), "disabled registries are never contacted");
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertFalse(r.bodyAsJsonObject().getBoolean("downloaded"));
+                        assertEquals(0, registry.requests(), "disabled registries are never contacted");
+                    });
+                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+                            .sendJsonObject(new JsonObject().put("igPackageId", "parent").put("igPackageVersion", "1.0.0"));
+                })
+                .onComplete(ctx.succeeding(include -> ctx.verify(() -> {
+                    assertEquals(200, include.statusCode(), include.bodyAsString());
+                    List<Object> resolved = include.bodyAsJsonObject().getJsonArray("resolved").getList();
+                    assertTrue(resolved.contains("dep#1.0.2"), "the stored match is the version used (US5/AC2): " + resolved);
+                    assertFalse(resolved.contains("dep#1.1.0"), resolved.toString());
                     ctx.completeNow();
                 })));
     }
@@ -202,6 +214,25 @@ class RegisterDependencySeriesIT extends BaseTestContainer {
                     assertTrue(access.isPresent());
                     assertEquals("orga", access.get().ownerShortName());
                     assertFalse(access.get().shareable());
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void aDependencyWithoutAVersionPrefersTheRegistries(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, true)
+                .compose(a -> storeLocally("dep", "1.0.0", Map.of()))
+                .compose(v -> register("parentn"))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertEquals(List.of("/dep/1.1.0"), archiveRequestsFor("dep"),
+                                "no version declared: the registries' highest release, not the stored 1.0.0 (FR-020)");
+                    });
+                    return stored("dep", "1.1.0");
+                })
+                .onComplete(ctx.succeeding(s -> ctx.verify(() -> {
+                    assertTrue(s);
                     ctx.completeNow();
                 })));
     }
