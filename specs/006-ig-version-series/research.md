@@ -202,7 +202,12 @@ list after the upgrade. The existing reconciliation (`ResolvedContext.sameAs`) r
 the CHANGELOG.
 
 **Alternatives considered**: a caller-filtered catalog in `DependencyResolver`. Rejected because snapshot builds on
-other instances have no caller, so the context would differ between instances.
+other instances have no caller, so the context would differ between instances. R13 filters by the context's owner
+instead, which every instance knows.
+
+**Correction (2026-11-08)**: unpinned dependency versions converge across instances without a restart. Every package
+store or access change bumps the catalog revision, and `ConfigSync.runCatalogSync` re-applies every FHIR version, so
+included contexts are resolved again and rebuilt when their package set changes (spec 004 R3, "Consequence").
 
 ## R11. Access-aware `latest` fallback (3.2.1, FR-023)
 
@@ -221,3 +226,36 @@ so the caller gets their highest usable version instead of 404, and nothing abou
 **Decision**: Patch release 3.2.1, CHANGELOG **Fixed**. No field, status code or path changes. Only the `version`
 description in `openapi.yaml` is clarified ("the caller may use" for the `latest` fallback, and dependencies resolve
 series).
+
+## R13. Floating dependencies resolve as the context's owner (3.2.1, FR-024)
+
+**Problem**: `DependencyResolver` picked the highest stored version of a dependency declared as a series or `latest`
+without regard to ownership. When that version was private to another organisation, the include's dependency
+access check (and `AccessPolicy.canUseContext` for `?ig=`) refused the context with 424, even though a lower usable
+version was stored.
+
+**Decision**: `DependencyResolver.resolve(roots, catalog, selectable)` chooses floating versions (missing, `latest`,
+`current`, series) only among versions `selectable` accepts. Exact versions ignore it. The predicate is
+`AccessPolicy.selectableFor(owner, access)`: shareable, or owned by `owner`, with no system exception. The owner is:
+
+- for an included context, its owner from the shared configuration (`PinnedAccess`). On include, that's the caller for
+  a new context, or the existing owner. `ConfigSync.resolveAll` and the include preview use the same owner;
+- for an on-demand context, the IG package's owner (`view.access(ig)`).
+
+`ResolvedContext.forKey(ig, view, pinned)` applies this rule. It is used by `ConfigSync.resolveAll` and by
+`FhirValidationService.checkAccess` when a context has no snapshot yet, so the access check always sees the packages
+the build uses.
+
+**Rationale**:
+
+- Deterministic across instances: the owner and each package's access are shared state, kept in the catalog view, and
+  any change bumps the catalog revision, which re-applies every version (R10 correction).
+- No system exception: a shareable system-owned context must not resolve to a version other organisations can't use.
+- Exact versions keep their meaning, so a package that really needs a private version is still refused (424) for
+  callers who can't use it.
+
+**Consequences**: a transfer of an included context, or a change to a dependency's sharing, can change the resolved
+set and so rebuild the context. Previously only content changes did.
+
+**Alternatives considered**: pinning each include's resolved set. Rejected again for the reasons in spec 004 R3: it
+needs a migration with a Java backfill of existing rows.

@@ -168,7 +168,7 @@ public class FhirValidationService {
         }
         PinnedAccess pinned = pinnedAccess.apply(key.fhirVersion());
         List<String> resolved = registry.peekResolvedPackages(key)
-                .orElseGet(() -> ResolvedContext.of(key.igPackage(), view).packages());
+                .orElseGet(() -> ResolvedContext.forKey(key.igPackage(), view, pinned).packages());
         AccessPolicy.Decision decision = AccessPolicy.canUseContext(who, key, resolved, view, pinned);
         switch (decision) {
             case IG_NOT_VISIBLE -> {
