@@ -37,13 +37,13 @@ public class ValidatorApi {
     public void includeRoutes(RouterBuilder routerBuilder) {
         // Method: POST, Path: "/:version/validator"
         routerBuilder.operation("validatorApiIncludeIg")
-                .handler(this::handleIncludeImplementationGuide);
+                .handler(this::handleCreateValidator);
         // Method: DELETE, Path: "/:version/validator?ig=name#version"
         routerBuilder.operation("validatorApiExcludeIg")
-                .handler(this::handleExcludeImplementationGuide);
+                .handler(this::handleRemoveValidator);
         // Method: PATCH, Path: "/:version/validator?ig=name#version" (spec 005 sharing and ownership, spec 007 terminology)
         routerBuilder.operation("validatorApiChangeIncludedIg")
-                .handler(this::handleChangeIncludedIgAccess);
+                .handler(this::handleChangeValidatorAccess);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -52,7 +52,7 @@ public class ValidatorApi {
     }
 
     /** {@code POST /{version}/validator}: includes an IG version (spec 004 FR-019, spec 006, spec 007 FR-003). */
-    private void handleIncludeImplementationGuide(RoutingContext ctx) {
+    private void handleCreateValidator(RoutingContext ctx) {
         SupportedFhirVersion version;
         JsonObject body;
         try {
@@ -94,7 +94,7 @@ public class ValidatorApi {
     }
 
     /** {@code PATCH /{version}/validator?ig=name#version} (spec 005 FR-019, spec 007 FR-003, contracts §3-4). */
-    private void handleChangeIncludedIgAccess(RoutingContext ctx) {
+    private void handleChangeValidatorAccess(RoutingContext ctx) {
         SupportedFhirVersion version;
         List<String> values = ctx.queryParam("ig");
         try {
@@ -117,7 +117,7 @@ public class ValidatorApi {
     }
 
     /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/validator?ig=name#version}. */
-    private void handleExcludeImplementationGuide(RoutingContext ctx) {
+    private void handleRemoveValidator(RoutingContext ctx) {
         SupportedFhirVersion version;
         List<String> values = ctx.queryParam("ig");
         try {

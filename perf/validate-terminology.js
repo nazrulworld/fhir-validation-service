@@ -20,13 +20,18 @@ const VUS = Number(__ENV.VUS || 8);
 export const options = {
   scenarios: {
     cached: { executor: 'constant-vus', vus: VUS, duration: DURATION, exec: 'cached', tags: { phase: 'cached' } },
-    uncached: { executor: 'constant-vus', vus: VUS, duration: DURATION, exec: 'uncached', startTime: DURATION,
-      tags: { phase: 'uncached' } },
+    // Each uncached iteration makes one call to a real registry server (tx.fhir.org): keep it small
+    // (UNCACHED_VUS / UNCACHED_DURATION) so the run never load-tests a public server.
+    uncached: { executor: 'constant-vus', vus: Number(__ENV.UNCACHED_VUS || 1), duration: __ENV.UNCACHED_DURATION || '10s',
+      exec: 'uncached', startTime: DURATION, tags: { phase: 'uncached' } },
   },
   thresholds: {
     http_req_failed: ['rate<0.001'],
     // SC-008: a cached code adds no measurable latency to the 200 ms target.
     'http_req_duration{phase:cached}': ['p(95)<200'],
+    // Reported for the record: one terminology round trip each, bounded by FV_TX_TIMEOUT_MS / FV_TX_REQUEST_BUDGET_MS.
+    'http_req_duration{phase:uncached}': ['p(95)<10000'],
+    'http_reqs{phase:uncached}': ['count>=0'],
   },
 };
 
