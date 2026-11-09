@@ -138,6 +138,7 @@ public final class Bootstrap {
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
                             .compose(v -> installSystemOrganisation(services))
                             .compose(v -> installBootstrapKey(services))
+                            .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
                             .onFailure(err -> logger().error("Validator initialisation failed", err));

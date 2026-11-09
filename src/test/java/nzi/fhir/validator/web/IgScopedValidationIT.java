@@ -56,11 +56,12 @@ class IgScopedValidationIT extends BaseTestContainer {
                 })
                 .compose(v -> {
                     ServiceRegistry services = app.bootstrap().services();
-                    return TestPackages.storePackage(services, TestPackages.profilePackage("scoped.a", "1.0.0",
-                                    TestPackages.requiredPatientElements(PA, "birthDate")))
-                            .compose(x -> TestPackages.storePackage(services, TestPackages.profilePackage("scoped.a", "2.0.0",
+                    // Spec 007 FR-021: only included versions can be named in ig.
+                    return TestPackages.includePackage(services, TestPackages.profilePackage("scoped.a", "1.0.0",
+                                    TestPackages.requiredPatientElements(PA, "birthDate")), "scoped.a", "1.0.0")
+                            .compose(x -> TestPackages.includePackage(services, TestPackages.profilePackage("scoped.a", "2.0.0",
                                     TestPackages.requiredPatientElements(PA, "birthDate"),
-                                    TestPackages.requiredPatientElements(PA2, "gender"))))
+                                    TestPackages.requiredPatientElements(PA2, "gender")), "scoped.a", "2.0.0"))
                             .compose(x -> TestPackages.includePackage(services, TestPackages.profilePackage("scoped.b", "1.0.0",
                                     TestPackages.requiredPatientElements(PB, "gender")), "scoped.b", "1.0.0"))
                             .compose(x -> TestPackages.storePackage(services, TestPackages.igPackage("scoped.r5", "1.0.0",
@@ -140,7 +141,7 @@ class IgScopedValidationIT extends BaseTestContainer {
     }
 
     @Test
-    void versionlessIgUsesTheHighestStoredVersionAndReportsIt(VertxTestContext ctx) {
+    void versionlessIgUsesTheHighestIncludedVersionAndReportsIt(VertxTestContext ctx) {
         Future.all(validate("R4", "scoped.a").sendBuffer(Buffer.buffer(PATIENT_A)),
                         validate("R4", "scoped.a#latest").sendBuffer(Buffer.buffer(PATIENT_A)))
                 .onComplete(ctx.succeeding(all -> ctx.verify(() -> {

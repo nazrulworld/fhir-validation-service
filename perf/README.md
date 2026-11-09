@@ -90,3 +90,24 @@ Run the pinned k6 image on the compose network instead (the repository is mounte
 docker run --rm --network fhir_default -v "$PWD":/work:ro grafana/k6:0.54.0 \
   run -e BASE=http://validator:8880 -e VUS=4 /work/perf/validate.js
 ```
+
+## Terminology (spec 007, SC-008, SC-009)
+
+The validation hot path changed in 4.0.0 (included-only contexts, a terminology budget per request). Attach both runs
+to the PR:
+
+```bash
+# 1. Mode none / base context: before (3.2.1) and after (4.0.0), same machine and load. p95 must stay within
+#    run-to-run noise (SC-008, target < 200 ms on a warm context).
+k6 run -e VUS=8 -e DURATION=60s perf/validate.js
+
+# 2. A terminology context. Include the IG with {"terminology": {"mode": "ecosystem"}} (or "server" pointing at a
+#    registered server), then run both phases: "cached" (the same code; answered from the code cache) and "uncached"
+#    (a new code per iteration; one server round trip each, bounded by FV_TX_TIMEOUT_MS and FV_TX_REQUEST_BUDGET_MS).
+k6 run -e IG='test.tx.ig#1.0.0' -e VUS=8 -e DURATION=60s perf/validate-terminology.js
+```
+
+Record `http_req_duration p(95)` for `phase:cached` and `phase:uncached`. Validation workers block on terminology
+calls, so a terminology-heavy load may need a larger `FV_VALIDATION_WORKERS`. For SC-009, compare the heap of one
+instance with and without one ecosystem-mode context after the uncached phase (at most about 5 MB more at the default
+`FV_TX_CACHE_SIZE` of 5000).

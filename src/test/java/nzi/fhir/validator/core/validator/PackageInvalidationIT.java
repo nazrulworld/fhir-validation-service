@@ -83,17 +83,17 @@ class PackageInvalidationIT extends BaseTestContainer {
     }
 
     @Test
-    void replacedContentInvalidatesPinnedAndOnDemandContextsOnBothInstances(Vertx vertx, VertxTestContext ctx) {
+    void replacedContentInvalidatesPinnedContextsOnBothInstances(Vertx vertx, VertxTestContext ctx) {
         SnapshotKey dependent = SnapshotKey.of(R4, "inv.dependent#1.0.0");
         TestPackages.includePackage(a.services(), TestPackages.profilePackage("inv.p", "1.0.0",
                         TestPackages.requiredPatientElements(P, "birthDate")), "inv.p", "1.0.0")
-                .compose(v -> TestPackages.storePackage(a.services(), TestPackages.npmPackage("inv.dependent", "1.0.0",
-                        Map.of("inv.p", "1.0.0"), List.of())))
+                .compose(v -> TestPackages.includePackage(a.services(), TestPackages.npmPackage("inv.dependent", "1.0.0",
+                        Map.of("inv.p", "1.0.0"), List.of()), "inv.dependent", "1.0.0"))
                 .compose(v -> Await.until(vertx, PROPAGATION_MS, "pinned on B", () -> pinnedActive(b, "inv.p#1.0.0")))
-                .compose(ms -> Await.until(vertx, PROPAGATION_MS, "on-demand context on B",
+                .compose(ms -> Await.until(vertx, PROPAGATION_MS, "dependent context on B",
                         () -> requires(b, "inv.dependent#1.0.0", "birthDate")))
                 .compose(ms -> {
-                    ctx.verify(() -> assertEquals(ValidatorRegistry.Kind.ON_DEMAND, b.services().validatorRegistry().kind(dependent)));
+                    ctx.verify(() -> assertEquals(ValidatorRegistry.Kind.PINNED, b.services().validatorRegistry().kind(dependent)));
                     // Same name#version, new content: the profile now requires gender instead of birthDate.
                     return TestPackages.storePackage(a.services(), TestPackages.profilePackage("inv.p", "1.0.0",
                             TestPackages.requiredPatientElements(P, "gender")));
@@ -103,7 +103,7 @@ class PackageInvalidationIT extends BaseTestContainer {
                         Await.until(vertx, PROPAGATION_MS, "B applies the new content", () -> requires(b, "inv.p#1.0.0", "gender"))))
                 .compose(all -> requires(b, "inv.dependent#1.0.0", "gender"))
                 .onComplete(ctx.succeeding(dependentUpdated -> ctx.verify(() -> {
-                    assertTrue(dependentUpdated, "the on-demand context containing the replaced package was rebuilt from new content");
+                    assertTrue(dependentUpdated, "the included context containing the replaced package was rebuilt from new content");
                     assertEquals(ValidatorRegistry.Kind.PINNED, b.services().validatorRegistry().kind(SnapshotKey.of(R4, "inv.p#1.0.0")));
                     ctx.completeNow();
                 })));
@@ -114,8 +114,8 @@ class PackageInvalidationIT extends BaseTestContainer {
         SnapshotKey q = SnapshotKey.of(R4, "inv.q#1.0.0");
         TestPackages.storePackage(a.services(), TestPackages.profilePackage("inv.d", "1.0.0",
                         TestPackages.requiredPatientElements(P, "birthDate").put("version", "1.0.0")))
-                .compose(v -> TestPackages.storePackage(a.services(), TestPackages.npmPackage("inv.q", "1.0.0",
-                        Map.of("inv.d", "latest"), List.of())))
+                .compose(v -> TestPackages.includePackage(a.services(), TestPackages.npmPackage("inv.q", "1.0.0",
+                        Map.of("inv.d", "latest"), List.of()), "inv.q", "1.0.0"))
                 .compose(v -> Await.until(vertx, PROPAGATION_MS, "B builds inv.q with inv.d#1.0.0",
                         () -> requires(b, "inv.q#1.0.0", "birthDate")))
                 .compose(ms -> {

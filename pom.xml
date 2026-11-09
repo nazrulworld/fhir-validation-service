@@ -6,7 +6,7 @@
 
     <groupId>nzi.fhir.validation</groupId>
     <artifactId>fhir-validation-service</artifactId>
-    <version>3.2.1</version>
+    <version>4.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>FHIR Validation Service</name>
@@ -149,6 +149,13 @@
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-validation</artifactId>
+            <version>${hapi-fhir.version}</version>
+        </dependency>
+        <!-- HAPI FHIR REST client: needed at run time by RemoteTerminologyServiceValidationSupport (spec 007, plan
+             Complexity Tracking). Uses the Apache HttpClient 4.5.x already declared below. -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-client</artifactId>
             <version>${hapi-fhir.version}</version>
         </dependency>
         <!-- HAPI FHIR DSTU3 Structures -->
@@ -494,6 +501,12 @@ in /NOTICE.
                         <include>**/*Test.java</include>
                         <include>**/*IT.java</include>
                     </includes>
+                    <systemPropertyVariables>
+                        <!-- Spec 007 research R14: the production registry client never contacts ecosystem.hl7.org from
+                             tests (it stays on the stored or built-in list). Tests that need a registry use a local
+                             stub through the test-only constructor. -->
+                        <fv.tx.registry.offline>true</fv.tx.registry.offline>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

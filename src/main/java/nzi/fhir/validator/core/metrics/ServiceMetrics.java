@@ -96,23 +96,65 @@ public class ServiceMetrics {
             @Override
             public void eviction(SnapshotKey key, String reason) {
                 Counter.builder("fv.validator.context.evictions").tag("fhir_version", key.fhirVersion().name())
-                        .tag("reason", reason).description("On-demand validator contexts dropped, by reason")
+                        .tag("reason", reason).description("Validator contexts dropped, by reason (excluded)")
                         .register(registry).increment();
             }
 
             @Override
             public void lookup(SnapshotKey key, String result) {
-                counter("fv.validator.context.lookups", "Validator context lookups: hit, joined a build, or built",
+                counter("fv.validator.context.lookups", "Validator context lookups (served from a built context)",
                         "fhir_version", key.fhirVersion().name(), "result", result).increment();
             }
         });
     }
 
+    /**
+     * Terminology meters (spec 007 FR-026, contracts §6). Labels never carry codes, value set URLs or IG names: the
+     * server label is a host name, the outcome and result labels are fixed words.
+     */
+    public void bindTerminology(nzi.fhir.validator.core.terminology.TxRegistry txRegistry,
+                                nzi.fhir.validator.core.terminology.TerminologyClients clients,
+                                nzi.fhir.validator.core.terminology.RegistryResolver resolver) {
+        clients.setListener(new nzi.fhir.validator.core.terminology.TerminologyClients.Listener() {
+            @Override
+            public void call(String server, SupportedFhirVersion version, String outcome, long elapsedNanos) {
+                counter("fv.tx.calls", "Terminology server calls by outcome", "server", server,
+                        "fhir_version", version.name(), "outcome", outcome).increment();
+                if (elapsedNanos > 0) {
+                    txTimers.computeIfAbsent(server + '|' + version, k -> Timer.builder("fv.tx.call").tag("server", server)
+                            .tag("fhir_version", version.name()).description("Terminology server call duration")
+                            .publishPercentileHistogram().minimumExpectedValue(Duration.ofMillis(1))
+                            .maximumExpectedValue(Duration.ofSeconds(60)).register(registry)).record(Duration.ofNanos(elapsedNanos));
+                }
+            }
+        });
+        resolver.setListener(new nzi.fhir.validator.core.terminology.RegistryResolver.Listener() {
+            @Override
+            public void lookup(SupportedFhirVersion version, String result) {
+                counter("fv.tx.routing.lookups", "Terminology routing lookups: hit (cached), resolved or failed",
+                        "fhir_version", version.name(), "result", result).increment();
+            }
+        });
+        for (SupportedFhirVersion version : SupportedFhirVersion.enabled()) {
+            for (nzi.fhir.validator.core.terminology.TxServerAllowlist.Source source
+                    : nzi.fhir.validator.core.terminology.TxServerAllowlist.Source.values()) {
+                Gauge.builder("fv.tx.allowlist.age", txRegistry, r -> r.current().list(version)
+                                .filter(l -> l.source() == source && l.fetchedAt() != null)
+                                .map(l -> (double) Duration.between(l.fetchedAt(), java.time.Instant.now()).toSeconds())
+                                .orElse(Double.NaN))
+                        .tag("fhir_version", version.name()).tag("source", source.wire()).baseUnit("seconds")
+                        .description("Age of the terminology server list in use (NaN when another source is in use)")
+                        .register(registry);
+            }
+        }
+    }
+
+    private final java.util.Map<String, Timer> txTimers = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static String kindLabel(ValidatorRegistry.Kind kind) {
         return switch (kind) {
             case BASE -> "base";
             case PINNED -> "pinned";
-            case ON_DEMAND -> "on-demand";
         };
     }
 

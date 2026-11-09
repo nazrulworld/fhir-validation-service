@@ -81,6 +81,8 @@ class ValidationContextPropagationTest {
         executors = Executors.create(vertx, 2, 30_000, 1);
         FhirValidationService service = new FhirValidationService(registry, executors, new AdmissionController(4));
         service.setCatalog(catalog);
+        // Spec 007 FR-021: ctx.ig is an included context.
+        service.setPinnedAccess(v -> nzi.fhir.validator.core.validator.PinnedAccess.of(List.of("ctx.ig#1.0.0"), Map.of(), "system"));
 
         ContextInternal request = ((ContextInternal) vertx.getOrCreateContext()).duplicate();
         request.runOnContext(v -> {

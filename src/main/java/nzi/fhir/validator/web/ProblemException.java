@@ -63,6 +63,40 @@ public class ProblemException extends RuntimeException {
     public static final String TYPE_PACKAGE_NOT_FOUND = "package-not-found";
     public static final String TYPE_DEPENDENCY_NOT_FOUND = "dependency-not-found";
     public static final String TYPE_CONFLICT = "conflict";
+    /** Spec 007 FR-010: a terminology server the official registry doesn't list for the FHIR version. */
+    public static final String TYPE_TX_SERVER_NOT_REGISTERED = "tx-server-not-registered";
+    /** Spec 007 FR-012a: no registry list was ever obtained, and the server is not on the built-in fallback list. */
+    public static final String TYPE_TX_REGISTRY_UNAVAILABLE = "tx-registry-unavailable";
+    /** The official HL7 terminology registry, named in {@link #txServerNotRegistered} (spec 007 FR-006). */
+    public static final String TX_REGISTRY = "https://ecosystem.hl7.org/tx-reg";
+
+    /**
+     * A validation request names an IG package version that is stored and usable but not included for the FHIR version
+     * (spec 007 FR-022, clarification Q1): 400 {@code invalid-request}. Only answered when the caller may see the
+     * package, so it discloses nothing.
+     *
+     * @param key always a concrete {@code name#version}
+     */
+    public static ProblemException igNotIncluded(String key, nzi.fhir.validator.core.enums.SupportedFhirVersion version) {
+        return new ProblemException(400, "invalid-request", "IG package " + key + " is not included for " + version
+                + "; include it first (POST /" + version + "/include-ig)");
+    }
+
+    /** Spec 007 FR-010 (a): the terminology server is not on the registry's list for {@code version}. */
+    public static ProblemException txServerNotRegistered(String url, nzi.fhir.validator.core.enums.SupportedFhirVersion version) {
+        return new ProblemException(400, TYPE_TX_SERVER_NOT_REGISTERED, "Terminology server " + url
+                + " is not listed as an open server for " + version + " by the official HL7 terminology registry")
+                .withExtension("registry", TX_REGISTRY)
+                .withExtension("fhirVersion", version.name());
+    }
+
+    /** Spec 007 FR-012a: the registry's list has never been obtained and the server isn't built in. */
+    public static ProblemException txRegistryUnavailable(nzi.fhir.validator.core.enums.SupportedFhirVersion version) {
+        return new ProblemException(503, TYPE_TX_REGISTRY_UNAVAILABLE, "The list of terminology servers for " + version
+                + " has not been obtained from the official HL7 terminology registry yet; retry later, or use mode none")
+                .withExtension("registry", TX_REGISTRY)
+                .withHeader("Retry-After", "60");
+    }
 
     /** The {@code ig} package of a validation request is not stored (spec 004 FR-003). The name is client input. */
     public static ProblemException igNotStored(String label) {
@@ -100,16 +134,6 @@ public class ProblemException extends RuntimeException {
     /** Upload or download of a {@code name#version} another organisation stored (spec 005 FR-017, research R7). */
     public static ProblemException conflictOwnedElsewhere(String key) {
         return new ProblemException(409, TYPE_CONFLICT, "IG package " + key + " is already stored by another organisation");
-    }
-
-    /**
-     * An on-demand validator context would fit in this instance's memory, but not next to the pinned ones (spec 004
-     * FR-016).
-     */
-    public static ProblemException insufficientCapacity() {
-        return new ProblemException(503, "insufficient-capacity",
-                "This instance has no memory left for another IG validator context; retry later or ask an administrator "
-                        + "to exclude an included IG or raise the memory limit").withHeader("Retry-After", "30");
     }
 
     public ProblemException withExtension(String name, Object value) {

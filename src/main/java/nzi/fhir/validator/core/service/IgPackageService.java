@@ -51,6 +51,9 @@ public class IgPackageService {
 
     private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
     private Function<Long, Future<Void>> admitBuild = bytes -> Future.succeededFuture();
+    /** Spec 007: the terminology allowlist settings are checked against when saved (FR-010 a, FR-012a). */
+    private volatile nzi.fhir.validator.core.terminology.TxServerAllowlistSource txAllowlist =
+            nzi.fhir.validator.core.terminology.TxServerAllowlistSource.EMPTY;
     private volatile long localApplyWaitMs = DEFAULT_LOCAL_APPLY_WAIT_MS;
 
     private IgPackageService(Vertx vertx, Pool pgPool, PostgresPackageCacheManager cacheManager) {
@@ -81,6 +84,11 @@ public class IgPackageService {
      */
     public void setAdmitBuild(Function<Long, Future<Void>> admitBuild) {
         this.admitBuild = admitBuild;
+    }
+
+    /** The allowlist a terminology setting is checked against when saved (spec 007). */
+    public void setTxAllowlist(nzi.fhir.validator.core.terminology.TxServerAllowlistSource txAllowlist) {
+        this.txAllowlist = txAllowlist;
     }
 
     public PostgresPackageCacheManager cacheManager() {
@@ -115,6 +123,17 @@ public class IgPackageService {
      */
     public Future<JsonObject> include(Caller caller, SupportedFhirVersion fhirVersion, String name, String requestedVersion,
                                       Optional<Boolean> shareable) {
+        return include(caller, fhirVersion, name, requestedVersion, shareable, Optional.empty());
+    }
+
+    /**
+     * As {@link #include(Caller, SupportedFhirVersion, String, String, Optional)}, with the new context's terminology
+     * setting (spec 007 FR-003). It is checked against the allowlist after the existing include checks and before the
+     * heap check and the commit (contracts §2). For a context that is already included it is ignored with a warning.
+     */
+    public Future<JsonObject> include(Caller caller, SupportedFhirVersion fhirVersion, String name, String requestedVersion,
+                                      Optional<Boolean> shareable,
+                                      Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology) {
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
         }
@@ -172,8 +191,18 @@ public class IgPackageService {
                             if (shareable.isPresent() && shareable.get() != existing.shareable() && caller.owns(existing.owner())) {
                                 warnings.add(ALREADY_INCLUDED_WARNING);
                             }
+                            if (terminology.isPresent() && !terminology.get().equals(row.terminologyOf(key))) {
+                                warnings.add(TERMINOLOGY_IGNORED_WARNING);
+                            }
                             return Future.succeededFuture(includeResult(fhirVersion, key, row.revision(), row.included(),
-                                    resolution.resolved(), existing));
+                                    resolution.resolved(), existing, row.terminologyOf(key)));
+                        }
+                        nzi.fhir.validator.core.terminology.TerminologySettings txSettings =
+                                terminology.orElse(nzi.fhir.validator.core.terminology.TerminologySettings.NONE);
+                        try {
+                            txAllowlist.current().require(txSettings, fhirVersion);
+                        } catch (ProblemException e) {
+                            return Future.failedFuture(e);
                         }
                         boolean share = shareable.orElse(true);
                         if (!share && !caller.system() && !caller.owns(packageAccess == null ? null : packageAccess.owner())) {
@@ -187,9 +216,9 @@ public class IgPackageService {
                         // The new context must fit in this instance's heap (after evicting on-demand contexts).
                         return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild)
                                 .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
-                                        ConfigRevisionRepository.KIND_IG, caller.orgId(), share))
+                                        ConfigRevisionRepository.KIND_IG, caller.orgId(), share, txSettings))
                                 .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved(),
-                                        contextAccess));
+                                        contextAccess, txSettings));
                     });
                 }))
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
@@ -209,10 +238,14 @@ public class IgPackageService {
 
     static final String ALREADY_INCLUDED_WARNING = "Already included; change sharing with PATCH /{version}/include-ig";
     static final String PRIVATE_CONTEXT_REFUSED = "Only the owner of the IG package can make its validator context private";
+    static final String TERMINOLOGY_IGNORED_WARNING = "terminology is ignored for an already included context; change it "
+            + "with PATCH /{version}/include-ig";
 
     private static JsonObject includeResult(SupportedFhirVersion fhirVersion, String key, long revision,
-                                            List<String> included, List<String> resolved, Access access) {
+                                            List<String> included, List<String> resolved, Access access,
+                                            nzi.fhir.validator.core.terminology.TerminologySettings terminology) {
         return new JsonObject()
+                .put("terminology", terminology.toJson())
                 .put("status", "success")
                 .put("fhirVersion", fhirVersion.name())
                 .put("key", new JsonObject().put("fhirVersion", fhirVersion.name()).put("igPackage", key))
@@ -338,10 +371,23 @@ public class IgPackageService {
                             : packageAccess(tx, ref.name(), ref.version()).compose(pkg -> pkg.isPresent() && caller.owns(pkg.get().owner())
                             ? Future.succeededFuture()
                             : Future.failedFuture(new ProblemException(400, "invalid-request", PRIVATE_CONTEXT_REFUSED)));
-                    return privateAllowed
+                    // Spec 007 FR-003, FR-010 a, FR-012a: a terminology setting is checked against the allowlist after the
+                    // body checks (contracts §3); setting the same value again changes nothing.
+                    Optional<nzi.fhir.validator.core.terminology.TerminologySettings> newTerminology = change.terminology()
+                            .filter(t -> !t.equals(row.terminologyOf(key)));
+                    try {
+                        newTerminology.ifPresent(t -> txAllowlist.current().require(t, fhirVersion));
+                    } catch (ProblemException e) {
+                        return Future.failedFuture(e);
+                    }
+                    Future<Long> accessChanged = !change.changesAccess() ? Future.succeededFuture(row.revision())
+                            : privateAllowed
                             .compose(v -> PostgresPackageCacheManager.resolveTargetOrganisation(tx, change))
                             .compose(newOwner -> ConfigRevisionRepository.changeSnapshotAccess(tx, fhirVersion, key, newOwner,
-                                    change.shareable()))
+                                    change.shareable()));
+                    return accessChanged
+                            .compose(revision -> newTerminology.isEmpty() ? Future.succeededFuture(revision)
+                                    : ConfigRevisionRepository.changeTerminology(tx, fhirVersion, key, newTerminology.get()))
                             .compose(revision -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)
                                     .map(after -> new JsonObject()
                                             .put("status", "success")
@@ -349,6 +395,7 @@ public class IgPackageService {
                                             .put("igPackage", key)
                                             .put("owner", after.access().get(key).ownerShortName())
                                             .put("shareable", after.access().get(key).shareable())
+                                            .put("terminology", after.terminologyOf(key).toJson())
                                             .put("revision", revision)));
                 }))
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
@@ -359,8 +406,9 @@ public class IgPackageService {
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
-                .onSuccess(r -> logger.info("Changed access of IG {} in {} (owner {}, shareable {}, revision {}) by {}", key,
-                        fhirVersion, r.getString("owner"), r.getBoolean("shareable"), r.getLong("revision"), caller.label()));
+                .onSuccess(r -> logger.info("Changed IG {} in {} (owner {}, shareable {}, terminology {}, revision {}) by {}", key,
+                        fhirVersion, r.getString("owner"), r.getBoolean("shareable"),
+                        r.getJsonObject("terminology").getString("mode"), r.getLong("revision"), caller.label()));
     }
 
     /**

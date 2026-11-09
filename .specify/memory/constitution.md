@@ -1,3 +1,14 @@
+<!--
+Sync Impact Report (1.1.1 → 1.2.0, MINOR: Security & Compliance expanded; feature 007-terminology-routing)
+- Changed section: Security & Compliance — added the outbound terminology rule.
+- Principles: unchanged. Principle II's "profiles are never fetched from the network" still holds (terminology servers
+  only check codes).
+- Dependent documents:
+  - README.md — "Terminology servers" section (updated).
+  - specs/003-ig-only-profile-resolution/spec.md, specs/004-ig-scoped-validation/spec.md — amendment notes (updated).
+  - .specify/templates/plan-template.md — no change needed (its Constitution Check reads the gates from this file).
+  - CHANGELOG.md — 4.0.0 entry (updated).
+-->
 # FHIR Validation Service Constitution
 
 ## Core Principles
@@ -154,6 +165,9 @@ place.
 - Uploaded IG packages MUST be sanitized: reject path traversal entries, enforce size limits and
   guard against archive bombs (compressed/uncompressed ratio and entry count limits).
 - Outbound package downloads MUST be restricted to configured package registries.
+- Outbound terminology calls MUST be restricted to open servers listed by the official HL7 terminology registry (or
+  the built-in fallback list while no registry list exists), on public addresses, without redirects; validated
+  resources are never sent.
 - CORS MUST be configurable per environment; wildcard origins MUST NOT be the production default.
 
 ## Governance
@@ -174,4 +188,4 @@ None open. The seven deviations recorded at ratification (static `HashMap` regis
 upload limit, no changelog) were resolved by feature `001-service-hardening` (see `CHANGELOG.md`, 1.0.0). New code
 MUST NOT reintroduce them.
 
-**Version**: 1.1.1 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-07
+**Version**: 1.2.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-09

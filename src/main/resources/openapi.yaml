@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 3.2.1
+  version: 4.0.0
 
 servers:
   - url: http://localhost:8880
@@ -94,10 +94,15 @@ paths:
         exactly one IG package (the `ig` parameter), its dependencies and the core specification, or against the
         core specification alone when `ig` is absent. Every 4xx is problem JSON, whatever Accept asks for:
         invalid-resource (body is not FHIR), invalid-request (e.g. a malformed ig, profile limits, an ig package for
-        another FHIR version), package-not-found (404: the ig package is not stored), dependency-not-found (424: a
-        dependency of the ig package is not stored) and unknown-profile (a requested profile is not available; see
-        UnknownProfileProblem). 503 covers not-ready (including an ig context still being built), overloaded and
-        insufficient-capacity; 413 package-too-large means the ig context can never fit on this instance.
+        another FHIR version, or (4.0.0) an ig package version that is stored but not included for this FHIR version:
+        "IG package name#version is not included for R4; include it first"), package-not-found (404: the ig package is
+        not stored) and unknown-profile (a requested profile is not available; see UnknownProfileProblem). 503 covers
+        not-ready (an included context still being built or rebuilt), overloaded and insufficient-capacity.
+        Included contexts only (4.0.0): validation never builds a context; name an IG version that was included with
+        POST /{version}/include-ig. Terminology (4.0.0): a context whose terminology mode is `server` or `ecosystem`
+        checks codes that can't be decided from its packages with an allowlisted terminology server; a code that
+        could not be checked (server unavailable, time budget used up, no permitted server) is reported as a warning,
+        never an error, and the answer is still 200.
         Organisation ownership (3.1.0): only IG packages and contexts the caller's organisation owns, or that are
         shareable, can be used; an IG package the caller may not use is answered exactly like one that is not stored
         (404), and a dependency the caller may not use gives 424 without naming it. 403 forbidden means the API key's
@@ -115,10 +120,9 @@ paths:
           description: >-
             The one IG package to validate against: `name#version`, `name#latest` or `name`. URL-encode `#` as `%23`;
             an unencoded `#` is cut off by the client and the bare name then resolves to the highest stored version.
-            Without a version (or with `latest`) the highest stored version is used; the response reports the
-            concrete version. Any stored package that supports this FHIR version can be named: included packages are
-            pre-built, others are built on first use from stored packages only (nothing is downloaded). Absent: the
-            core specification only. One value; at most 256 characters. Only packages your organisation owns or
+            Without a version (or with `latest`) the highest included version is used; the response reports the
+            concrete version. Only IG versions included for this FHIR version can be named (4.0.0): a stored version
+            that isn't included is answered 400 invalid-request. Absent: the core specification only. One value; at most 256 characters. Only packages your organisation owns or
             that are shareable can be named. Anonymous callers can name shareable packages only. Without a version,
             the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
             series such as `name#1.2.x` is rejected with 400 invalid-request (3.2.0); use the concrete version reported
@@ -209,8 +213,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '424':
           description: >-
-            dependency-not-found: a dependency of the ig package is not stored (named), or exists but is not available
-            to the caller (not named): "A dependency of the requested IG package is not available."
+            dependency-not-found: a dependency of the ig package exists but is not available to the caller (not
+            named): "A dependency of the requested IG package is not available."
           content:
             application/problem+json:
               schema:
@@ -237,7 +241,12 @@ paths:
         the existing owner and sharing. A dependency the caller may not use is answered 424 dependency-not-found
         without naming it. Version series (3.2.0): igPackageVersion `1.2.x` / `1.x.x` includes the highest matching
         stored version; 404 package-not-found when none is stored, and the highest match is never swapped for a lower
-        one (a highest match for another FHIR version is 400).
+        one (a highest match for another FHIR version is 400). Terminology (4.0.0): `terminology` sets the new
+        context's terminology mode; a server must be listed by the official HL7 terminology registry
+        (https://ecosystem.hl7.org/tx-reg) for this FHIR version (400 tx-server-not-registered otherwise), or, while
+        the service has never obtained the registry's list, be on the built-in fallback list (503
+        tx-registry-unavailable otherwise). For an already included context `terminology` is ignored with a
+        warning; change it with PATCH.
       parameters:
         - name: version
           in: path
@@ -271,6 +280,8 @@ paths:
                     Sharing of a newly included context. false is allowed only when your organisation owns the IG
                     package (or you are the system organisation). Ignored, with a warning, when the context is
                     already included.
+                terminology:
+                  $ref: '#/components/schemas/TerminologySettings'
       responses:
         '200':
           description: IG included
@@ -304,8 +315,9 @@ paths:
       operationId: validationApiExcludeIg
       summary: Stop pre-building an included Implementation Guide version for a FHIR version
       description: >-
-        Removes one name#version from the included set and propagates to every instance. The package stays stored
-        and can still be named in ?ig= on validation (it is then built on demand). Administrative: requires an ADMIN
+        Removes one name#version from the included set and propagates to every instance. The package stays stored.
+        Validation requests naming it are refused with 400 invalid-request until it is included again (4.0.0). Its
+        terminology setting is deleted with the context. Administrative: requires an ADMIN
         key. 404 package-not-found when that version is not included, or when the caller's organisation doesn't own
         its context and isn't the system organisation (3.1.0).
       parameters:
@@ -342,14 +354,17 @@ paths:
           $ref: '#/components/responses/Problem'
     patch:
       operationId: validationApiChangeIncludedIgAccess
-      summary: Change sharing or transfer ownership of an included validator context
+      summary: Change sharing, ownership or terminology of an included validator context
       description: >-
         Administrative (3.1.0). The context's owner or the system organisation may change `shareable`; only the
         system organisation may transfer ownership (`owner`) to another active organisation. Checks run in this
         order: 404 (not included, or the caller is neither the owner nor the system organisation), 403 (a transfer by
         a caller that isn't the system organisation), 400 (body, unknown or inactive target organisation, or a
-        private context of an IG package owned by another organisation). The change takes effect on every instance
-        within the propagation window; the context is not rebuilt.
+        private context of an IG package owned by another organisation, or a malformed terminology setting), then
+        400 tx-server-not-registered and 503 tx-registry-unavailable for the terminology server. Access changes take
+        effect on every instance within the propagation window without a rebuild. A terminology change (4.0.0)
+        rebuilds the context on every instance; the old context serves until the new one is ready. Setting the same
+        terminology again changes nothing.
       parameters:
         - name: version
           in: path
@@ -705,11 +720,12 @@ components:
           type: object
           description: >-
             Per FHIR version: appliedRevision, latestRevision, `base` (the core-only context: state, packages,
-            packageBytes) and `contexts` (every IG context on this instance: key name#version, kind pinned|on-demand,
-            state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason). Since
+            packageBytes) and `contexts` (every IG context on this instance: key name#version, kind pinned,
+            state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason, and
+            (4.0.0) terminology {mode, server}). Since
             3.1.0 `contexts` lists only contexts that are shareable and whose packages are all shareable; the others
             are summarised in `privateContexts` {count, states {ACTIVE, BUILDING, STALE, ABSENT}}. Owners are never
-            listed. Readiness counts the base and pinned contexts only.
+            listed. Readiness counts the base and pinned contexts only (4.0.0: there are no on-demand contexts).
         reasons:
           type: array
           items:
@@ -783,6 +799,33 @@ components:
               type: string
         readiness:
           $ref: '#/components/schemas/ReadinessResponse'
+        terminology:
+          type: object
+          description: >-
+            Terminology allowlist state (4.0.0). Readiness does not depend on it.
+          properties:
+            registry:
+              type: string
+              description: The official HL7 terminology registry (fixed)
+            allowlist:
+              type: object
+              description: Per FHIR version
+              additionalProperties:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    enum: [registry, stored-registry, built-in]
+                  fetchedAt:
+                    type: string
+                    nullable: true
+                  registryLastUpdate:
+                    type: string
+                    nullable: true
+                  servers:
+                    type: integer
+                  reason:
+                    type: string
 
     ValidationMessage:
       type: object
@@ -863,6 +906,8 @@ components:
           type: array
           items:
             type: string
+        terminology:
+          $ref: '#/components/schemas/TerminologySettings'
         owner:
           type: string
           description: Short name of the organisation owning the context (may be another organisation when it was already included)
@@ -940,6 +985,8 @@ components:
       minProperties: 1
       additionalProperties: false
       properties:
+        terminology:
+          $ref: '#/components/schemas/TerminologySettings'
         shareable:
           type: boolean
         owner:
@@ -964,10 +1011,32 @@ components:
             revision:
               type: integer
               format: int64
+            terminology:
+              $ref: '#/components/schemas/TerminologySettings'
             warnings:
               type: array
               items:
                 type: string
+
+    TerminologySettings:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      description: >-
+        Terminology setting of an included validator context (4.0.0). `none`: codes are checked only against the
+        context's packages and built-in code systems, with no outbound request. `server`: codes that can't be decided
+        locally are checked with `server`. `ecosystem`: each code system is routed to the server the official HL7
+        terminology registry names for it; `server`, when set, replaces the registry's default server (tx.fhir.org).
+        Servers must be open servers listed by https://ecosystem.hl7.org/tx-reg for the FHIR version. The registry
+        lists none for STU3 and R4B.
+      properties:
+        mode:
+          type: string
+          enum: [none, server, ecosystem]
+        server:
+          type: string
+          maxLength: 512
+          description: Base URL of the terminology server, exactly as the registry lists it (required for `server`; not allowed for `none`)
 
     IgAccessResponse:
       allOf:

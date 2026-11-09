@@ -20,12 +20,19 @@ import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
 import nzi.fhir.validator.core.service.FhirValidationService;
 import nzi.fhir.validator.core.service.HealthService;
 import nzi.fhir.validator.core.service.IgPackageService;
+import nzi.fhir.validator.core.terminology.NetworkGuard;
+import nzi.fhir.validator.core.terminology.RegistryResolver;
+import nzi.fhir.validator.core.terminology.TerminologyClients;
+import nzi.fhir.validator.core.terminology.TerminologyServices;
+import nzi.fhir.validator.core.terminology.TxRegistry;
+import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import nzi.fhir.validator.core.validator.ConfigSync;
 import nzi.fhir.validator.core.validator.HeapBudget;
 import nzi.fhir.validator.core.validator.SnapshotBuilder;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.web.endpoint.ValidationApi;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,6 +52,8 @@ public final class ServiceRegistry {
     private final ValidationApi validationApi;
     private final ApiKeyRepository apiKeys;
     private final OrganisationRepository organisations;
+    private TxRegistry txRegistry;
+    private TerminologyServices txServices;
     private final ApiKeyAuthHandler auth;
     private final SafePackageFetcher fetcher;
     private final AdmissionController adminAdmission;
@@ -87,13 +96,22 @@ public final class ServiceRegistry {
                 PackageArchiveGuard.from(config), fetcher, config.packageRegistryUrls(), config.packageRegistryEnabled());
         IgPackageService igPackageService = IgPackageService.create(vertx, pool, packages);
         HeapBudget heap = HeapBudget.ofRuntime();
+        // Spec 007: the allowlist comes only from the official HL7 terminology registry (fixed address, public
+        // addresses only); there is no setting that changes either (FR-006, FR-011).
+        TxRegistry txRegistry = TxRegistry.official(vertx, pool, config.txRegistryRefreshMs(), config.txTimeoutMs());
+        TerminologyClients txClients = new TerminologyClients(txRegistry, NetworkGuard.strict(), config.txTimeoutMs(),
+                config.txMaxConnectionsPerServer());
+        TerminologyServices txServices = new TerminologyServices(txRegistry, RegistryResolver.official(config.txTimeoutMs()),
+                txClients, ValidationSupportChain.CacheConfiguration.defaultValues()
+                        .setCacheSize(config.txCacheSize()).setCacheTimeout(Duration.ofMillis(config.txCacheTtlMs())),
+                config.txRequestBudgetMs());
         SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()),
-                config.packageWorkers(), heap);
+                config.packageWorkers(), heap, txServices);
         AdmissionController adminAdmission = new AdmissionController(config.adminMaxPending(),
                 "Too many administrative operations in progress; retry shortly");
-        // On-demand context builds share the administrative admission limit (spec 004 FR-014).
-        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, config.igMaxOnDemand(), config.igBuildWaitMs(),
-                adminAdmission);
+        // Only base and included contexts exist (spec 007 FR-021): nothing is built on demand, evicted or admitted per
+        // request, so the registry needs no limits of its own.
+        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder);
         PackageCatalog catalog = PackageCatalog.of(pool);
         ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), registry, catalog, builder.cache(),
                 config.syncPollIntervalMs());
@@ -104,13 +122,15 @@ public final class ServiceRegistry {
         });
         igPackageService.setApplyLocally(sync::syncNow);
         igPackageService.setAdmitBuild(expandedBytes -> executors.packages().executeBlocking(() -> {
-            heap.admitInclude(expandedBytes, registry.evictor());
+            heap.admitInclude(expandedBytes);
             return null;
         }, false));
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
         healthService.setCatalogRevision(() -> catalog.current().revision());
+        healthService.setTerminologyStatus(txRegistry::status);
+        igPackageService.setTxAllowlist(txRegistry);
         PackageCache packageCache = builder.cache();
         FhirValidationService validationService = new FhirValidationService(registry, executors,
                 new AdmissionController(config.validationMaxPending()), config.validationMaxBundleEntries());
@@ -123,15 +143,37 @@ public final class ServiceRegistry {
                 validationService, fetcher, adminAdmission);
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
         metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache);
+        metrics.bindTerminology(txRegistry, txClients, txServices.resolver());
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
         services.snapshotBuilder = builder;
         services.heapBudget = heap;
+        services.txRegistry = txRegistry;
+        services.txServices = txServices;
         return services;
     }
 
+    /**
+     * Loads the stored terminology server lists and starts refreshing them from the registry in the background (spec
+     * 007 FR-007). Call before {@code configSync().start()}, so contexts are built against the last good list.
+     */
+    public Future<Void> startTerminology() {
+        return txRegistry.start();
+    }
+
+    /** The terminology allowlist's source (spec 007). */
+    public TxRegistry txRegistry() {
+        return txRegistry;
+    }
+
+    /** The terminology infrastructure every snapshot build shares (spec 007). */
+    public TerminologyServices txServices() {
+        return txServices;
+    }
+
     public Future<Void> stop() {
+        txRegistry.stop();
         validatorRegistry.close();
         healthService.stop();
         return configSync.stop();

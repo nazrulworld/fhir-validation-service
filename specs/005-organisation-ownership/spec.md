@@ -6,6 +6,10 @@
 
 **Status**: Implemented (released in v3.1.0, 2026-11-07; convergence fixes in #52 and #53)
 
+**Amended by spec 007** (`specs/007-terminology-routing/spec.md`, 4.0.0): FR-013 (the access check runs before an
+on-demand build is admitted) is superseded by spec 007 FR-021, because there are no on-demand builds; the access check
+before a context serves a request still applies. In FR-015, the words "on-demand builds" no longer apply.
+
 **Input**: User description: "@var/specify_instruction_organisation_ownership.md". In summary: introduce
 organisations as the owner of everything the service stores. Each API key belongs to one organisation. Each stored
 IG package and each validator snapshot has an owner organisation and a shareable flag. A caller can use a package

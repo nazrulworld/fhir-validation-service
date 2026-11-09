@@ -111,4 +111,26 @@ class ErrorResponderTest {
                     ctx.completeNow();
                 })));
     }
+
+    /** Spec 007: the three problems of terminology and included-only validation (data-model §6). */
+    @Test
+    void terminologyAndIncludedOnlyProblems() {
+        ProblemException notIncluded = ProblemException.igNotIncluded("p#1.0.0",
+                nzi.fhir.validator.core.enums.SupportedFhirVersion.R4);
+        assertEquals(400, notIncluded.status());
+        assertEquals("invalid-request", notIncluded.type());
+        assertEquals("IG package p#1.0.0 is not included for R4; include it first (POST /R4/include-ig)", notIncluded.detail());
+
+        ProblemException unregistered = ProblemException.txServerNotRegistered("http://10.0.0.5/fhir",
+                nzi.fhir.validator.core.enums.SupportedFhirVersion.R4);
+        assertEquals(400, unregistered.status());
+        assertEquals("tx-server-not-registered", unregistered.type());
+        assertEquals("https://ecosystem.hl7.org/tx-reg", unregistered.extensions().getString("registry"));
+        assertEquals("R4", unregistered.extensions().getString("fhirVersion"));
+
+        ProblemException unavailable = ProblemException.txRegistryUnavailable(nzi.fhir.validator.core.enums.SupportedFhirVersion.R5);
+        assertEquals(503, unavailable.status());
+        assertEquals("tx-registry-unavailable", unavailable.type());
+        assertEquals("60", unavailable.headers().get("Retry-After"));
+    }
 }

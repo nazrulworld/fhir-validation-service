@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -33,6 +34,7 @@ class HealthApiTest extends BaseTestContainer {
     private int testPort;
     private Vertx vertx;
     private WebClient client;
+    private HealthService healthService;
 
     @BeforeEach
     void setUp(VertxTestContext testContext) {
@@ -46,7 +48,7 @@ class HealthApiTest extends BaseTestContainer {
 
         RouterBuilder.create(vertx, "openapi.yaml")
                 .onSuccess(routerBuilder -> {
-                    HealthService healthService = new HealthService(vertx, pgPool);
+                    healthService = new HealthService(vertx, pgPool);
                     new HealthApi(routerBuilder, vertx, healthService);
                     // Create the router from the builder
                     Router router = routerBuilder.createRouter();
@@ -108,6 +110,33 @@ class HealthApiTest extends BaseTestContainer {
                     testContext.completeNow();
                 })
                 .onFailure(testContext::failNow);
+    }
+
+    /** Spec 007 (contracts §5): the terminology allowlist state is reported; readiness doesn't depend on it. */
+    @Test
+    void healthReportsTheTerminologyAllowlist(VertxTestContext testContext) {
+        healthService.setTerminologyStatus(() -> new JsonObject()
+                .put("registry", nzi.fhir.validator.core.terminology.TxRegistry.OFFICIAL_BASE)
+                .put("allowlist", nzi.fhir.validator.core.terminology.TxServerAllowlist.builtIn().status()));
+        String readinessBefore = healthService.readiness().getString("status");
+        client.get(testPort, "localhost", "/health")
+                .as(BodyCodec.jsonObject())
+                .send()
+                .onComplete(testContext.succeeding(response -> testContext.verify(() -> {
+                    JsonObject body = response.body();
+                    nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredBySchema(body, "HealthResponse", "terminology");
+                    JsonObject terminology = body.getJsonObject("terminology");
+                    assertEquals("https://ecosystem.hl7.org/tx-reg", terminology.getString("registry"));
+                    JsonObject r4 = terminology.getJsonObject("allowlist").getJsonObject("R4");
+                    assertEquals("built-in", r4.getString("source"));
+                    assertEquals(1, r4.getInteger("servers"));
+                    assertTrue(r4.containsKey("fetchedAt") && r4.getValue("fetchedAt") == null);
+                    assertTrue(r4.getString("reason").contains("built-in fallback list in use"));
+                    assertEquals(0, terminology.getJsonObject("allowlist").getJsonObject("R4B").getInteger("servers"));
+                    assertEquals(readinessBefore, healthService.readiness().getString("status"),
+                            "readiness doesn't depend on the allowlist");
+                    testContext.completeNow();
+                })));
     }
 
     @Test

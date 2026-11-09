@@ -219,11 +219,25 @@ public class ValidationApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
             return;
         }
+        // Spec 007 FR-003: the new context's terminology setting (contracts §2).
+        java.util.Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology;
+        try {
+            Object raw = body.getValue("terminology");
+            if (raw != null && !(raw instanceof JsonObject)) {
+                throw new ProblemException(400, "invalid-request", "terminology must be an object with a mode");
+            }
+            terminology = raw == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(nzi.fhir.validator.core.terminology.TerminologySettings.parse((JsonObject) raw));
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
         String requestedVersion = body.getString("igPackageVersion", "latest");
         // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
         ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
                 body.getString("igPackageId"), requestedVersion,
-                java.util.Optional.ofNullable((Boolean) shareable)).map(json -> json.put("requestedVersion", requestedVersion)));
+                java.util.Optional.ofNullable((Boolean) shareable), terminology)
+                .map(json -> json.put("requestedVersion", requestedVersion)));
     }
 
     /** {@code PATCH /{version}/include-ig?ig=name#version} (spec 005 FR-019, contracts §4). */

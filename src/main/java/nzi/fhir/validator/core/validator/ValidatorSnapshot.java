@@ -69,6 +69,10 @@ public final class ValidatorSnapshot {
     private final FhirValidator validator;
     private final ValidationSupportChain chain;
     private volatile long packageArchiveBytes;
+    /** Spec 007: the setting this snapshot was built with, and the per-request terminology budget. */
+    private volatile nzi.fhir.validator.core.terminology.TerminologySettings terminology =
+            nzi.fhir.validator.core.terminology.TerminologySettings.NONE;
+    private volatile long requestBudgetMs;
 
     public ValidatorSnapshot(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                              FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
@@ -98,6 +102,16 @@ public final class ValidatorSnapshot {
 
     void setPackageArchiveBytes(long bytes) {
         this.packageArchiveBytes = bytes;
+    }
+
+    void setTerminology(nzi.fhir.validator.core.terminology.TerminologySettings terminology, long requestBudgetMs) {
+        this.terminology = terminology;
+        this.requestBudgetMs = requestBudgetMs;
+    }
+
+    /** The terminology setting this snapshot was built with (spec 007). */
+    public nzi.fhir.validator.core.terminology.TerminologySettings terminology() {
+        return terminology;
     }
 
     /**
@@ -160,8 +174,25 @@ public final class ValidatorSnapshot {
                     .filter(p -> p != null && !applied.contains(p) && resolves(p))
                     .forEach(applied::add);
         }
-        return new Outcome(version, validator.validateWithResult(body, options), List.copyOf(applied), fhirContext,
-                key.igPackage());
+        // Spec 007 FR-019a, research R5, R6: the request's terminology budget (only time spent on terminology calls
+        // counts) is open while HAPI validates on this worker thread; a request that got a degraded answer drops the
+        // snapshot's expiring code cache, so a "not checked" warning never outlives the outage.
+        boolean opened = !nzi.fhir.validator.core.terminology.TerminologyBudget.isOpen();
+        if (opened) {
+            nzi.fhir.validator.core.terminology.TerminologyBudget.open(
+                    terminology.mode() == nzi.fhir.validator.core.terminology.TerminologyMode.NONE ? 0 : requestBudgetMs);
+        }
+        try {
+            ValidationResult result = validator.validateWithResult(body, options);
+            if (nzi.fhir.validator.core.terminology.TerminologyBudget.degraded()) {
+                chain.invalidateExpiringCaches();
+            }
+            return new Outcome(version, result, List.copyOf(applied), fhirContext, key.igPackage());
+        } finally {
+            if (opened) {
+                nzi.fhir.validator.core.terminology.TerminologyBudget.close();
+            }
+        }
     }
 
     /**

@@ -33,13 +33,13 @@ PostgreSQL database; IG changes reach every instance within seconds, without res
 - PostgreSQL 16 (provided by the Compose setup)
 - Up to 4 GB of memory per instance (the default container limit; the JVM takes 75% as heap). Warmed core-only
   validators for four FHIR versions take about 0.9 GB of heap. Every IG in use has its own validator context (the IG
-  plus its dependencies): one per included IG, plus up to `FV_IG_MAX_ON_DEMAND` (default 4) built on demand. A build
+  plus its dependencies): one per included IG (since 4.0.0 nothing is built on demand). A build
   holds about 6 times the context's expanded size. Size the heap as 0.9 GB + the contexts you keep + 64 MB + 6 × the
   largest context's expanded size: 4 GB fits contexts up to about 350 MB expanded (roughly a 30 MB archive), including
   a 20 MB IG such as `hl7.fhir.r4.examples` (180 MB expanded). The cluster profile runs two instances, so the host needs
   room for two such limits. An include that would not fit is refused with 413 `package-too-large` and nothing is
-  committed; on-demand contexts are evicted (least recently used first) before a new one is refused with 503
-  `insufficient-capacity`. Watch `fv_snapshot_package_size_bytes` and `fv_validator_contexts`.
+  committed. A context with a terminology mode adds at most about 5 MB of cached code results at the default
+  `FV_TX_CACHE_SIZE`. Watch `fv_snapshot_package_size_bytes` and `fv_validator_contexts`.
 
 ## Installation
 
@@ -313,10 +313,11 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
 
 - `?ig=<name>#<version>` validates against that one IG package, its dependencies and the core specification, like
   `validator_cli.jar -ig`. URL-encode `#` as `%23`: `?ig=hl7.fhir.us.core%237.0.0`. `?ig=<name>` or `#latest` uses the
-  highest stored version. Without `ig`, only the core specification applies. Any **stored** package that supports the
-  FHIR version can be named: an included one is pre-built, any other is built on the first request that names it, from
-  stored packages only (nothing is downloaded); later requests reuse it. The response names the context used in the
-  `X-Validation-Context` header (`name#version` or `base`) and in `igPackage`.
+  highest **included** version. Without `ig`, only the core specification applies. Since 4.0.0 only IG versions
+  **included** for the FHIR version (see below) can be named; a stored version that isn't included is refused with
+  **400** `invalid-request` ("IG package name#version is not included for R4; include it first"). Validation never
+  builds a context. The response names the context used in the `X-Validation-Context` header (`name#version` or
+  `base`) and in `igPackage`.
 - `Accept: application/fhir+json` or `application/fhir+xml` returns a FHIR `OperationOutcome` (unchanged body; read the
   header for the context).
 - `?profile=<canonical>[,<canonical>]` validates against additional profiles (at most 10, each at most 1024
@@ -325,10 +326,12 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
   their canonical URL. If any of them cannot be resolved, the answer is **400 `unknown-profile`** with
   `unresolvedProfiles`, and nothing is validated. `appliedProfiles` lists only profiles that were actually applied.
 - A completed validation answers **200**, valid or not. A body that is not FHIR at all answers **400**
-  (`invalid-resource`). An `ig` package that is not stored answers **404** `package-not-found`, one whose dependency is
-  not stored **424** `dependency-not-found`, and a malformed `ig` or a package for another FHIR version **400**
-  `invalid-request`. Overload, a validator that is not ready (including an `ig` context still being built, for up to
-  `FV_IG_BUILD_WAIT_MS`) or no memory left for another context answers **503** with `Retry-After`.
+  (`invalid-resource`). An `ig` package that is not stored answers **404** `package-not-found`, and a malformed `ig`,
+  a package for another FHIR version or one that isn't included **400** `invalid-request`. Overload or a validator
+  that is not ready (an included context still being built or rebuilt) answers **503** with `Retry-After`.
+- For an IG included with a terminology mode (see below), codes that can't be decided from its packages are checked
+  by a terminology server. A code that could not be checked (server unavailable, the request's terminology time used
+  up, no permitted server) is reported as a **warning**, never an error; the answer is still 200.
 
 ### Manage IGs (administrator key required)
 
@@ -356,7 +359,7 @@ curl -H "$AUTH" -H 'Content-Type: application/json' \
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.us.core","igPackageVersion":"6.x"}' http://127.0.0.1:8880/R4/include-ig
 
-# Stop pre-building it (the package stays stored and can still be named in ?ig=)
+# Stop pre-building it (the package stays stored; ?ig= naming it is refused with 400 until it is included again)
 curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.dk.core%233.4.0'
 ```
 
@@ -365,13 +368,53 @@ package contributes. A version series is `N.x`, `N.x.x` or `N.N.x`; versions are
 never matches `1.20.0`, and a release wins over a pre-release. `?ig=` on validation needs an exact version (or none):
 a series there is 400. `/igs/register` stores the dependencies too (unless `"includeDependency": false`), resolving a
 dependency declared as a series (`"1.0.x"`) or as `latest` the same way as the package itself (3.2.1); a package
-uploaded through `/igs/upload` needs its dependencies stored before it can be built on demand. To use your own
+uploaded through `/igs/upload` needs its dependencies stored before it is included. To use your own
 profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`, `fhirVersions`
-and `dependencies`, plus the `.json` resources under `package/`), then upload it and name it in `ig`, or include it to
-have it pre-built.
+and `dependencies`, plus the `.json` resources under `package/`), then upload it, include it, and name it in `ig`.
 
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
+
+### Terminology servers (4.0.0)
+
+By default every context is offline: codes are checked only against code systems in its packages and the built-in
+common code systems (UCUM, BCP-47, ISO 3166/4217, MIME types). An included IG can instead use a terminology server,
+like `validator_cli.jar -tx`:
+
+| Mode        | Behaviour                                                                                                                                   |
+|-------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `none`      | default; no outbound request at all                                                                                                         |
+| `server`    | codes that can't be decided locally are checked by one server (`"server": "<base url>"`)                                                    |
+| `ecosystem` | each code system is routed to the server the official HL7 terminology registry names for it; an optional `server` replaces tx.fhir.org    |
+
+```bash
+# Set it when including ...
+curl -H "$AUTH" -H 'Content-Type: application/json' \
+  --data '{"igPackageId":"hl7.fhir.uv.ips","igPackageVersion":"2.0.0","terminology":{"mode":"ecosystem"}}' \
+  http://127.0.0.1:8880/R4/include-ig
+# ... or change it later (the context's owner or the system organisation); every instance rebuilds the context.
+curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminology":{"mode":"none"}}' \
+  'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.uv.ips%232.0.0'
+```
+
+- **Only registry servers.** The service contacts only open servers that the official registry
+  (`https://ecosystem.hl7.org/tx-reg`, fixed, not configurable) lists for the FHIR version, on public addresses,
+  without following redirects. A setting naming another server is refused with **400** `tx-server-not-registered`.
+  The list is refreshed every `FV_TX_REGISTRY_REFRESH_MS` and the last good copy is kept in the database. Until a list
+  has ever been obtained, only a built-in fallback (`http://tx.fhir.org/r4`, `http://tx.fhir.org/r5`) is allowed, and
+  other servers are refused with **503** `tx-registry-unavailable`.
+- Some listed servers are plain `http://` (for example `http://tx.fhir.org/r4`); they are contacted exactly as listed.
+  Only codes, systems, displays and the IG's own value set and code system definitions are sent, never the resource
+  being validated.
+- The registry lists no server for **STU3** and **R4B**, so those versions can only use mode `none`.
+- An IG's own value sets are sent with the request, so membership follows the IG; its code systems go along as
+  `tx-resource`.
+- Each call is bounded by `FV_TX_TIMEOUT_MS`, each request by `FV_TX_REQUEST_BUDGET_MS` of terminology time; a server
+  that keeps failing is skipped for a minute. Answers are cached per context (`FV_TX_CACHE_SIZE`, `FV_TX_CACHE_TTL_MS`).
+- Validation workers wait on terminology calls, so terminology-heavy traffic may need a larger `FV_VALIDATION_WORKERS`.
+- `GET /health` shows the allowlist per FHIR version (`source`: `registry`, `stored-registry` or `built-in`) and each
+  context's setting; `/metrics` adds `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total` and
+  `fv_tx_allowlist_age_seconds`.
 
 ### Organisations and API keys
 
@@ -446,7 +489,7 @@ bundled compose database runs on a private compose network. When the database is
 | `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
 | `GET /health/readiness` | 200 when the database is reachable, every core and included-IG validator is usable, and the instance is not draining      |
 | `GET /health`           | detailed report                                                                                                          |
-| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, ...) |
+| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, ...) |
 
 On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
 `FV_SHUTDOWN_GRACE_MS`), then exits.
@@ -465,9 +508,11 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_AUTH_ANONYMOUS_VALIDATE`                                                 | `true`                                                          | `false` requires a key for validation and reads too               |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
-| `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations and on-demand IG builds in progress; beyond it 503 `overloaded` |
-| `FV_IG_MAX_ON_DEMAND`                                                        | 4                                                               | IG validator contexts built on demand kept per instance (LRU)     |
-| `FV_IG_BUILD_WAIT_MS`                                                        | min(10000, request timeout / 2)                                 | how long a request waits for an on-demand IG build before 503     |
+| `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
+| `FV_TX_TIMEOUT_MS` / `FV_TX_REQUEST_BUDGET_MS`                               | 5000 / 10000                                                    | one terminology call / a request's total terminology time (4.0.0) |
+| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 5000 / 600000                                                   | code results cached per terminology context (4.0.0)               |
+| `FV_TX_REGISTRY_REFRESH_MS`                                                  | 21600000 (6 h)                                                  | how often the registry's server list is refreshed (4.0.0)         |
+| `FV_TX_MAX_CONNECTIONS_PER_SERVER`                                           | 10                                                              | pooled connections per terminology server (4.0.0)                 |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |
 | `FV_CORS_ALLOWED_ORIGINS`                                                    | *(none)*                                                        | browser origins allowed to call the API                           |
 | `FV_SYSTEM_ORG_NAME_SHORT`, `FV_SYSTEM_ORG_NAME_LONG`                        | `system`, `FHIR Validation Service`                             | the system organisation's names, applied at every start (3.1.0)   |

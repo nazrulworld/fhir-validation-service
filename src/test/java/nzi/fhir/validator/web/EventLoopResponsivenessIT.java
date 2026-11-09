@@ -122,36 +122,4 @@ class EventLoopResponsivenessIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
-
-    /**
-     * Spec 004 FR-013, Principle I: an on-demand context build (US Core, repackaged without its non-core dependencies so
-     * it can be built from what is stored) never blocks an event loop.
-     */
-    @Test
-    void probesStayResponsiveWhileAnIgContextIsBuiltOnDemand(VertxTestContext ctx) {
-        AtomicLong maxLiveness = new AtomicLong();
-        logs = LogCapture.start();
-        nzi.fhir.validator.testsupport.TestPackages.storePackage(app.bootstrap().services(),
-                        nzi.fhir.validator.testsupport.TestPackages.withoutDependencies(Fixtures.bytes(Fixtures.US_CORE_IG)))
-                .compose(stored -> {
-                    long timer = vertx.setPeriodic(100, id -> probe("/health/liveness", maxLiveness));
-                    return app.client().post(app.port(), "localhost", "/R4/validate").timeout(120_000)
-                            .addQueryParam("ig", "hl7.fhir.us.core#7.0.0")
-                            .putHeader("Content-Type", "application/json")
-                            .sendBuffer(io.vertx.core.buffer.Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"))
-                            .eventually(() -> {
-                                vertx.cancelTimer(timer);
-                                return Future.succeededFuture();
-                            });
-                })
-                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
-                    // The first request may give up after the build wait (503) while the build continues; either is fine.
-                    assertTrue(r.statusCode() == 200 || r.statusCode() == 503, r.bodyAsString());
-                    assertTrue(maxLiveness.get() < 1_000, "slowest liveness probe: " + maxLiveness.get() + " ms");
-                    assertEquals(java.util.List.of(), logs.from(BLOCKED_THREAD_CHECKER).stream()
-                            .filter(e -> e.message().contains("vert.x-eventloop")).map(LogCapture.Captured::message).toList(),
-                            "no event loop may block during an on-demand build");
-                    ctx.completeNow();
-                })));
-    }
 }

@@ -219,6 +219,72 @@ public final class TestPackages {
                 .mapEmpty();
     }
 
+    // --- terminology (spec 007) ---------------------------------------------------------------------------------
+
+    /** The local, complete CodeSystem of {@link #terminologyIg()}. */
+    public static final String TX_LOCAL_SYSTEM = "http://example.org/fhir/CodeSystem/local";
+    /** The ValueSet of {@link #terminologyIg()}: the local system plus all of LOINC. */
+    public static final String TX_MIXED_VALUESET = "http://example.org/fhir/ValueSet/mixed";
+    /** The Observation profile of {@link #terminologyIg()}: {@code Observation.code} bound (required) to the mixed set. */
+    public static final String TX_OBSERVATION_PROFILE = "http://example.org/fhir/StructureDefinition/tx-observation";
+    public static final String TX_IG_NAME = "test.tx.ig";
+    public static final String TX_IG_VERSION = "1.0.0";
+
+    /**
+     * {@code test.tx.ig#1.0.0} (R4): a complete local CodeSystem ({@code local-a}, {@code local-b}), a ValueSet that
+     * includes that system and LOINC, and an Observation profile binding {@code code} to the ValueSet (required).
+     */
+    public static byte[] terminologyIg() {
+        JsonObject codeSystem = new JsonObject()
+                .put("resourceType", "CodeSystem").put("id", "local").put("url", TX_LOCAL_SYSTEM)
+                .put("version", "1.0.0").put("name", "Local").put("status", "active").put("content", "complete")
+                .put("concept", new JsonArray()
+                        .add(new JsonObject().put("code", "local-a").put("display", "Local A"))
+                        .add(new JsonObject().put("code", "local-b").put("display", "Local B")));
+        JsonObject valueSet = new JsonObject()
+                .put("resourceType", "ValueSet").put("id", "mixed").put("url", TX_MIXED_VALUESET)
+                .put("version", "1.0.0").put("name", "Mixed").put("status", "active")
+                .put("compose", new JsonObject().put("include", new JsonArray()
+                        .add(new JsonObject().put("system", TX_LOCAL_SYSTEM))
+                        .add(new JsonObject().put("system", "http://loinc.org"))));
+        JsonObject profile = new JsonObject()
+                .put("resourceType", "StructureDefinition").put("id", "tx-observation").put("url", TX_OBSERVATION_PROFILE)
+                .put("name", "TxObservation").put("status", "active").put("fhirVersion", "4.0.1")
+                .put("kind", "resource").put("abstract", false).put("type", "Observation")
+                .put("baseDefinition", "http://hl7.org/fhir/StructureDefinition/Observation")
+                .put("derivation", "constraint")
+                .put("differential", new JsonObject().put("element", new JsonArray()
+                        .add(new JsonObject().put("id", "Observation").put("path", "Observation"))
+                        .add(new JsonObject().put("id", "Observation.code").put("path", "Observation.code")
+                                .put("binding", new JsonObject().put("strength", "required").put("valueSet", TX_MIXED_VALUESET)))));
+        return npmPackage(TX_IG_NAME, TX_IG_VERSION, Map.of(), List.of(codeSystem, valueSet, profile));
+    }
+
+    /** An R4 Observation coded with {@code system|code} and conforming to the {@link #terminologyIg()} profile. */
+    public static String codedObservation(String system, String code) {
+        return new JsonObject().put("resourceType", "Observation").put("id", "o1").put("status", "final")
+                .put("meta", new JsonObject().put("profile", new JsonArray().add(TX_OBSERVATION_PROFILE)))
+                .put("code", new JsonObject().put("coding", new JsonArray()
+                        .add(new JsonObject().put("system", system).put("code", code))))
+                .encode();
+    }
+
+    /**
+     * A collection Bundle of {@code entries} Observations, each with a distinct LOINC code and the {@link #terminologyIg()}
+     * profile, so every code is checked against the mixed ValueSet (budget tests).
+     */
+    public static String loincBundle(int entries) {
+        JsonArray list = new JsonArray();
+        for (int i = 0; i < entries; i++) {
+            list.add(new JsonObject().put("fullUrl", "urn:uuid:" + java.util.UUID.randomUUID())
+                    .put("resource", new JsonObject().put("resourceType", "Observation").put("status", "final")
+                            .put("meta", new JsonObject().put("profile", new JsonArray().add(TX_OBSERVATION_PROFILE)))
+                            .put("code", new JsonObject().put("coding", new JsonArray()
+                                    .add(new JsonObject().put("system", "http://loinc.org").put("code", (10000 + i) + "-0"))))));
+        }
+        return new JsonObject().put("resourceType", "Bundle").put("type", "collection").put("entry", list).encode();
+    }
+
     /** A Patient without the elements the test profiles require. */
     public static String minimalPatient() {
         return new JsonObject().put("resourceType", "Patient").put("id", "p1").put("active", true).encode();

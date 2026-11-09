@@ -1,0 +1,87 @@
+{
+    "formatVersion": "1",
+    "registry-url": "https://fhir.github.io/ig-registry/tx-servers.json",
+    "candidates": [
+        {
+            "server-name": "tx.fhir.org",
+            "url": "http://tx.fhir.org/r4",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "This server is open to the public",
+            "content": "complete"
+        },
+        {
+            "server-name": "HL7 Australia Server",
+            "url": "https://tx.hl7.org.au/fhir",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "This server is open to the public",
+            "content": "not-present"
+        },
+        {
+            "server-name": "AEHRC Server",
+            "url": "https://tx.ontoserver.csiro.au/fhir",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "This server is open to the public",
+            "content": "not-present"
+        },
+        {
+            "server-name": "Canada Health Infoway Terminology Server",
+            "url": "https://terminologystandardsservice.ca/tx/fhir",
+            "fhirVersion": "4.0.1",
+            "security": "api-key",
+            "token": true,
+            "access_info": "This server requires an API Key - see https://infocentral.infoway-inforoute.ca/en/tools/standards-tools/terminology-server",
+            "content": "not-present"
+        },
+        {
+            "server-name": "HL7 Europe Terminology Server",
+            "url": "http://tx.hl7europe.eu/r4",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "Open",
+            "content": "complete"
+        },
+        {
+            "server-name": "HL7 Switzerland Terminology Server",
+            "url": "https://tx.fhir.ch/r4",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "Open",
+            "content": "complete"
+        },
+        {
+            "server-name": "HL7 Germany Terminology Server",
+            "url": "https://tx.fhir.de/fhir",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "open",
+            "content": "not-present"
+        },
+        {
+            "server-name": "HL7 Czech Republic Terminology Server",
+            "url": "https://tx.hl7.cz/r4",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "Open FHIR Terminology Server supporting publication and validation of Czech FHIR Implementation Guides. Provides Czech national terminologies, SNOMED CT Czech Republic Edition and selected international terminologies with Czech language designations where available.",
+            "content": "complete"
+        },
+        {
+            "server-name": "HL7 Korea Terminology Server",
+            "url": "https://tx.healthall.co.kr/fhir/r4",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "Open read-only FHIR terminology service supporting terminology resources published by HL7 Korea, including KR Core. The server also hosts the SNOMED CT Korean Edition subject to SNOMED International licensing conditions.",
+            "content": "complete"
+        }
+    ]
+}

@@ -324,4 +324,40 @@ class IgPackageApiContractTest extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /** Spec 007 contracts §2-3: include and PATCH carry the context's terminology setting, declared by openapi.yaml. */
+    @Test
+    void includeAndPatchCarryTheTerminologySetting(VertxTestContext ctx) {
+        TestPackages.storePackage(app.bootstrap().services(), TestPackages.profilePackage("contract.tx", "1.0.0"))
+                .compose(v -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+                        .sendJsonObject(new JsonObject().put("igPackageId", "contract.tx").put("igPackageVersion", "1.0.0")
+                                .put("terminology", new JsonObject().put("mode", "none"))))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredBySchema(r.bodyAsJsonObject(),
+                                "IncludeResponse", "terminology");
+                        assertEquals(new JsonObject().put("mode", "none"), r.bodyAsJsonObject().getJsonObject("terminology"));
+                    });
+                    // No registry list in this test JVM: R4 is on the built-in list, which has tx.fhir.org only.
+                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/include-ig"))
+                            .addQueryParam("ig", "contract.tx#1.0.0").timeout(10_000)
+                            .sendJsonObject(new JsonObject().put("terminology",
+                                    new JsonObject().put("mode", "server").put("server", "https://tx.fhir.ch/r4")));
+                })
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        JsonObject problem = assertProblem(r, 503, "tx-registry-unavailable");
+                        assertEquals("60", r.getHeader("Retry-After"));
+                        assertEquals("https://ecosystem.hl7.org/tx-reg", problem.getString("registry"));
+                    });
+                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/include-ig"))
+                            .addQueryParam("ig", "contract.tx#1.0.0").timeout(10_000)
+                            .sendJsonObject(new JsonObject().put("terminology", new JsonObject().put("mode", "sometimes")));
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(400, r.statusCode(), "the contract refuses an unknown mode: " + r.bodyAsString());
+                    ctx.completeNow();
+                })));
+    }
 }

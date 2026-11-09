@@ -1,0 +1,15 @@
+{
+    "formatVersion": "2",
+    "registry-url": "https://example.org/tx-servers.json",
+    "candidates": [
+        {
+            "server-name": "{{BASE}}",
+            "url": "{{BASE}}",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "test",
+            "content": "complete"
+        }
+    ]
+}

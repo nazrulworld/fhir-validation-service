@@ -328,22 +328,17 @@ class IncludeOwnershipIT extends BaseTestContainer {
     // --- spec 006 FR-024 (T054): sharing changes and transfers re-resolve and rebuild contexts ---------------------
 
     @Test
-    void sharingADependencyVersionReResolvesIncludedAndOnDemandContexts(VertxTestContext ctx) {
+    void sharingADependencyVersionReResolvesIncludedContexts(VertxTestContext ctx) {
         SnapshotKey pinned = SnapshotKey.of(R4, "inc.fparent#1.0.0");
-        SnapshotKey onDemand = SnapshotKey.of(R4, "inc.fparent2#1.0.0");
         floatingDependencies()
                 .compose(v -> TestPackages.storePackage(core.services(), TestPackages.igPackage("inc.fparent2", "1.0.0",
                         java.util.List.of("4.0.1"), java.util.Map.of("inc.fdep", "1.0.x"))))
                 .compose(v -> TestPackages.setPackageAccess(core.services().pool(), "inc.fparent2#1.0.0", a.orgId(), true))
                 .compose(v -> core.services().configSync().syncCatalogNow())
                 .compose(v -> service().include(a, R4, "inc.fparent", "1.0.0", Optional.empty()))
-                .compose(v -> core.services().validatorRegistry().snapshot(onDemand))
                 .compose(v -> {
-                    ctx.verify(() -> {
-                        assertTrue(core.services().validatorRegistry().peekResolvedPackages(pinned).orElseThrow()
-                                .contains("inc.fdep#1.0.3"));
-                        assertEquals(ValidatorRegistry.Kind.ON_DEMAND, core.services().validatorRegistry().kind(onDemand));
-                    });
+                    ctx.verify(() -> assertTrue(core.services().validatorRegistry().peekResolvedPackages(pinned).orElseThrow()
+                            .contains("inc.fdep#1.0.3")));
                     // B shares its 1.0.5: now the highest version A's contexts may select.
                     return service().changePackageAccess(b, "inc.fdep", "1.0.5",
                             nzi.fhir.validator.core.security.AccessChange.parse(new io.vertx.core.json.JsonObject().put("shareable", true)));
@@ -354,8 +349,6 @@ class IncludeOwnershipIT extends BaseTestContainer {
                     assertTrue(rebuilt.contains("inc.fdep#1.0.5") && !rebuilt.contains("inc.fdep#1.0.3"),
                             "the included context is resolved again and rebuilt: " + rebuilt);
                     assertEquals(ValidatorRegistry.Status.ACTIVE, core.services().validatorRegistry().status(pinned));
-                    assertEquals(ValidatorRegistry.Status.ABSENT, core.services().validatorRegistry().status(onDemand),
-                            "the on-demand context built from 1.0.3 is dropped, so the next request rebuilds it");
                     assertTrue(ResolvedContext.of("inc.fparent2#1.0.0", core.services().configSync().catalog().current())
                             .packages().contains("inc.fdep#1.0.5"));
                     ctx.completeNow();

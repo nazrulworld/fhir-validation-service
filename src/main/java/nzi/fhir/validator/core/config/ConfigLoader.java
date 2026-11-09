@@ -2,6 +2,8 @@ package nzi.fhir.validator.core.config;
 
 import io.vertx.core.json.DecodeException;
 import io.vertx.core.json.JsonObject;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,6 +23,7 @@ import java.util.Map;
  * @author Md Nazrul Islam
  */
 public final class ConfigLoader {
+    private static final Logger logger = LogManager.getLogger(ConfigLoader.class);
 
     private enum Kind { INT, LONG, BOOL, STRING }
 
@@ -56,8 +59,13 @@ public final class ConfigLoader {
             new Entry("FV_PACKAGE_MAX_EXPANDED_MB", "packages.maxExpandedMb", Kind.LONG, 1, 16_384),
             new Entry("FV_PACKAGE_MAX_ENTRIES", "packages.maxEntries", Kind.INT, 1, 1_000_000),
             new Entry("FV_PACKAGE_MAX_RATIO", "packages.maxRatio", Kind.INT, 1, 10_000),
-            new Entry("FV_IG_MAX_ON_DEMAND", "ig.maxOnDemand", Kind.INT, 1, 64),
-            new Entry("FV_IG_BUILD_WAIT_MS", "ig.buildWaitMs", Kind.LONG, 1_000, 120_000),
+            // Spec 007 (data-model §5): terminology. The registry address is deliberately not configurable (FR-006).
+            new Entry("FV_TX_REGISTRY_REFRESH_MS", "tx.registryRefreshMs", Kind.LONG, 300_000, 604_800_000),
+            new Entry("FV_TX_TIMEOUT_MS", "tx.timeoutMs", Kind.LONG, 500, 60_000),
+            new Entry("FV_TX_REQUEST_BUDGET_MS", "tx.requestBudgetMs", Kind.LONG, 1_000, 120_000),
+            new Entry("FV_TX_CACHE_SIZE", "tx.cacheSize", Kind.INT, 100, 1_000_000),
+            new Entry("FV_TX_CACHE_TTL_MS", "tx.cacheTtlMs", Kind.LONG, 10_000, 86_400_000),
+            new Entry("FV_TX_MAX_CONNECTIONS_PER_SERVER", "tx.maxConnectionsPerServer", Kind.INT, 1, 200),
             new Entry("FV_CONFIG_POLL_INTERVAL_MS", "sync.pollIntervalMs", Kind.LONG, 1_000, 60_000),
             new Entry("FV_AUTH_ANONYMOUS_VALIDATE", "auth.anonymousValidate", Kind.BOOL, NO_MIN, NO_MAX),
             new Entry("FV_ADMIN_API_KEY", "auth.bootstrapAdminKey", Kind.STRING, NO_MIN, NO_MAX),
@@ -85,6 +93,12 @@ public final class ConfigLoader {
             new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_MOBILE", "systemOrg.contactPersonMobile", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_EMAIL", "systemOrg.contactPersonEmail", Kind.STRING, NO_MIN, NO_MAX)
     );
+
+    /**
+     * Variables of earlier releases that no longer have any effect (spec 007 FR-025: on-demand contexts were removed).
+     * A deployment that still sets one starts with a warning instead of failing.
+     */
+    private static final List<String> DEPRECATED = List.of("FV_IG_MAX_ON_DEMAND", "FV_IG_BUILD_WAIT_MS");
 
     /** Prefix of the system-organisation entries (their path is {@code systemOrg.<organisation field>}). */
     static final String SYSTEM_ORG = "systemOrg";
@@ -115,6 +129,7 @@ public final class ConfigLoader {
             }
         }
         putIfPresent(env, "FV_CONFIG_FILE");
+        DEPRECATED.forEach(name -> putIfPresent(env, name));
         return env;
     }
 
@@ -146,6 +161,12 @@ public final class ConfigLoader {
             }
             if (raw != null) {
                 set(merged, e.path(), parse(name, raw, e.kind()));
+            }
+        }
+        for (String name : DEPRECATED) {
+            if (blankToNull(env.get(name)) != null) {
+                logger.warn("{} is deprecated and ignored: validation contexts are no longer built on demand (4.0.0); "
+                        + "include IGs with POST /{version}/include-ig", name);
             }
         }
         return finish(merged);
@@ -218,11 +239,6 @@ public final class ConfigLoader {
         }
         if (validation.getValue("maxPending") == null) {
             validation.put("maxPending", 4 * validation.getInteger("workers"));
-        }
-        JsonObject ig = section(c, "ig");
-        if (ig.getValue("buildWaitMs") == null) {
-            // Same rule as the include's local-apply wait: a first ?ig= request never outlives the request timeout.
-            ig.put("buildWaitMs", Math.max(1_000L, Math.min(10_000L, http.getLong("requestTimeoutMs") / 2)));
         }
     }
 

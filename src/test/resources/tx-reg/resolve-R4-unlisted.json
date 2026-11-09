@@ -1,0 +1,24 @@
+{
+    "formatVersion": "1",
+    "registry-url": "https://example.org/tx-servers.json",
+    "candidates": [
+        {
+            "server-name": "https://unlisted.example.org/fhir",
+            "url": "https://unlisted.example.org/fhir",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "test",
+            "content": "complete"
+        },
+        {
+            "server-name": "{{BASE2}}",
+            "url": "{{BASE2}}",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "test",
+            "content": "fragment"
+        }
+    ]
+}

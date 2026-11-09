@@ -26,8 +26,13 @@
   "admin": {
     "maxPending": 4
   },
-  "ig": {
-    "maxOnDemand": 4
+  "tx": {
+    "registryRefreshMs": 21600000,
+    "timeoutMs": 5000,
+    "requestBudgetMs": 10000,
+    "cacheSize": 5000,
+    "cacheTtlMs": 600000,
+    "maxConnectionsPerServer": 10
   },
   "sync": {
     "pollIntervalMs": 5000

@@ -310,17 +310,18 @@ class MigrationUpgradeIT extends BaseTestContainer {
                 for (String field : List.of("valid", "messages", "fhirVersion", "appliedProfiles", "igPackage")) {
                     assertTrue(base.bodyAsJsonObject().containsKey(field), field);
                 }
-                var withIg = join(client.post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", "upgrade.ig#1.0.0")
-                        .putHeader("Content-Type", "application/fhir+json")
-                        .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
-                assertEquals(200, withIg.statusCode(), withIg.bodyAsString());
-                assertEquals("upgrade.ig#1.0.0", withIg.getHeader("X-Validation-Context"));
+                // Spec 007 FR-021: an IG is named in validation only once it is included.
                 var include = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/R4/include-ig"))
                         .sendJsonObject(new io.vertx.core.json.JsonObject().put("igPackageId", "upgrade.ig").put("igPackageVersion", "1.0.0")));
                 assertEquals(200, include.statusCode(), include.bodyAsString());
                 for (String field : List.of("status", "fhirVersion", "key", "revision", "included", "resolved", "warnings")) {
                     assertTrue(include.bodyAsJsonObject().containsKey(field), field);
                 }
+                var withIg = join(client.post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", "upgrade.ig#1.0.0")
+                        .putHeader("Content-Type", "application/fhir+json")
+                        .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
+                assertEquals(200, withIg.statusCode(), withIg.bodyAsString());
+                assertEquals("upgrade.ig#1.0.0", withIg.getHeader("X-Validation-Context"));
                 var register = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/igs/register"))
                         .sendJsonObject(new io.vertx.core.json.JsonObject().put("name", "upgrade.ig").put("version", "1.0.0")));
                 assertEquals(200, register.statusCode(), register.bodyAsString());
@@ -360,6 +361,50 @@ class MigrationUpgradeIT extends BaseTestContainer {
             }
         } finally {
             join(vertx.close());
+        }
+    }
+
+    // --- V9 (4.0.0, spec 007: terminology per context) -----------------------------------------------------------
+
+    /** V9 on an empty database: the terminology columns and their constraint, and the registry snapshot table. */
+    @Test
+    void v9AddsTerminologyColumnsAndRegistrySnapshot() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'a.ig#1.0.0')");
+            assertEquals(List.of("NONE|null"), column(c, "SELECT tx_mode || '|' || coalesce(tx_server, 'null') FROM " + S
+                    + ".fhir_validator_snapshots"), "FR-005: a context without a setting is in mode NONE");
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package, tx_mode, tx_server) "
+                    + "VALUES ('R4', 'b.ig#1.0.0', 'SERVER', 'http://tx.fhir.org/r4'), ('R4', 'c.ig#1.0.0', 'ECOSYSTEM', NULL)");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".fhir_validator_snapshots "
+                    + "(fhir_version, ig_package, tx_mode, tx_server) VALUES ('R4', 'd.ig#1.0.0', 'SERVER', NULL)"),
+                    "SERVER needs a server");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".fhir_validator_snapshots "
+                    + "(fhir_version, ig_package, tx_mode, tx_server) VALUES ('R4', 'e.ig#1.0.0', 'NONE', 'http://x')"),
+                    "NONE forbids a server");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".fhir_validator_snapshots "
+                    + "(fhir_version, ig_package, tx_mode) VALUES ('R4', 'f.ig#1.0.0', 'REMOTE')"), "unknown mode");
+            st.execute("INSERT INTO " + S + ".tx_registry_snapshot (fhir_version, fetched_at, registry_last_update, body) "
+                    + "VALUES ('R4', now(), NULL, '[]')");
+            assertEquals(List.of("R4"), column(c, "SELECT fhir_version FROM " + S + ".tx_registry_snapshot"));
+            assertLatestSchema(c);
+        }
+    }
+
+    /** 3.2.1 (V8) to 4.0.0 (V9): existing context rows keep their access and read as mode NONE (FR-005). */
+    @Test
+    void v9KeepsExistingContextsInModeNone() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("8")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package, is_shareable) "
+                    + "VALUES ('R4', 'a.ig#1.0.0', false)");
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("a.ig#1.0.0|false|NONE|null"), column(c, "SELECT ig_package || '|' || is_shareable || '|' "
+                    + "|| tx_mode || '|' || coalesce(tx_server, 'null') FROM " + S + ".fhir_validator_snapshots"));
         }
     }
 

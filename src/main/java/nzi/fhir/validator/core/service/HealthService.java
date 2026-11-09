@@ -36,6 +36,7 @@ public class HealthService {
     private volatile Supplier<List<String>> validatorReadiness = () -> List.of("validators not initialised");
     private volatile Supplier<JsonObject> validatorDetails = JsonObject::new;
     private volatile java.util.function.LongSupplier catalogRevision = () -> 0L;
+    private volatile Supplier<JsonObject> terminologyStatus = () -> null;
     private long timerId = -1;
 
     public HealthService(Vertx vertx, Pool pgPool) {
@@ -76,6 +77,11 @@ public class HealthService {
     /** The package catalog revision this instance has loaded, shown in the report (spec 004 FR-032). */
     public void setCatalogRevision(java.util.function.LongSupplier catalogRevision) {
         this.catalogRevision = catalogRevision;
+    }
+
+    /** The terminology allowlist state shown in the {@code /health} report (spec 007, contracts §5). */
+    public void setTerminologyStatus(Supplier<JsonObject> terminologyStatus) {
+        this.terminologyStatus = terminologyStatus == null ? () -> null : terminologyStatus;
     }
 
     public void setDraining(boolean value) {
@@ -128,11 +134,19 @@ public class HealthService {
     public Future<JsonObject> checkHealth() {
         long timestamp = System.currentTimeMillis();
         return checkPostgresConnection(timestamp)
-                .map(pgStatus -> new JsonObject()
-                        .put("status", STATUS_UP.equals(pgStatus.getString("status")) ? STATUS_UP : STATUS_DOWN)
-                        .put("timestamp", timestamp)
-                        .put("postgres", pgStatus)
-                        .put("readiness", readiness()));
+                .map(pgStatus -> {
+                    JsonObject health = new JsonObject()
+                            .put("status", STATUS_UP.equals(pgStatus.getString("status")) ? STATUS_UP : STATUS_DOWN)
+                            .put("timestamp", timestamp)
+                            .put("postgres", pgStatus)
+                            .put("readiness", readiness());
+                    // Spec 007: reported, but readiness never depends on it (terminology is optional).
+                    JsonObject terminology = terminologyStatus.get();
+                    if (terminology != null) {
+                        health.put("terminology", terminology);
+                    }
+                    return health;
+                });
     }
 
     private Future<JsonObject> checkPostgresConnection(long timestamp) {
