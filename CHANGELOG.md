@@ -6,7 +6,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [4.0.0] - unreleased
+## [4.0.0] - 2026-11-09
 
 Terminology servers per included IG (spec 007), and validation served only by included IG contexts. **Breaking** for
 clients that name an IG package that isn't included; see [docs/upgrade-4.0.md](docs/upgrade-4.0.md). Migration V9 runs
