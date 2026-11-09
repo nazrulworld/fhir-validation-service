@@ -142,6 +142,13 @@ class TerminologySettingIT extends BaseTestContainer {
         return new JsonObject().put("mode", "ecosystem");
     }
 
+    /** The state of {@code ig} in an instance's status, or null when it isn't listed. */
+    private static String state(AppHarness on, String fhirVersion, String ig) {
+        JsonArray contexts = on.bootstrap().services().validatorRegistry().details().getJsonObject(fhirVersion).getJsonArray("contexts");
+        return contexts.stream().map(o -> (JsonObject) o).filter(c -> ig.equals(c.getString("key")))
+                .map(c -> c.getString("state")).findFirst().orElse(null);
+    }
+
     /** The terminology shown for {@code ig} in an instance's status (FR-004), or null when it isn't listed. */
     private static JsonObject shown(AppHarness on, String fhirVersion, String ig) {
         JsonArray contexts = on.bootstrap().services().validatorRegistry().details().getJsonObject(fhirVersion).getJsonArray("contexts");
@@ -244,16 +251,16 @@ class TerminologySettingIT extends BaseTestContainer {
                         assertEquals(ecosystem(), r.bodyAsJsonObject().getJsonObject("terminology"));
                     });
                     revision[0] = r.bodyAsJsonObject().getLong("revision");
+                    // The status shows the new setting as soon as the rebuild starts; wait until it has finished.
                     return Await.until(vertx, PROPAGATION_MS, "B rebuilds with the new setting",
-                            () -> Future.succeededFuture(ecosystem().equals(shown(b, "R4", ig))));
+                            () -> Future.succeededFuture(ecosystem().equals(shown(b, "R4", ig))
+                                    && "ACTIVE".equals(state(b, "R4", ig))));
                 })
                 .compose(ms -> patch("R4", ig, new JsonObject().put("terminology", ecosystem()), keyA))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     assertEquals(revision[0], r.bodyAsJsonObject().getLong("revision"), "the same value changes nothing");
-                    assertEquals("ACTIVE", b.bootstrap().services().validatorRegistry().details().getJsonObject("R4")
-                            .getJsonArray("contexts").stream().map(o -> (JsonObject) o)
-                            .filter(c -> ig.equals(c.getString("key"))).findFirst().orElseThrow().getString("state"));
+                    assertEquals("ACTIVE", state(b, "R4", ig), "no rebuild was started by the unchanged value");
                     ctx.completeNow();
                 })));
     }
