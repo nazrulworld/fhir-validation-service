@@ -66,7 +66,7 @@ class AdminAdmissionIT extends BaseTestContainer {
     }
 
     private Future<HttpResponse<Buffer>> includeUnknownIg() {
-        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator")).timeout(10_000)
                 .sendJsonObject(new JsonObject().put("igPackageId", "example.unknown").put("igPackageVersion", "1.0.0"));
     }
 
@@ -90,7 +90,7 @@ class AdminAdmissionIT extends BaseTestContainer {
             }).compose(gone -> {
                 ctx.verify(() -> assertProblem(gone, 404, "not-found"));
                 // Spec 004: excluding an IG takes an admin slot like every other administrative operation.
-                return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+                return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/validator")).timeout(10_000)
                         .addQueryParam("ig", "example.unknown#1.0.0").send();
             }).compose(excludeRefused -> {
                 ctx.verify(() -> assertProblem(excludeRefused, 503, "overloaded"));

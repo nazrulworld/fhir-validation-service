@@ -140,7 +140,7 @@ class RegisterDependencySeriesIT extends BaseTestContainer {
                         assertFalse(r.bodyAsJsonObject().getBoolean("downloaded"));
                         assertEquals(0, registry.requests(), "disabled registries are never contacted");
                     });
-                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator").timeout(60_000))
                             .sendJsonObject(new JsonObject().put("igPackageId", "parent").put("igPackageVersion", "1.0.0"));
                 })
                 .onComplete(ctx.succeeding(include -> ctx.verify(() -> {

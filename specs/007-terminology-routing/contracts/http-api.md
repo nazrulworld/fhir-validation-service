@@ -1,5 +1,9 @@
 # HTTP Contract Changes: 4.0.0 (spec 007)
 
+> **Renamed after implementation (4.0.0, before release):** `/{version}/include-ig` is now `/{version}/validator`
+> (POST include, PATCH change, DELETE exclude; operations `validatorApiIncludeIg`, `validatorApiChangeIncludedIg`,
+> `validatorApiExcludeIg`, handled by `ValidatorApi`). The old path answers 404. Sections §2-§4 below use the old name.
+
 The changes below land in `src/main/resources/openapi.yaml` before or with the code (constitution IV). Problem
 documents keep the existing format (`application/problem+json`, with `type`, `title`, `status`, `detail` and
 extensions). Field and type details are in [data-model.md](../data-model.md) §1 and §6.

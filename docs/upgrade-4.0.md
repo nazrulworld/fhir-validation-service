@@ -5,11 +5,14 @@ a **breaking** release for clients that name an IG package that isn't included.
 
 ## Before you upgrade
 
+- **Use `/{version}/validator` instead of `/{version}/include-ig`.** The endpoint that includes (POST), changes
+  (PATCH) and excludes (DELETE) IG validator contexts is renamed; bodies, `?ig=name#version` and responses are
+  unchanged. The old path answers 404. Update scripts, CI pipelines and admin tooling.
 - **Include every IG your clients name in `?ig=`.** Until 3.2.1 any stored package could be named and was built on
   demand. From 4.0.0 a stored version that isn't included for the FHIR version is refused:
 
   ```
-  400 invalid-request: IG package hl7.fhir.us.core#7.0.0 is not included for R4; include it first (POST /R4/include-ig)
+  400 invalid-request: IG package hl7.fhir.us.core#7.0.0 is not included for R4; include it first (POST /R4/validator)
   ```
 
   `ig=name` and `ig=name#latest` now resolve to the highest **included** version the caller may use. A package that
@@ -33,8 +36,8 @@ include the IGs first.
 
 ## Terminology servers (new, opt-in)
 
-Nothing changes until you set a terminology mode on an included IG (`POST /{version}/include-ig` with
-`"terminology": {...}`, or `PATCH /{version}/include-ig?ig=name#version`). See the README, "Terminology servers".
+Nothing changes until you set a terminology mode on an included IG (`POST /{version}/validator` with
+`"terminology": {...}`, or `PATCH /{version}/validator?ig=name#version`). See the README, "Terminology servers".
 
 Operational notes:
 

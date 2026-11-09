@@ -99,7 +99,7 @@ paths:
         not stored) and unknown-profile (a requested profile is not available; see UnknownProfileProblem). 503 covers
         not-ready (an included context still being built or rebuilt), overloaded and insufficient-capacity.
         Included contexts only (4.0.0): validation never builds a context; name an IG version that was included with
-        POST /{version}/include-ig. Terminology (4.0.0): a context whose terminology mode is `server` or `ecosystem`
+        POST /{version}/validator. Terminology (4.0.0): a context whose terminology mode is `server` or `ecosystem`
         checks codes that can't be decided from its packages with an allowlisted terminology server; a code that
         could not be checked (server unavailable, time budget used up, no permitted server) is reported as a warning,
         never an error, and the answer is still 200.
@@ -126,7 +126,7 @@ paths:
             that are shareable can be named. Anonymous callers can name shareable packages only. Without a version,
             the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
             series such as `name#1.2.x` is rejected with 400 invalid-request (3.2.0); use the concrete version reported
-            by include-ig.
+            when the IG was included (POST /{version}/validator).
           schema:
             type: string
             maxLength: 256
@@ -224,11 +224,12 @@ paths:
         '503':
           $ref: '#/components/responses/Problem'
 
-  /{version}/include-ig:
+  /{version}/validator:
     post:
-      operationId: validationApiIncludeIg
+      operationId: validatorApiIncludeIg
       summary: Pre-build and keep a validator context for a stored Implementation Guide version
       description: >-
+        (4.0.0: this path replaces /{version}/include-ig, which no longer exists.)
         Adds a pinned validator context for igPackageId#igPackageVersion on every instance; other versions of the
         same package stay included and usable through ?ig=. Including a version that is already included changes
         nothing. igPackageVersion defaults to latest (the highest stored version); nothing is downloaded. The
@@ -312,7 +313,7 @@ paths:
         '503':
           $ref: '#/components/responses/Problem'
     delete:
-      operationId: validationApiExcludeIg
+      operationId: validatorApiExcludeIg
       summary: Stop pre-building an included Implementation Guide version for a FHIR version
       description: >-
         Removes one name#version from the included set and propagates to every instance. The package stays stored.
@@ -353,7 +354,7 @@ paths:
         '503':
           $ref: '#/components/responses/Problem'
     patch:
-      operationId: validationApiChangeIncludedIgAccess
+      operationId: validatorApiChangeIncludedIg
       summary: Change sharing, ownership or terminology of an included validator context
       description: >-
         Administrative (3.1.0). The context's owner or the system organisation may change `shareable`; only the
@@ -668,7 +669,7 @@ components:
       type: http
       scheme: bearer
       description: >-
-        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, include-ig, exclude-ig,
+        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, POST/PATCH/DELETE /{version}/validator,
         and the PATCH operations that change sharing or ownership) always require an ADMIN key. Every key belongs to
         an organisation (3.1.0); a key of a deactivated organisation gets 403. Validation and read operations require a VALIDATE or ADMIN key
         only when FV_AUTH_ANONYMOUS_VALIDATE=false. Enforced by the service (see contracts/http-api.md).

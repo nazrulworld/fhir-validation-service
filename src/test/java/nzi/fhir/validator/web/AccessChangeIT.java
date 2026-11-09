@@ -108,7 +108,7 @@ class AccessChangeIT extends BaseTestContainer {
     }
 
     private Future<HttpResponse<Buffer>> patchSnapshot(String key, String apiKey, JsonObject body) {
-        HttpRequest<Buffer> req = AppHarness.as(app.client().patch(app.port(), "localhost", "/R4/include-ig"), apiKey)
+        HttpRequest<Buffer> req = AppHarness.as(app.client().patch(app.port(), "localhost", "/R4/validator"), apiKey)
                 .addQueryParam("ig", key).timeout(15_000);
         return body == null ? req.send() : req.sendJsonObject(body);
     }
@@ -118,7 +118,7 @@ class AccessChangeIT extends BaseTestContainer {
         if (shareable != null) {
             body.put("shareable", shareable);
         }
-        return AppHarness.as(app.client().post(app.port(), "localhost", "/R4/include-ig"), apiKey).timeout(30_000)
+        return AppHarness.as(app.client().post(app.port(), "localhost", "/R4/validator"), apiKey).timeout(30_000)
                 .sendJsonObject(body);
     }
 

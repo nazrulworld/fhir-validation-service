@@ -124,12 +124,12 @@ class TerminologySettingIT extends BaseTestContainer {
         if (terminology != null) {
             body.put("terminology", terminology);
         }
-        return AppHarness.as(a.client().post(a.port(), "localhost", "/" + fhirVersion + "/include-ig"), key)
+        return AppHarness.as(a.client().post(a.port(), "localhost", "/" + fhirVersion + "/validator"), key)
                 .putHeader("Content-Type", "application/json").sendJsonObject(body);
     }
 
     private Future<HttpResponse<Buffer>> patch(String fhirVersion, String ig, JsonObject body, String key) {
-        var req = a.client().patch(a.port(), "localhost", "/" + fhirVersion + "/include-ig").addQueryParam("ig", ig)
+        var req = a.client().patch(a.port(), "localhost", "/" + fhirVersion + "/validator").addQueryParam("ig", ig)
                 .putHeader("Content-Type", "application/json");
         return (key == null ? AppHarness.asAdmin(req) : AppHarness.as(req, key)).sendJsonObject(body);
     }
@@ -232,7 +232,7 @@ class TerminologySettingIT extends BaseTestContainer {
                     JsonObject body = r.bodyAsJsonObject();
                     assertEquals(new JsonObject().put("mode", "none"), body.getJsonObject("terminology"), "unchanged");
                     assertTrue(body.getJsonArray("warnings").contains("terminology is ignored for an already included context; "
-                            + "change it with PATCH /{version}/include-ig"), body.encode());
+                            + "change it with PATCH /{version}/validator"), body.encode());
                     ctx.completeNow();
                 })));
     }

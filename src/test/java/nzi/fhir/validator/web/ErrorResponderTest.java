@@ -119,7 +119,7 @@ class ErrorResponderTest {
                 nzi.fhir.validator.core.enums.SupportedFhirVersion.R4);
         assertEquals(400, notIncluded.status());
         assertEquals("invalid-request", notIncluded.type());
-        assertEquals("IG package p#1.0.0 is not included for R4; include it first (POST /R4/include-ig)", notIncluded.detail());
+        assertEquals("IG package p#1.0.0 is not included for R4; include it first (POST /R4/validator)", notIncluded.detail());
 
         ProblemException unregistered = ProblemException.txServerNotRegistered("http://10.0.0.5/fhir",
                 nzi.fhir.validator.core.enums.SupportedFhirVersion.R4);

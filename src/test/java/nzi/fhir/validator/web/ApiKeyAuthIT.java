@@ -70,10 +70,10 @@ class ApiKeyAuthIT extends BaseTestContainer {
     private Future<List<HttpResponse<Buffer>>> callAdminOperations(String key) {
         return Future.all(
                 req("POST", "/igs/register", key).sendJsonObject(new JsonObject().put("name", "x")),
-                req("POST", "/R4/include-ig", key).sendJsonObject(new JsonObject().put("igPackageId", "x")),
+                req("POST", "/R4/validator", key).sendJsonObject(new JsonObject().put("igPackageId", "x")),
                 req("POST", "/igs/upload", key).sendBuffer(Buffer.buffer("x")),
                 // Spec 004: excluding an IG is administrative too (every method on the path, not only POST).
-                req("DELETE", "/R4/include-ig?ig=x%231.0.0", key).send()
+                req("DELETE", "/R4/validator?ig=x%231.0.0", key).send()
         ).map(cf -> cf.list());
     }
 
@@ -107,22 +107,22 @@ class ApiKeyAuthIT extends BaseTestContainer {
                     return app.bootstrap().services().igPackageService().registerIg(
                                     TestPackages.profilePackage("example.auth", "1.0.0",
                                             TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/ok", "gender")), false)
-                            .compose(pkg -> req("POST", "/R4/include-ig", AppHarness.ADMIN_KEY)
+                            .compose(pkg -> req("POST", "/R4/validator", AppHarness.ADMIN_KEY)
                                     .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")));
                 })
                 .compose(adminOk -> {
                     ctx.verify(() -> assertEquals(200, adminOk.statusCode(), adminOk.bodyAsString()));
                     return app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE);
                 })
-                .compose(v -> req("POST", "/R4/include-ig", VALIDATE_KEY)
+                .compose(v -> req("POST", "/R4/validator", VALIDATE_KEY)
                         .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")))
                 .compose(forbidden -> {
                     ctx.verify(() -> assertProblem(forbidden, 403, "forbidden"));
-                    return req("DELETE", "/R4/include-ig?ig=example.auth%231.0.0", VALIDATE_KEY).send();
+                    return req("DELETE", "/R4/validator?ig=example.auth%231.0.0", VALIDATE_KEY).send();
                 })
                 .compose(forbiddenExclude -> {
                     ctx.verify(() -> assertProblem(forbiddenExclude, 403, "forbidden"));
-                    return req("DELETE", "/R4/include-ig?ig=example.auth%231.0.0", AppHarness.ADMIN_KEY).send();
+                    return req("DELETE", "/R4/validator?ig=example.auth%231.0.0", AppHarness.ADMIN_KEY).send();
                 })
                 .compose(adminExclude -> {
                     ctx.verify(() -> assertEquals(200, adminExclude.statusCode(), adminExclude.bodyAsString()));
@@ -191,7 +191,7 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 .compose(v -> Await.until(vertx, 5_000, "a deactivated organisation's key is refused",
                         () -> validate(validateKey.get()).map(r -> r.statusCode() == 403)))
                 .compose(v -> Future.all(validate(validateKey.get()),
-                        req("POST", "/R4/include-ig", adminKey.get()).sendJsonObject(new JsonObject().put("igPackageId", "x")),
+                        req("POST", "/R4/validator", adminKey.get()).sendJsonObject(new JsonObject().put("igPackageId", "x")),
                         // The package read endpoints are authorised paths too (openapi.yaml declares the 403).
                         req("GET", "/igs/none/1.0.0/dependencies", validateKey.get()).send()))
                 .compose(refused -> {
@@ -214,14 +214,42 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 .compose(v -> Future.all(
                         req("PATCH", "/igs/a/1.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
                         req("PATCH", "/igs/a/1.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false)),
-                        req("PATCH", "/R4/include-ig?ig=a%231.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
-                        req("PATCH", "/R4/include-ig?ig=a%231.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false))))
+                        req("PATCH", "/R4/validator?ig=a%231.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
+                        req("PATCH", "/R4/validator?ig=a%231.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false))))
                 .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
                     List<HttpResponse<Buffer>> r = cf.list();
                     assertProblem(r.get(0), 401, "unauthorized");
                     assertProblem(r.get(1), 403, "forbidden");
                     assertProblem(r.get(2), 401, "unauthorized");
                     assertProblem(r.get(3), 403, "forbidden");
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * 4.0.0: the validator context endpoints moved from /{version}/include-ig to /{version}/validator. The new path is
+     * administrative for every method; /{version}/validate (one letter shorter) stays a validation path; the old path
+     * no longer exists.
+     */
+    @Test
+    void theValidatorPathIsAdministrativeAndTheOldPathIsGone(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, new JsonObject())
+                .compose(a -> Future.all(
+                        req("POST", "/R4/validator", null).sendJsonObject(new JsonObject().put("igPackageId", "x")),
+                        req("PATCH", "/R4/validator?ig=x%231.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
+                        req("DELETE", "/R4/validator?ig=x%231.0.0", null).send(),
+                        req("POST", "/R4/validate", null).putHeader("Content-Type", "application/fhir+json")
+                                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}")),
+                        req("POST", "/R4/include-ig", AppHarness.ADMIN_KEY).sendJsonObject(new JsonObject().put("igPackageId", "x"))))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    for (int i = 0; i < 3; i++) {
+                        HttpResponse<Buffer> r = cf.resultAt(i);
+                        assertEquals(401, r.statusCode(), "anonymous call to /validator: " + r.bodyAsString());
+                    }
+                    HttpResponse<Buffer> validate = cf.resultAt(3);
+                    assertEquals(200, validate.statusCode(), "anonymous validation stays open: " + validate.bodyAsString());
+                    HttpResponse<Buffer> old = cf.resultAt(4);
+                    assertEquals(404, old.statusCode(), "/include-ig no longer exists: " + old.bodyAsString());
                     ctx.completeNow();
                 })));
     }

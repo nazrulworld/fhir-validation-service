@@ -581,6 +581,8 @@ Deviations from the task text, found while implementing (also recorded in resear
 - **T058, T065 (research R4):** the terminology module sits before `InMemoryTerminologyServerValidationSupport`.
 - **T068:** `fv_tx_code_cache_hits_total` was not exported at first (HAPI's chain cache exposes no hit count); convergence task T078 added it by counting code checks the chain answers without reaching the terminology module. Routing-cache hits are exported as `fv_tx_routing_lookups_total{result="hit"}`.
 - **T075:** the CHANGELOG entry is "4.0.0 - unreleased"; `pom.xml` stays `4.0.0-SNAPSHOT` until the release.
+- **Rename (#67):** tasks T006, T017 and T045 name `/{version}/include-ig`; the endpoint is now `/{version}/validator`
+  (operations `validatorApiIncludeIg`, `validatorApiChangeIncludedIg`, `validatorApiExcludeIg`, handled by `ValidatorApi`).
 
 ---
 

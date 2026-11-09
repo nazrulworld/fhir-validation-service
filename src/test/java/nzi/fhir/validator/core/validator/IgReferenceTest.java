@@ -53,7 +53,7 @@ class IgReferenceTest {
             ProblemException e = assertThrows(ProblemException.class, () -> IgReference.parse(series), series);
             assertEquals(400, e.status());
             assertEquals("invalid-request", e.type());
-            assertEquals("The ig parameter needs an exact version (for example the version reported by include-ig), "
+            assertEquals("The ig parameter needs an exact version (for example the version reported when it was included), "
                     + "not a version series", e.detail());
         }
         assertEquals(new IgReference("p", "1.2.3"), IgReference.parse("p#1.2.3"));

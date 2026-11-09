@@ -211,7 +211,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
         var services = app.bootstrap().services();
         // Source URL: uploadOverTheCompressedLimitIsRefusedBeforeReading counts UPLOAD rows in the shared schema.
         services.igPackageService().registerIg(TestPackages.npmPackage("example.r4only", "1.0.0", Map.of(), List.of()), false, "URL")
-                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R5/include-ig")).timeout(10_000)
+                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R5/validator")).timeout(10_000)
                         .sendJsonObject(new JsonObject().put("igPackageId", "example.r4only").put("igPackageVersion", "1.0.0")))
                 .compose(r -> {
                     ctx.verify(() -> {
@@ -231,7 +231,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
     }
 
     private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> include(String name) {
-        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator")).timeout(10_000)
                 .sendJsonObject(new JsonObject().put("igPackageId", name).put("igPackageVersion", "1.0.0"));
     }
 
@@ -329,7 +329,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
     @Test
     void includeAndPatchCarryTheTerminologySetting(VertxTestContext ctx) {
         TestPackages.storePackage(app.bootstrap().services(), TestPackages.profilePackage("contract.tx", "1.0.0"))
-                .compose(v -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig")).timeout(10_000)
+                .compose(v -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator")).timeout(10_000)
                         .sendJsonObject(new JsonObject().put("igPackageId", "contract.tx").put("igPackageVersion", "1.0.0")
                                 .put("terminology", new JsonObject().put("mode", "none"))))
                 .compose(r -> {
@@ -340,7 +340,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
                         assertEquals(new JsonObject().put("mode", "none"), r.bodyAsJsonObject().getJsonObject("terminology"));
                     });
                     // No registry list in this test JVM: R4 is on the built-in list, which has tx.fhir.org only.
-                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/include-ig"))
+                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/validator"))
                             .addQueryParam("ig", "contract.tx#1.0.0").timeout(10_000)
                             .sendJsonObject(new JsonObject().put("terminology",
                                     new JsonObject().put("mode", "server").put("server", "https://tx.fhir.ch/r4")));
@@ -351,7 +351,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
                         assertEquals("60", r.getHeader("Retry-After"));
                         assertEquals("https://ecosystem.hl7.org/tx-reg", problem.getString("registry"));
                     });
-                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/include-ig"))
+                    return AppHarness.asAdmin(app.client().patch(app.port(), "localhost", "/R4/validator"))
                             .addQueryParam("ig", "contract.tx#1.0.0").timeout(10_000)
                             .sendJsonObject(new JsonObject().put("terminology", new JsonObject().put("mode", "sometimes")));
                 })

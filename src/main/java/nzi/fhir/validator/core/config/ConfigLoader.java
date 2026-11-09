@@ -166,7 +166,7 @@ public final class ConfigLoader {
         for (String name : DEPRECATED) {
             if (blankToNull(env.get(name)) != null) {
                 logger.warn("{} is deprecated and ignored: validation contexts are no longer built on demand (4.0.0); "
-                        + "include IGs with POST /{version}/include-ig", name);
+                        + "include IGs with POST /{version}/validator", name);
             }
         }
         return finish(merged);

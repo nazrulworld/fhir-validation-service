@@ -91,12 +91,12 @@ class IncludeExcludeIT extends BaseTestContainer {
         if (version != null) {
             body.put("igPackageVersion", version);
         }
-        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator").timeout(60_000))
                 .sendJsonObject(body);
     }
 
     private HttpRequest<Buffer> exclude(String ig) {
-        return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+        return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/validator").timeout(60_000))
                 .addQueryParam("ig", ig);
     }
 
@@ -216,7 +216,7 @@ class IncludeExcludeIT extends BaseTestContainer {
     void excludeErrors(VertxTestContext ctx) {
         Future.all(exclude("inc.p#1.0.0").send(), exclude("inc.p").send(),
                         exclude("inc.p#latest").send(),
-                        AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R6/include-ig").timeout(10_000))
+                        AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R6/validator").timeout(10_000))
                                 .addQueryParam("ig", "inc.p#1.0.0").send())
                 .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
                     assertProblem(all.resultAt(0), 404, "package-not-found");

@@ -13,7 +13,8 @@ Two changes ship together as **4.0.0**.
 - **The setting:** each included IG context gets a terminology setting (`none` by default, `server` or `ecosystem`).
   - It is stored on `fhir_validator_snapshots` (V9) and is part of the context's build identity, so changing it
     rebuilds the context through the existing `ConfigSync` → `applyPinned` path.
-  - It is set with `POST /include-ig` and changed with `PATCH /include-ig`.
+  - It is set with `POST /{version}/validator` and changed with `PATCH /{version}/validator` (named
+    `/{version}/include-ig` until the pre-release rename in #67).
 - **The allowlist:** the official HL7 registry is the only one, and it is fixed in code. A server may be contacted
   only when the registry lists it, open and healthy, for the snapshot's FHIR version.
   - It is checked on save, on build and before every call. Redirects are refused, and so are non-public addresses

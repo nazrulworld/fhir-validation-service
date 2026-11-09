@@ -313,6 +313,8 @@ the 500 ms timeout.
   access fields. It uses the same lock, the same owner/system check and the same 404 rule as access changes.
   - It bumps the revision and notifies the new kind `IG_TERMINOLOGY`.
   - `ConfigSync` handles the new kind like `IG`, through `runSync` → `applyPinned`.
+- **Renamed (#67, before 4.0.0):** the endpoint is `/{version}/validator` (POST, PATCH, DELETE), handled by
+  `ValidatorApi`; `/{version}/include-ig` answers 404.
 - **Checks at save time** (FR-002, FR-010a, FR-012a), in this order:
   1. the shape of the setting (400 `invalid-request`);
   2. URL normalisation;
@@ -332,7 +334,7 @@ the delete-on-exclude logic of `fhir_validator_snapshots`.
     `evictOne` and the on-demand branch of `snapshot(key)`.
   - `snapshot(key)` serves base and pinned keys only. Any other key fails with
     `ProblemException.igNotIncluded(key)`: 400 `invalid-request`, "IG package P#v is not included for R4; include it
-    first (POST /R4/include-ig)".
+    first (POST /R4/include-ig)". Since #67 the text ends "include it first (POST /R4/validator)".
   - In `applyPinned`, an excluded context is dropped (no longer demoted). A request already holding the snapshot
     finishes normally.
 - **`HeapBudget`:** with nothing evictable left, `evictor()` is removed. The include-time 413 check stays.

@@ -48,10 +48,10 @@ public record IgReference(String name, String version) {
             if (version.equalsIgnoreCase("latest")) {
                 version = null;
             } else if (VersionSeries.isSeries(version)) {
-                // Spec 006 FR-018: a series is resolved by include-ig and register only; validation needs the concrete
+                // Spec 006 FR-018: a series is resolved by include (POST /{version}/validator) and register only; validation needs the concrete
                 // version, so `1.2.x` is a client error here, not a literal version that is answered 404.
                 throw new ProblemException(400, "invalid-request", "The ig parameter needs an exact version (for example "
-                        + "the version reported by include-ig), not a version series");
+                        + "the version reported when it was included), not a version series");
             } else if (!VERSION.matcher(version).matches()) {
                 throw invalid();
             }

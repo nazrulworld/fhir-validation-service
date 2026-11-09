@@ -79,7 +79,7 @@ public class ProblemException extends RuntimeException {
      */
     public static ProblemException igNotIncluded(String key, nzi.fhir.validator.core.enums.SupportedFhirVersion version) {
         return new ProblemException(400, "invalid-request", "IG package " + key + " is not included for " + version
-                + "; include it first (POST /" + version + "/include-ig)");
+                + "; include it first (POST /" + version + "/validator)");
     }
 
     /** Spec 007 FR-010 (a): the terminology server is not on the registry's list for {@code version}. */

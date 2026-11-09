@@ -255,10 +255,10 @@ public class IgPackageService {
                         caller.label()));
     }
 
-    static final String ALREADY_INCLUDED_WARNING = "Already included; change sharing with PATCH /{version}/include-ig";
+    static final String ALREADY_INCLUDED_WARNING = "Already included; change sharing with PATCH /{version}/validator";
     static final String PRIVATE_CONTEXT_REFUSED = "Only the owner of the IG package can make its validator context private";
     static final String TERMINOLOGY_IGNORED_WARNING = "terminology is ignored for an already included context; change it "
-            + "with PATCH /{version}/include-ig";
+            + "with PATCH /{version}/validator";
 
     private static JsonObject includeResult(SupportedFhirVersion fhirVersion, String key, long revision,
                                             List<String> included, List<String> resolved, Access access,

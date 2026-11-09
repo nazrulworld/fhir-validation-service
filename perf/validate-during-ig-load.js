@@ -46,7 +46,7 @@ export function loadIg() {
   const up = http.post(`${BASE}/igs/upload`, { file: http.file(archive, 'package.tgz', 'application/gzip') },
     { headers: AUTH, tags: { name: 'upload' }, timeout: '300s' });
   check(up, { 'upload 200': (res) => res.status === 200 });
-  const inc = http.post(`${BASE}/R4/include-ig`, JSON.stringify({ igPackageId: PACKAGE_NAME, igPackageVersion: PACKAGE_VERSION }),
+  const inc = http.post(`${BASE}/R4/validator`, JSON.stringify({ igPackageId: PACKAGE_NAME, igPackageVersion: PACKAGE_VERSION }),
     { headers: Object.assign({ 'Content-Type': 'application/json' }, AUTH), tags: { name: 'include' }, timeout: '300s' });
   check(inc, { 'include 200': (res) => res.status === 200 });
   console.log(`upload ${up.status} in ${up.timings.duration.toFixed(0)} ms; include ${inc.status} in ${inc.timings.duration.toFixed(0)} ms: ${inc.body}`);

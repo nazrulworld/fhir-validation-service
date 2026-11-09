@@ -68,14 +68,14 @@ public class ApiKeyAuthHandler {
     }
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
-            java.util.regex.Pattern.compile("^/(igs/(upload|register)|igs/[^/]+/[^/]+|[^/]+/include-ig)/?$");
+            java.util.regex.Pattern.compile("^/(igs/(upload|register)|igs/[^/]+/[^/]+|[^/]+/validator)/?$");
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
 
     /**
      * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
-     * method on an administrative path counts (POST include/upload/register, DELETE include-ig since 3.0.0, PATCH
-     * include-ig and {@code /igs/{name}/{version}} since 3.1.0), except
+     * method on an administrative path counts (POST, PATCH and DELETE {@code /{version}/validator}, named
+     * {@code /{version}/include-ig} before 4.0.0; POST upload/register; PATCH {@code /igs/{name}/{version}}), except
      * {@code OPTIONS} (CORS preflight), so a new method on these paths can never fall through unauthenticated.
      */
     public static boolean isAdministrative(RoutingContext ctx) {
