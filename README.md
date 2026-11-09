@@ -9,6 +9,10 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+> **Upgrading from 3.x?** 4.0.0 serves `?ig=` only from **included** IGs (a stored IG that isn't included answers
+> 400), renames `/{version}/include-ig` to `/{version}/validator`, and adds optional terminology servers per included
+> IG. Read [docs/upgrade-4.0.md](docs/upgrade-4.0.md) before upgrading.
+>
 > **Upgrading from 2.x?** 3.0.0 validates a request against the core specification only unless it names an IG with
 > `?ig=name#version`. Read [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before upgrading.
 >
@@ -66,15 +70,16 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `3.0.0`        | an exact release (recommended for production: pin it)      |
-| `3.0`          | the newest patch release of 3.0                            |
+| `4.0.0`        | an exact release (recommended for production: pin it)      |
+| `4.0`          | the newest patch release of 4.0                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
-`latest` is now 3.0.0, a breaking release. A 2.x deployment that tracks `latest` (the default `FV_TAG` in
-`compose.yaml`) would upgrade on its next pull, and requests without `ig` would stop using included IGs. Pin `FV_TAG`
-to your current release and follow [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before moving to 3.0.0 (from 1.x, follow
-[docs/upgrade-2.0.md](docs/upgrade-2.0.md) first).
+`latest` is now 4.0.0, a breaking release. A 3.x deployment that tracks `latest` (the default `FV_TAG` in
+`compose.yaml`) would upgrade on its next pull: `?ig=` naming an IG that isn't included would answer 400, and
+`/{version}/include-ig` would answer 404. Pin `FV_TAG` to your current release and follow
+[docs/upgrade-4.0.md](docs/upgrade-4.0.md) before moving to 4.0.0 (from 2.x, follow
+[docs/upgrade-3.0.md](docs/upgrade-3.0.md) first; from 1.x, [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before that).
 
 **1. Create a directory and an `.env` file**
 
@@ -82,7 +87,7 @@ to your current release and follow [docs/upgrade-3.0.md](docs/upgrade-3.0.md) be
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=3.0.0
+FV_TAG=4.0.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
 EOF
