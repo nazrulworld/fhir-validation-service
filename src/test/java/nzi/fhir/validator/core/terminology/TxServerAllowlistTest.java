@@ -86,19 +86,21 @@ class TxServerAllowlistTest {
         assertEquals("tx-server-not-registered", unregistered.type());
 
         TxServerAllowlist fallback = TxServerAllowlist.builtIn();
-        fallback.require("http://tx.fhir.org/r4", R4);
-        fallback.require("http://tx.fhir.org/r5", R5);
+        fallback.require("https://tx.fhir.org/r4", R4);
+        fallback.require("https://tx.fhir.org/r5", R5);
+        assertEquals(503, assertThrows(ProblemException.class, () -> fallback.require("http://tx.fhir.org/r4", R4)).status(),
+                "the built-in list is https; the http address is not built in");
         ProblemException unavailable = assertThrows(ProblemException.class, () -> fallback.require("https://tx.fhir.ch/r4", R4));
         assertEquals(503, unavailable.status());
         assertEquals("tx-registry-unavailable", unavailable.type());
-        assertEquals(503, assertThrows(ProblemException.class, () -> fallback.require("http://tx.fhir.org/r4", R4B)).status(),
+        assertEquals(503, assertThrows(ProblemException.class, () -> fallback.require("https://tx.fhir.org/r4", R4B)).status(),
                 "no built-in server for R4B");
     }
 
     @Test
     void theBuiltInListAppliesOnlyUntilARegistryListExists() {
         TxServerAllowlist fallback = TxServerAllowlist.builtIn();
-        assertTrue(fallback.isAllowed("http://tx.fhir.org/r4", R4));
+        assertTrue(fallback.isAllowed("https://tx.fhir.org/r4", R4));
         assertFalse(fallback.isAllowed("https://tx.fhir.ch/r4", R4));
         TxServerAllowlist withoutTxFhirOrg = fallback.withVersion(R4, TxServerAllowlist.VersionList.of(
                 List.of(new TxServerEntry("https://tx.fhir.ch/r4", R4, "hl7-ch", List.of())),
@@ -106,13 +108,14 @@ class TxServerAllowlistTest {
         assertFalse(withoutTxFhirOrg.isAllowed("http://tx.fhir.org/r4", R4), "the registry list alone decides");
         assertTrue(withoutTxFhirOrg.isAllowed("https://tx.fhir.ch/r4", R4));
         assertEquals(400, assertThrows(ProblemException.class, () -> withoutTxFhirOrg.require("http://tx.fhir.org/r4", R4)).status());
-        assertTrue(withoutTxFhirOrg.isAllowed("http://tx.fhir.org/r5", R5), "other versions keep their own list");
+        assertTrue(withoutTxFhirOrg.isAllowed("https://tx.fhir.org/r5", R5), "other versions keep their own list");
     }
 
     @Test
     void theDefaultServerIsTxFhirOrgOnlyWhenAllowlisted() {
-        assertEquals("http://tx.fhir.org/r4", registry(R4, "discovery-R4.json").defaultServer(R4).orElseThrow());
-        assertEquals("http://tx.fhir.org/r4", TxServerAllowlist.builtIn().defaultServer(R4).orElseThrow());
+        assertEquals("http://tx.fhir.org/r4", registry(R4, "discovery-R4.json").defaultServer(R4).orElseThrow(),
+                "the registry lists tx.fhir.org as http: that entry is the default server");
+        assertEquals("https://tx.fhir.org/r4", TxServerAllowlist.builtIn().defaultServer(R4).orElseThrow());
         assertTrue(TxServerAllowlist.builtIn().defaultServer(R4B).isEmpty());
         TxServerAllowlist without = TxServerAllowlist.builtIn().withVersion(R4, TxServerAllowlist.VersionList.of(List.of(),
                 TxServerAllowlist.Source.REGISTRY, Instant.now(), null));

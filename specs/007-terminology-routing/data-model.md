@@ -67,8 +67,13 @@ An entry is **kept** only when `error == null`, `security == "open"` and its FHI
 
 | Constant | URL | Version |
 |---|---|---|
-| `TX_FHIR_ORG_R4` | `http://tx.fhir.org/r4` | R4 |
-| `TX_FHIR_ORG_R5` | `http://tx.fhir.org/r5` | R5 |
+| `TX_FHIR_ORG_R4` | `https://tx.fhir.org/r4` | R4 |
+| `TX_FHIR_ORG_R5` | `https://tx.fhir.org/r5` | R5 |
+
+The built-in addresses use `https` (decided after implementation, 2026-11-09). The registry lists tx.fhir.org as
+`http://`, and matching is exact, so `https://tx.fhir.org/r4` is allowed only while the built-in list applies; once a
+registry list exists, its `http://` address applies. `defaultServer` therefore also accepts an allowlisted entry with
+the same host and path under the other scheme.
 
 STU3 and R4B have no built-in entry, because the registry lists none for them (R8).
 

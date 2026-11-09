@@ -127,6 +127,12 @@ public class ServiceMetrics {
                             .maximumExpectedValue(Duration.ofSeconds(60)).register(registry)).record(Duration.ofNanos(elapsedNanos));
                 }
             }
+
+            @Override
+            public void codeCacheHit(SupportedFhirVersion version) {
+                counter("fv.tx.code.cache.hits", "Code checks of terminology contexts answered from the code cache",
+                        "fhir_version", version.name()).increment();
+            }
         });
         resolver.setListener(new nzi.fhir.validator.core.terminology.RegistryResolver.Listener() {
             @Override

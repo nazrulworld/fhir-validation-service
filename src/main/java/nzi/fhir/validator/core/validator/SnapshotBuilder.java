@@ -239,7 +239,9 @@ public class SnapshotBuilder {
         modules.add(new SnapshotGeneratingValidationSupport(ctx));
         // Code results are cached per snapshot: a different server means a different setting, a new snapshot and a
         // fresh cache, so answers are never shared between servers (FR-018).
-        ValidationSupportChain chain = new ValidationSupportChain(txServices.chainCache(), modules);
+        ValidationSupportChain chain = tx.mode() == TerminologyMode.NONE
+                ? new ValidationSupportChain(txServices.chainCache(), modules)
+                : new CacheCountingChain(txServices.chainCache(), modules, version, txServices.clients());
         // FR-002 / research R1: no IValidatorResourceFetcher is set, so the validator can never fetch a profile,
         // reference or other conformance resource over the network. Do not add one.
         FhirValidator validator = ctx.newValidator();
@@ -247,6 +249,50 @@ public class SnapshotBuilder {
         ValidatorSnapshot snapshot = new ValidatorSnapshot(key, revision, resolvedPackages, hashes, ctx, validator, chain);
         snapshot.setTerminology(tx, txServices.requestBudgetMs());
         return snapshot;
+    }
+
+    /**
+     * The chain of a context with a terminology mode (spec 007 FR-026, T078): a code check that the chain answers
+     * without reaching the terminology module was answered from the code cache (the modules before it answer no code
+     * checks), so it is counted as a cache hit.
+     */
+    static final class CacheCountingChain extends ValidationSupportChain {
+        private final SupportedFhirVersion version;
+        private final nzi.fhir.validator.core.terminology.TerminologyClients clients;
+
+        CacheCountingChain(ValidationSupportChain.CacheConfiguration cache, List<IValidationSupport> modules,
+                           SupportedFhirVersion version, nzi.fhir.validator.core.terminology.TerminologyClients clients) {
+            super(cache, modules);
+            this.version = version;
+            this.clients = clients;
+        }
+
+        @Override
+        public CodeValidationResult validateCode(ca.uhn.fhir.context.support.ValidationSupportContext ctx,
+                                                 ca.uhn.fhir.context.support.ConceptValidationOptions options, String system,
+                                                 String code, String display, String valueSetUrl) {
+            long before = RoutedTerminologySupport.reached();
+            CodeValidationResult result = super.validateCode(ctx, options, system, code, display, valueSetUrl);
+            count(before, result);
+            return result;
+        }
+
+        @Override
+        public CodeValidationResult validateCodeInValueSet(ca.uhn.fhir.context.support.ValidationSupportContext ctx,
+                                                           ca.uhn.fhir.context.support.ConceptValidationOptions options,
+                                                           String system, String code, String display,
+                                                           org.hl7.fhir.instance.model.api.IBaseResource valueSet) {
+            long before = RoutedTerminologySupport.reached();
+            CodeValidationResult result = super.validateCodeInValueSet(ctx, options, system, code, display, valueSet);
+            count(before, result);
+            return result;
+        }
+
+        private void count(long before, CodeValidationResult result) {
+            if (result != null && RoutedTerminologySupport.reached() == before) {
+                clients.codeCacheHit(version);
+            }
+        }
     }
 
     /**

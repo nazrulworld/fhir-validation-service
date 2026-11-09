@@ -203,7 +203,7 @@ class ConfigPropagationIT extends BaseTestContainer {
         String url = "http://example.org/fhir/StructureDefinition/tx-propagated";
         SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, "example.txprop#1.0.0");
         nzi.fhir.validator.core.terminology.TerminologySettings routed = new nzi.fhir.validator.core.terminology.TerminologySettings(
-                nzi.fhir.validator.core.terminology.TerminologyMode.SERVER, "http://tx.fhir.org/r4");
+                nzi.fhir.validator.core.terminology.TerminologyMode.SERVER, "https://tx.fhir.org/r4");
         java.util.function.Supplier<String> shownOnB = () -> b.services().validatorRegistry().details().getJsonObject("R4")
                 .getJsonArray("contexts").stream().map(o -> (io.vertx.core.json.JsonObject) o)
                 .filter(c -> "example.txprop#1.0.0".equals(c.getString("key"))).map(c -> c.getJsonObject("terminology").getString("mode"))

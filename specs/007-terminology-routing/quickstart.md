@@ -21,13 +21,13 @@ Must pass, at least:
 | Test | Proves |
 |---|---|
 | `TxServerAllowlistTest` | Recorded discovery answers: entries with an `error`, a non-`open` `security` or another FHIR version are dropped; matching is exact on the normalised URL; STU3 and R4B are empty; the built-in list is used only while no list exists (FR-006 to FR-012) |
-| `RegistryResolverTest` | Recorded `/resolve` answers: the choice order and tie-break (R9); `formatVersion` other than `"1"` rejected; URLs missing from the allowlist skipped; failures kept 5 min, successes 24 h |
+| `core/terminology/RegistryResolverTest`, `core/terminology/TxRegistryIT` | Recorded `/resolve` answers: the choice order and tie-break (R9); `formatVersion` other than `"1"` rejected; URLs missing from the allowlist skipped; failures kept 5 min, successes 24 h |
 | `NetworkGuardTest` | Loopback, private, link-local and rebinding addresses refused; redirects not followed (FR-011) |
-| `TerminologyRoutingIT` | Stub registry and stub server: a LOINC code routed and checked; the second request answered from the cache (0 extra hits); a code from a complete IG CodeSystem never sent; the IG's ValueSet carried in `valueSet` and its CodeSystems in `tx-resource` (US1, SC-004) |
-| `TerminologyFailureIT` | The stub server down, slow or 5xx: a warning, not an error, 200 within the timeout; the request budget stops calls; degraded answers aren't served from the cache afterwards (FR-019, FR-019a, SC-005, SC-005a) |
-| `TerminologySettingIT` | Include and PATCH with terminology: 400 `tx-server-not-registered`, 503 `tx-registry-unavailable`, built-in accepted with no list, the owner and system rule, a rebuild on every instance in the propagation window, the setting shown in health (US3, US4, SC-006) |
-| `IncludedOnlyValidationIT` | US5 scenarios 1-6: 400 for not included, no build started, `latest` among included, 404 unchanged, exclude → 400 |
-| `ZeroOutboundIT` (the existing SC-002 test, extended) | Mode `none` and the base context: 0 outbound connections (SC-003) |
+| `core/validator/TerminologyRoutingIT`, `core/validator/EcosystemRoutingIT` | Stub registry and stub server: a LOINC code routed and checked; the second request answered from the cache (0 extra hits); a code from a complete IG CodeSystem never sent; the IG's ValueSet carried in `valueSet` and its CodeSystems in `tx-resource` (US1, SC-004) |
+| `core/validator/TerminologyFailureIT` | The stub server down, slow or 5xx: a warning, not an error, 200 within the timeout; the request budget stops calls; degraded answers aren't served from the cache afterwards (FR-019, FR-019a, SC-005, SC-005a) |
+| `web/TerminologySettingIT` | Include and PATCH with terminology: 400 `tx-server-not-registered`, 503 `tx-registry-unavailable`, built-in accepted with no list, the owner and system rule, a rebuild on every instance in the propagation window, the setting shown in health (US3, US4, SC-006) |
+| `core/validator/IncludedOnlyValidationIT` | US5 scenarios 1-6: 400 for not included, no build started, `latest` among included, 404 unchanged, exclude → 400 |
+| `EcosystemRoutingIT.modeNoneAndTheBaseContextStayOfflineNextToATerminologyContext` | Mode `none` and the base context: 0 outbound connections (SC-003) |
 | `MigrationUpgradeIT` | V9 applies to an empty database and on top of the 3.2.1 schema; existing contexts read as `none` (FR-005) |
 | `ConfigLoaderTest` | `FV_IG_MAX_ON_DEMAND` and `FV_IG_BUILD_WAIT_MS` give a deprecation warning, not a failure (FR-025) |
 

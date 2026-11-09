@@ -582,3 +582,11 @@ Deviations from the task text, found while implementing (also recorded in resear
 - **T068:** `fv_tx_code_cache_hits_total` is not exported: HAPI's chain cache exposes no hit count. Routing-cache hits are exported (`fv_tx_routing_lookups_total{result="hit"}`).
 - **T075:** the CHANGELOG entry is "4.0.0 - unreleased"; `pom.xml` stays `4.0.0-SNAPSHOT` until the release.
 
+---
+
+## Phase 9: Convergence
+
+- [X] T078 Export a code-cache hit count for terminology contexts (`fv_tx_code_cache_hits_total{fhir_version}`) in `src/main/java/nzi/fhir/validator/core/metrics/ServiceMetrics.java`, for example by counting the terminology checks HAPI makes for a terminology context and subtracting the calls that reach `RoutedTerminologySupport`; assert it in `src/test/java/nzi/fhir/validator/core/validator/TerminologyRoutingIT.java` (a repeated code raises it by one) per FR-026 (partial)
+- [X] T079 Make the guarded client factory of `src/main/java/nzi/fhir/validator/core/terminology/TerminologyClients.java` independent of which pool installed last: install it once per `FhirContext` process-wide (or verify before each call that the context's factory is this pool's), and add a test in `src/test/java/nzi/fhir/validator/core/terminology/` with two pools on one `FhirContext` showing each call uses its own pool's guard per plan: research R11 (partial)
+- [X] T080 Include a new context's code-cache bound in the include-time heap check: pass `HeapBudget.terminologyCacheBytes(settings, FV_TX_CACHE_SIZE)` through `IgPackageService.include` and `ServiceRegistry`'s `setAdmitBuild` into `src/main/java/nzi/fhir/validator/core/validator/HeapBudget.java` `admitInclude`, and extend `src/test/java/nzi/fhir/validator/core/validator/HeapBudgetTest.java` per SC-009 (partial)
+- [X] T081 Update the test table in `specs/007-terminology-routing/quickstart.md` §1 to the real classes (`core/validator/TerminologyRoutingIT`, `core/validator/TerminologyFailureIT`, `core/validator/EcosystemRoutingIT`, `core/terminology/TxRegistryIT`, `web/TerminologySettingIT`, `core/validator/IncludedOnlyValidationIT`; the zero-outbound check is `EcosystemRoutingIT.modeNoneAndTheBaseContextStayOfflineNextToATerminologyContext`) per quickstart.md (partial)

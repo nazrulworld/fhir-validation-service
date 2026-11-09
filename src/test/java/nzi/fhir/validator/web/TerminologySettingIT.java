@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * The allowlist comes from rows written to {@code tx_registry_snapshot} before the instances start (the "last good
  * list" the registry left behind): R4 lists {@code https://tx.fhir.ch/r4} and {@code http://tx.fhir.org/r4}; STU3
- * has a registry list with no server; R5 has none, so its built-in fallback list ({@code http://tx.fhir.org/r5})
+ * has a registry list with no server; R5 has none, so its built-in fallback list ({@code https://tx.fhir.org/r5})
  * applies. Nothing is fetched from the network (the test JVM keeps the production registry client offline).
  */
 @ExtendWith(VertxExtension.class)
@@ -186,7 +186,7 @@ class TerminologySettingIT extends BaseTestContainer {
                         assertProblem(r, 503, "tx-registry-unavailable");
                         assertEquals("60", r.getHeader("Retry-After"));
                     });
-                    return include("R5", "tx.r5", "1.0.0", server("http://tx.fhir.org/r5"), keyA);
+                    return include("R5", "tx.r5", "1.0.0", server("https://tx.fhir.org/r5"), keyA);
                 })
                 .compose(r -> {
                     ctx.verify(() -> assertEquals(200, r.statusCode(), r.bodyAsString()));
@@ -226,7 +226,7 @@ class TerminologySettingIT extends BaseTestContainer {
     @Test
     void includingAnIncludedContextAgainIgnoresTheSettingWithAWarning(VertxTestContext ctx) {
         include("R5", "tx.r5", "3.0.0", null, keyA)
-                .compose(r -> include("R5", "tx.r5", "3.0.0", server("http://tx.fhir.org/r5"), keyA))
+                .compose(r -> include("R5", "tx.r5", "3.0.0", server("https://tx.fhir.org/r5"), keyA))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     JsonObject body = r.bodyAsJsonObject();

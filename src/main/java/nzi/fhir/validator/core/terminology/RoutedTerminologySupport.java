@@ -26,6 +26,18 @@ public abstract class RoutedTerminologySupport implements IValidationSupport {
     protected final TerminologyClients clients;
     private final CommonCodeSystemsTerminologyService common;
 
+    /** Code checks that reached a terminology module on this thread (T078: a check that didn't was a cache hit). */
+    private static final ThreadLocal<long[]> REACHED = ThreadLocal.withInitial(() -> new long[1]);
+
+    /** How many code checks have reached a terminology module on this thread so far. */
+    public static long reached() {
+        return REACHED.get()[0];
+    }
+
+    private static void markReached() {
+        REACHED.get()[0]++;
+    }
+
     protected RoutedTerminologySupport(FhirContext ctx, SupportedFhirVersion version, TerminologyClients clients) {
         this.ctx = ctx;
         this.version = version;
@@ -93,6 +105,7 @@ public abstract class RoutedTerminologySupport implements IValidationSupport {
     @Override
     public CodeValidationResult validateCode(ValidationSupportContext vsc, ConceptValidationOptions options, String system,
                                              String code, String display, String valueSetUrl) {
+        markReached();
         if (system == null || decidedLocally(vsc, system)) {
             return null;
         }
@@ -110,6 +123,7 @@ public abstract class RoutedTerminologySupport implements IValidationSupport {
     @Override
     public CodeValidationResult validateCodeInValueSet(ValidationSupportContext vsc, ConceptValidationOptions options,
                                                        String system, String code, String display, IBaseResource valueSet) {
+        markReached();
         String routing;
         if (system != null) {
             if (decidedLocally(vsc, system)) {
