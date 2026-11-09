@@ -179,10 +179,23 @@ public final class TxServerAllowlist {
         throw ProblemException.txRegistryUnavailable(version);
     }
 
-    /** The registry's default server for {@code version} (tx.fhir.org), only when it is allowlisted. */
+    /**
+     * The default server for {@code version} (tx.fhir.org), only when it is allowlisted. The built-in address is
+     * {@code https}, while the registry may list the same server as {@code http} (it lists {@code http://tx.fhir.org/r4});
+     * so when the built-in address itself isn't allowed, an allowlisted entry with the same host and path under the other
+     * scheme is the default server, exactly as the registry lists it. Settings saved by users still need an exact match.
+     */
     public Optional<String> defaultServer(SupportedFhirVersion version) {
         String url = defaults.get(version);
-        return url != null && isAllowed(url, version) ? Optional.of(url) : Optional.empty();
+        if (url == null) {
+            return Optional.empty();
+        }
+        if (isAllowed(url, version)) {
+            return Optional.of(url);
+        }
+        String other = url.startsWith("https://") ? "http://" + url.substring("https://".length())
+                : url.startsWith("http://") ? "https://" + url.substring("http://".length()) : null;
+        return other != null && isAllowed(other, version) ? Optional.of(TerminologySettings.normaliseUrl(other)) : Optional.empty();
     }
 
     /** The {@code allowlist} object of the {@code /health} report (contracts §5). */

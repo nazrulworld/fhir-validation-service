@@ -48,6 +48,9 @@ public class TerminologyClients {
         Listener NONE = new Listener() { };
 
         default void call(String server, SupportedFhirVersion version, String outcome, long elapsedNanos) { }
+
+        /** A code check of a terminology context answered from its code cache (T078). */
+        default void codeCacheHit(SupportedFhirVersion version) { }
     }
 
     public static final String SUCCESS = "success";
@@ -66,8 +69,16 @@ public class TerminologyClients {
     private final int maxConnections;
     private final Map<Key, IgAwareRemoteTerminologySupport> clients = new ConcurrentHashMap<>();
     private final Map<String, CircuitBreaker> breakers = new ConcurrentHashMap<>();
-    private final Map<FhirContext, ApacheRestfulClientFactory> factories = new java.util.IdentityHashMap<>();
     private HttpClient http;
+
+    /**
+     * One guarded factory per {@code FhirContext}, process-wide (T079). It hands HAPI the HTTP client of the pool whose
+     * {@link #call} is running on this thread, so two pools sharing a context never use each other's guard, timeouts
+     * or redirect rule, whichever installed the factory. Outside a {@link #call} there is no client: HAPI can make no
+     * terminology request that bypasses the allowlist, circuit and budget checks.
+     */
+    private static final Map<FhirContext, ApacheRestfulClientFactory> FACTORIES = new java.util.IdentityHashMap<>();
+    private static final ThreadLocal<HttpClient> CURRENT = new ThreadLocal<>();
     private volatile Listener listener = Listener.NONE;
 
     /**
@@ -84,6 +95,11 @@ public class TerminologyClients {
 
     public void setListener(Listener listener) {
         this.listener = listener == null ? Listener.NONE : listener;
+    }
+
+    /** Reports a code-cache hit of a terminology context (FR-026). */
+    public void codeCacheHit(SupportedFhirVersion version) {
+        listener.codeCacheHit(version);
     }
 
     public TxServerAllowlistSource allowlist() {
@@ -108,24 +124,33 @@ public class TerminologyClients {
     /**
      * The guarded client factory of {@code ctx}, installed as the context's restful client factory. HAPI builds every
      * request of a generic client through {@code FhirContext.getRestfulClientFactory()}, not through the factory the
-     * client was created with, so only installing it there makes every terminology request use the guarded HTTP
-     * client (verified by TerminologyFailureIT). The service makes no other HAPI client calls: packages are fetched
-     * by {@code SafePackageFetcher} and profiles never leave the process.
+     * client was created with, so only installing it there makes every terminology request use a guarded HTTP client
+     * (verified by TerminologyFailureIT). The service makes no other HAPI client calls: packages are fetched by
+     * {@code SafePackageFetcher} and profiles never leave the process.
      */
-    private synchronized ApacheRestfulClientFactory factoryFor(FhirContext ctx) {
-        return factories.computeIfAbsent(ctx, c -> {
-            ApacheRestfulClientFactory factory = new ApacheRestfulClientFactory(c) {
-                // Always this guarded client: HAPI otherwise rebuilds its own native client whenever a timeout or pool
-                // setting changes, which would drop the redirect, address and budget rules.
-                @Override
-                public synchronized HttpClient getNativeHttpClient() {
-                    return http();
-                }
-            };
-            factory.setServerValidationMode(ServerValidationModeEnum.NEVER);
-            c.setRestfulClientFactory(factory);
+    static ApacheRestfulClientFactory factoryFor(FhirContext ctx) {
+        synchronized (FACTORIES) {
+            ApacheRestfulClientFactory factory = FACTORIES.computeIfAbsent(ctx, c -> {
+                ApacheRestfulClientFactory f = new ApacheRestfulClientFactory(c) {
+                    // Always the calling pool's guarded client: HAPI otherwise rebuilds its own native client whenever
+                    // a timeout or pool setting changes, which would drop the redirect, address and budget rules.
+                    @Override
+                    public synchronized HttpClient getNativeHttpClient() {
+                        HttpClient current = CURRENT.get();
+                        if (current == null) {
+                            throw new IllegalStateException("terminology requests must go through TerminologyClients.call");
+                        }
+                        return current;
+                    }
+                };
+                f.setServerValidationMode(ServerValidationModeEnum.NEVER);
+                return f;
+            });
+            if (ctx.getRestfulClientFactory() != factory) {
+                ctx.setRestfulClientFactory(factory);
+            }
             return factory;
-        });
+        }
     }
 
     private synchronized HttpClient http() {
@@ -161,6 +186,8 @@ public class TerminologyClients {
             return degraded.apply(Reasons.BUDGET);
         }
         long started = System.nanoTime();
+        HttpClient previous = CURRENT.get();
+        CURRENT.set(http());
         try {
             T result = work.get();
             breaker.onSuccess();
@@ -176,6 +203,11 @@ public class TerminologyClients {
             TerminologyBudget.markDegraded();
             return degraded.apply(TerminologyBudget.exhausted() ? Reasons.BUDGET : Reasons.UNAVAILABLE);
         } finally {
+            if (previous == null) {
+                CURRENT.remove();
+            } else {
+                CURRENT.set(previous);
+            }
             TerminologyBudget.charge(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         }
     }

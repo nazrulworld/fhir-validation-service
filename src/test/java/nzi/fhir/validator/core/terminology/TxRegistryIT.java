@@ -132,7 +132,7 @@ class TxRegistryIT extends BaseTestContainer {
         registry.start().compose(v -> vertx.timer(500)).onComplete(ctx.succeeding(v -> ctx.verify(() -> {
             TxServerAllowlist list = registry.current();
             assertEquals(TxServerAllowlist.Source.BUILT_IN, list.list(R4).orElseThrow().source());
-            assertTrue(list.isAllowed("http://tx.fhir.org/r4", R4));
+            assertTrue(list.isAllowed("https://tx.fhir.org/r4", R4));
             assertFalse(list.isAllowed("https://tx.fhir.ch/r4", R4));
             assertFalse(list.hasRegistryList(R4));
             assertEquals("built-in", registry.status().getJsonObject("allowlist").getJsonObject("R4").getString("source"));

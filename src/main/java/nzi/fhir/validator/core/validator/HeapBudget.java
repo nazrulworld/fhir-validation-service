@@ -100,7 +100,12 @@ public class HeapBudget {
      *                                   and the builds already admitted
      */
     public void check(long expandedBytes) {
-        long needed = estimate(expandedBytes);
+        check(expandedBytes, 0);
+    }
+
+    /** {@link #check(long)} for a build that also holds {@code additionalBytes} (a code cache bound, spec 007). */
+    public void check(long expandedBytes, long additionalBytes) {
+        long needed = estimate(expandedBytes) + Math.max(0, additionalBytes);
         if (needed <= free()) {
             return;
         }
@@ -128,7 +133,7 @@ public class HeapBudget {
      * {@link #reserve(long)}, also holding {@code additionalBytes} (for example a context's code cache bound, spec 007).
      */
     public synchronized long reserve(long expandedBytes, long additionalBytes) {
-        fit(expandedBytes);
+        fit(expandedBytes, additionalBytes);
         long needed = estimate(expandedBytes) + Math.max(0, additionalBytes);
         reserved.addAndGet(needed);
         return needed;
@@ -141,12 +146,16 @@ public class HeapBudget {
      * @throws InsufficientHeapException if it would not fit next to what is live now
      */
     private void fit(long expandedBytes) {
-        long needed = estimate(expandedBytes);
+        fit(expandedBytes, 0);
+    }
+
+    private void fit(long expandedBytes, long additionalBytes) {
+        long needed = estimate(expandedBytes) + Math.max(0, additionalBytes);
         if (needed > maxHeap.getAsLong()) {
             throw new NeverFitsException("needs about " + needed / MB + " MB of heap, more than the whole heap of "
                     + maxHeap.getAsLong() / MB + " MB; raise FV_MEMORY_LIMIT (or the JVM heap)");
         }
-        check(expandedBytes);
+        check(expandedBytes, additionalBytes);
     }
 
     public void release(long reservedBytes) {
@@ -157,8 +166,17 @@ public class HeapBudget {
      * For an include that is about to be committed: 413 {@code package-too-large} if it would not fit.
      */
     public synchronized void admitInclude(long expandedBytes) {
+        admitInclude(expandedBytes, 0);
+    }
+
+    /**
+     * {@link #admitInclude(long)} for a context that also holds {@code additionalBytes}: the code cache bound of a
+     * context with a terminology mode (spec 007 SC-009), so the include is refused with 413 before it is committed
+     * rather than its build failing afterwards.
+     */
+    public synchronized void admitInclude(long expandedBytes, long additionalBytes) {
         try {
-            fit(expandedBytes);
+            fit(expandedBytes, additionalBytes);
         } catch (InsufficientHeapException e) {
             throw new ProblemException(413, "package-too-large",
                     "This instance cannot build a validator with this IG set: it " + e.getMessage());

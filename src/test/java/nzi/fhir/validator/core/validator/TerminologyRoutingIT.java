@@ -101,12 +101,24 @@ class TerminologyRoutingIT {
 
     @Test
     void aRepeatedCodeIsAnsweredFromTheCache(Vertx vertx) throws Exception {
-        ValidatorSnapshot s = snapshot(new TerminologySettings(TerminologyMode.SERVER, stub.base()), services());
+        TestTerminology.MutableAllowlist allowlist = TestTerminology.allowlist(R4, stub.base());
+        TerminologyClients clients = TestTerminology.clients(allowlist, 2_000);
+        java.util.concurrent.atomic.AtomicInteger cacheHits = new java.util.concurrent.atomic.AtomicInteger();
+        clients.setListener(new TerminologyClients.Listener() {
+            @Override
+            public void codeCacheHit(SupportedFhirVersion version) {
+                cacheHits.incrementAndGet();
+            }
+        });
+        ValidatorSnapshot s = snapshot(new TerminologySettings(TerminologyMode.SERVER, stub.base()),
+                TestTerminology.services(allowlist, clients, RegistryResolver.DISABLED, 10_000));
         validate(vertx, s, TestPackages.codedObservation(LOINC, "8867-4"));
         int first = stub.hits();
         assertTrue(first >= 1);
+        int hitsBefore = cacheHits.get();
         validate(vertx, s, TestPackages.codedObservation(LOINC, "8867-4"));
         assertEquals(first, stub.hits(), "SC-004: 0 additional terminology calls");
+        assertTrue(cacheHits.get() > hitsBefore, "T078, FR-026: the repeat is counted as a code-cache hit");
     }
 
     /** FR-013 and the research R4 verification: local and common code systems never reach the server. */

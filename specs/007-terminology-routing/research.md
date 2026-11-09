@@ -249,6 +249,10 @@ national servers at random, and keeps results stable between runs.
   enforced locally on every call. No `NOTIFY` is needed.
 - **Built-in fallback list:** the enum `BuiltInTxServer`, `{TX_FHIR_ORG_R4("http://tx.fhir.org/r4", R4),
   TX_FHIR_ORG_R5("http://tx.fhir.org/r5", R5)}`. These are the default servers the registry lists today.
+  **Changed after implementation (2026-11-09):** the built-in addresses are `https://tx.fhir.org/r4` and `/r5`. Because
+  the registry lists `http://tx.fhir.org/r4` and matching is exact, the https addresses are allowed only while the
+  built-in list applies, and `TxServerAllowlist.defaultServer` accepts the registry's entry with the same host and path
+  under the other scheme, so routing still prefers tx.fhir.org and falls back to it.
   - It is used only while no list exists in memory or in the table, for the version in question.
   - Once a list is obtained, it alone applies (spec edge case).
   - It is fixed in source and changes only through a release.

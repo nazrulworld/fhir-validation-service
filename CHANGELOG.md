@@ -41,7 +41,7 @@ automatically; every existing included context keeps mode `none` and behaves as 
 - Configuration: `FV_TX_REGISTRY_REFRESH_MS`, `FV_TX_TIMEOUT_MS`, `FV_TX_REQUEST_BUDGET_MS`, `FV_TX_CACHE_SIZE`,
   `FV_TX_CACHE_TTL_MS`, `FV_TX_MAX_CONNECTIONS_PER_SERVER`.
 - `/health` `terminology` section; metrics `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total`,
-  `fv_tx_allowlist_age_seconds`.
+  `fv_tx_code_cache_hits_total`, `fv_tx_allowlist_age_seconds`.
 - Dependency: `ca.uhn.hapi.fhir:hapi-fhir-client` (same HAPI version), needed by HAPI's remote terminology client.
 
 ## [3.2.1] - 2026-11-08

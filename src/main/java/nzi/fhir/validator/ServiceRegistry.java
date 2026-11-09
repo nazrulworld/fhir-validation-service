@@ -121,10 +121,11 @@ public final class ServiceRegistry {
             sync.syncCatalog();
         });
         igPackageService.setApplyLocally(sync::syncNow);
-        igPackageService.setAdmitBuild(expandedBytes -> executors.packages().executeBlocking(() -> {
-            heap.admitInclude(expandedBytes);
+        igPackageService.setAdmitBuild((expandedBytes, additionalBytes) -> executors.packages().executeBlocking(() -> {
+            heap.admitInclude(expandedBytes, additionalBytes);
             return null;
         }, false));
+        igPackageService.setTxCacheSize(config.txCacheSize());
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);

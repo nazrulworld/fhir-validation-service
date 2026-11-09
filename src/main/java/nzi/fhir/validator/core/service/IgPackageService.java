@@ -50,7 +50,10 @@ public class IgPackageService {
     private final PostgresPackageCacheManager cacheManager;
 
     private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
-    private Function<Long, Future<Void>> admitBuild = bytes -> Future.succeededFuture();
+    /** Given (expanded package bytes, additional heap bytes), fails with 413 when the new context can't fit. */
+    private java.util.function.BiFunction<Long, Long, Future<Void>> admitBuild = (bytes, extra) -> Future.succeededFuture();
+    /** {@code FV_TX_CACHE_SIZE}: a new terminology context's code cache bound is part of its include check (SC-009). */
+    private volatile int txCacheSize;
     /** Spec 007: the terminology allowlist settings are checked against when saved (FR-010 a, FR-012a). */
     private volatile nzi.fhir.validator.core.terminology.TxServerAllowlistSource txAllowlist =
             nzi.fhir.validator.core.terminology.TxServerAllowlistSource.EMPTY;
@@ -83,7 +86,21 @@ public class IgPackageService {
      *                   committed, so a set that would exhaust the heap never reaches the configuration
      */
     public void setAdmitBuild(Function<Long, Future<Void>> admitBuild) {
+        this.admitBuild = (bytes, extra) -> admitBuild.apply(bytes);
+    }
+
+    /**
+     * @param admitBuild given the expanded size of a new resolved package set and the heap the context holds besides
+     *                   (its code cache bound, spec 007), fails with 413 {@code package-too-large} if this instance
+     *                   could not build it; checked before the include is committed
+     */
+    public void setAdmitBuild(java.util.function.BiFunction<Long, Long, Future<Void>> admitBuild) {
         this.admitBuild = admitBuild;
+    }
+
+    /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
+    public void setTxCacheSize(int txCacheSize) {
+        this.txCacheSize = txCacheSize;
     }
 
     /** The allowlist a terminology setting is checked against when saved (spec 007). */
@@ -214,7 +231,9 @@ public class IgPackageService {
                         List<String> includedList = List.copyOf(included);
                         Access contextAccess = new Access(caller.orgId(), caller.orgShortName(), share);
                         // The new context must fit in this instance's heap (after evicting on-demand contexts).
-                        return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved()).compose(admitBuild)
+                        long cacheBytes = nzi.fhir.validator.core.validator.HeapBudget.terminologyCacheBytes(txSettings, txCacheSize);
+                        return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved())
+                                .compose(bytes -> admitBuild.apply(bytes, cacheBytes))
                                 .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
                                         ConfigRevisionRepository.KIND_IG, caller.orgId(), share, txSettings))
                                 .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved(),

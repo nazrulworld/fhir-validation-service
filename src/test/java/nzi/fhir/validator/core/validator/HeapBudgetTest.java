@@ -95,4 +95,16 @@ class HeapBudgetTest {
         HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> 0, () -> { });
         assertEquals(HeapBudget.estimate(10 * MB) + 5_000 * 1024L, budget.reserve(10 * MB, 5_000 * 1024L));
     }
+
+    /** Spec 007 SC-009 (T080): the include check counts the code cache bound too, so a build can't fail later. */
+    @Test
+    void theIncludeCheckCountsTheCodeCacheBound() {
+        // About 128 MB free: the package estimate fits, the package plus a 100 MB code cache bound doesn't.
+        long freeAfterEstimate = HeapBudget.estimate(10 * MB) + 28 * MB;
+        HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> 4096 * MB - freeAfterEstimate, () -> { });
+        budget.admitInclude(10 * MB, 0);
+        budget.admitInclude(10 * MB, 20 * MB);
+        ProblemException e = assertThrows(ProblemException.class, () -> budget.admitInclude(10 * MB, 100 * MB));
+        assertEquals(413, e.status());
+    }
 }

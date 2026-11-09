@@ -43,12 +43,13 @@ Operational notes:
   that do. Allow egress to `ecosystem.hl7.org` and to the servers you use (for example `tx.fhir.org`). Some listed
   servers are plain `http://`; they are contacted as listed. Only codes, systems, displays and the IG's own value set
   and code system definitions are sent, never the validated resource.
-- **No registry list yet:** until an instance (or the shared database) has a list, only `http://tx.fhir.org/r4` and
-  `http://tx.fhir.org/r5` are allowed, and saving any other server answers 503 `tx-registry-unavailable`.
+- **No registry list yet:** until an instance (or the shared database) has a list, only `https://tx.fhir.org/r4` and
+  `https://tx.fhir.org/r5` are allowed (the built-in fallback uses https, although the registry lists tx.fhir.org as
+  `http://`; once a list exists, the registry's address applies), and saving any other server answers 503 `tx-registry-unavailable`.
 - **STU3 and R4B:** the registry lists no server for them, so only mode `none` can be used.
 - **Workers:** validation workers wait on terminology calls (bounded by `FV_TX_TIMEOUT_MS` per call and
   `FV_TX_REQUEST_BUDGET_MS` per request). Terminology-heavy traffic may need a larger `FV_VALIDATION_WORKERS`.
 - **Health and metrics:** `GET /health` has a `terminology` section (allowlist source and age per version, and each
-  context's setting); `/metrics` adds `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total` and
-  `fv_tx_allowlist_age_seconds`. The `kind="on-demand"` series of `fv_validator_contexts` and the on-demand build,
+  context's setting); `/metrics` adds `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total`,
+  `fv_tx_code_cache_hits_total` and `fv_tx_allowlist_age_seconds`. The `kind="on-demand"` series of `fv_validator_contexts` and the on-demand build,
   eviction and lookup outcomes are gone.
