@@ -249,10 +249,9 @@ national servers at random, and keeps results stable between runs.
   enforced locally on every call. No `NOTIFY` is needed.
 - **Built-in fallback list:** the enum `BuiltInTxServer`, `{TX_FHIR_ORG_R4("http://tx.fhir.org/r4", R4),
   TX_FHIR_ORG_R5("http://tx.fhir.org/r5", R5)}`. These are the default servers the registry lists today.
-  **Changed after implementation (2026-11-09):** the built-in addresses are `https://tx.fhir.org/r4` and `/r5`. Because
-  the registry lists `http://tx.fhir.org/r4` and matching is exact, the https addresses are allowed only while the
-  built-in list applies, and `TxServerAllowlist.defaultServer` accepts the registry's entry with the same host and path
-  under the other scheme, so routing still prefers tx.fhir.org and falls back to it.
+  **Note (2026-11-09):** the built-in addresses were briefly `https`, then reverted to `http` to match the registry
+  exactly. `TxServerAllowlist.defaultServer` still accepts an allowlisted entry with the same host and path under the
+  other scheme, so the default server is found whichever scheme the registry lists.
   - It is used only while no list exists in memory or in the table, for the version in question.
   - Once a list is obtained, it alone applies (spec edge case).
   - It is fixed in source and changes only through a release.
@@ -289,8 +288,10 @@ context. A separate factory per client isolates timeouts and redirect rules.
 **Verification result** (TerminologyFailureIT, 2026-11-09): HAPI builds **every request** of a generic client through
 `FhirContext.getRestfulClientFactory()`, not through the factory the client was created with, so a per-client factory
 was silently bypassed (no timeout, no guard). The decision changes: `TerminologyClients` installs one guarded
-`ApacheRestfulClientFactory` per `FhirContext` (`ctx.setRestfulClientFactory`) whose `getNativeHttpClient()` always
-returns the one guarded HTTP client (redirects off, `NetworkGuard` DNS resolver, timeouts from the budget interceptor,
+`ApacheRestfulClientFactory` per `FhirContext`, process-wide (`ctx.setRestfulClientFactory`), whose
+`getNativeHttpClient()` returns the guarded HTTP client of the pool whose `TerminologyClients.call` is running on the
+thread (T079; outside a `call` there is no client, so no request can bypass the checks). Each pool's client has
+redirects off, `NetworkGuard` DNS resolver, timeouts from the budget interceptor,
 at most `FV_TX_MAX_CONNECTIONS_PER_SERVER` connections per server). This is safe: the service makes no other HAPI client
 calls (packages are fetched by `SafePackageFetcher`, profiles never leave the process). Asserted: a 3 s server is cut at
 the 500 ms timeout.

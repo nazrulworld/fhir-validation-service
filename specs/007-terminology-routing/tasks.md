@@ -579,7 +579,7 @@ Deviations from the task text, found while implementing (also recorded in resear
 - **T056 (research R3):** HAPI sends only the value set URL; `IgAwareRemoteTerminologySupport` also overrides `validateCodeInValueSet` to send the definition.
 - **T057 (research R11):** HAPI builds every request through `FhirContext.getRestfulClientFactory()`; the guarded factory is installed there, with one guarded HTTP client for all servers.
 - **T058, T065 (research R4):** the terminology module sits before `InMemoryTerminologyServerValidationSupport`.
-- **T068:** `fv_tx_code_cache_hits_total` is not exported: HAPI's chain cache exposes no hit count. Routing-cache hits are exported (`fv_tx_routing_lookups_total{result="hit"}`).
+- **T068:** `fv_tx_code_cache_hits_total` was not exported at first (HAPI's chain cache exposes no hit count); convergence task T078 added it by counting code checks the chain answers without reaching the terminology module. Routing-cache hits are exported as `fv_tx_routing_lookups_total{result="hit"}`.
 - **T075:** the CHANGELOG entry is "4.0.0 - unreleased"; `pom.xml` stays `4.0.0-SNAPSHOT` until the release.
 
 ---

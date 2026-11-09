@@ -401,7 +401,7 @@ curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminolo
   (`https://ecosystem.hl7.org/tx-reg`, fixed, not configurable) lists for the FHIR version, on public addresses,
   without following redirects. A setting naming another server is refused with **400** `tx-server-not-registered`.
   The list is refreshed every `FV_TX_REGISTRY_REFRESH_MS` and the last good copy is kept in the database. Until a list
-  has ever been obtained, only a built-in fallback (`https://tx.fhir.org/r4`, `https://tx.fhir.org/r5`) is allowed, and
+  has ever been obtained, only a built-in fallback (`http://tx.fhir.org/r4`, `http://tx.fhir.org/r5`) is allowed, and
   other servers are refused with **503** `tx-registry-unavailable`.
 - Some listed servers are plain `http://` (for example `http://tx.fhir.org/r4`); they are contacted exactly as listed.
   Only codes, systems, displays and the IG's own value set and code system definitions are sent, never the resource

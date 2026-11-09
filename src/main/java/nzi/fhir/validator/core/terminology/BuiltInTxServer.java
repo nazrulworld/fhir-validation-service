@@ -13,8 +13,8 @@ import java.util.List;
  * R8).
  */
 public enum BuiltInTxServer {
-    TX_FHIR_ORG_R4("https://tx.fhir.org/r4", SupportedFhirVersion.R4),
-    TX_FHIR_ORG_R5("https://tx.fhir.org/r5", SupportedFhirVersion.R5);
+    TX_FHIR_ORG_R4("http://tx.fhir.org/r4", SupportedFhirVersion.R4),
+    TX_FHIR_ORG_R5("http://tx.fhir.org/r5", SupportedFhirVersion.R5);
 
     private final String url;
     private final SupportedFhirVersion fhirVersion;
