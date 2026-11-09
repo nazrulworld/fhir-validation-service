@@ -194,6 +194,44 @@ class ConfigPropagationIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Spec 007 FR-004, SC-006: a terminology change notified as IG_TERMINOLOGY rebuilds the context on the other
+     * instance; with notifications off the poll applies it too.
+     */
+    @Test
+    void aTerminologyChangeReachesTheOtherInstanceAlsoByPolling(Vertx vertx, VertxTestContext ctx) {
+        String url = "http://example.org/fhir/StructureDefinition/tx-propagated";
+        SnapshotKey key = SnapshotKey.of(SupportedFhirVersion.R4, "example.txprop#1.0.0");
+        nzi.fhir.validator.core.terminology.TerminologySettings routed = new nzi.fhir.validator.core.terminology.TerminologySettings(
+                nzi.fhir.validator.core.terminology.TerminologyMode.SERVER, "http://tx.fhir.org/r4");
+        java.util.function.Supplier<String> shownOnB = () -> b.services().validatorRegistry().details().getJsonObject("R4")
+                .getJsonArray("contexts").stream().map(o -> (io.vertx.core.json.JsonObject) o)
+                .filter(c -> "example.txprop#1.0.0".equals(c.getString("key"))).map(c -> c.getJsonObject("terminology").getString("mode"))
+                .findFirst().orElse("");
+        includeThroughA("example.txprop", url, "birthDate")
+                .compose(v -> Await.until(vertx, PROPAGATION_MS, "IG reaches B", () -> bPinned("example.txprop#1.0.0")))
+                .compose(ms -> a.services().igPackageService().changeSnapshotAccess(
+                        nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, "example.txprop#1.0.0",
+                        nzi.fhir.validator.core.security.AccessChange.of(java.util.Optional.empty(), java.util.Optional.empty(),
+                                java.util.Optional.of(routed))))
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "B rebuilds with server mode",
+                        () -> Future.succeededFuture("server".equals(shownOnB.get()))))
+                .compose(ms -> {
+                    b.services().configSync().setNotificationsEnabled(false);
+                    return a.services().igPackageService().changeSnapshotAccess(
+                            nzi.fhir.validator.core.security.Caller.system("system"), SupportedFhirVersion.R4, "example.txprop#1.0.0",
+                            nzi.fhir.validator.core.security.AccessChange.of(java.util.Optional.empty(), java.util.Optional.empty(),
+                                    java.util.Optional.of(nzi.fhir.validator.core.terminology.TerminologySettings.NONE)));
+                })
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "B applies the change by polling",
+                        () -> Future.succeededFuture("none".equals(shownOnB.get()))))
+                .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
+                    b.services().configSync().setNotificationsEnabled(true);
+                    assertEquals(ValidatorRegistry.Status.ACTIVE, b.services().validatorRegistry().status(key));
+                    ctx.completeNow();
+                })));
+    }
+
     /** Spec 004 US2-6, SC-006: an exclude reaches the other instance within the propagation window, also by polling. */
     @Test
     void excludeReachesTheOtherInstanceAlsoByPolling(Vertx vertx, VertxTestContext ctx) {
@@ -207,25 +245,32 @@ class ConfigPropagationIT extends BaseTestContainer {
                 })
                 .compose(r -> Await.until(vertx, PROPAGATION_MS, "exclude reaches B by polling",
                         () -> Future.succeededFuture(b.services().validatorRegistry().kind(key) != ValidatorRegistry.Kind.PINNED)))
-                .compose(ms -> bEnforces("example.excl#1.0.0", url, "birthDate"))
-                .onComplete(ctx.succeeding(enforced -> ctx.verify(() -> {
-                    assertTrue(enforced, "the excluded IG can still be named on B (built on demand)");
+                .compose(ms -> bEnforces("example.excl#1.0.0", url, "birthDate").transform(ar -> Future.succeededFuture(ar)))
+                .onComplete(ctx.succeeding(ar -> ctx.verify(() -> {
+                    // Spec 007 FR-021: an excluded IG is no longer built on demand; B refuses it with 400.
+                    nzi.fhir.validator.web.ProblemException p = assertInstanceOf(nzi.fhir.validator.web.ProblemException.class,
+                            ar.cause());
+                    assertEquals(400, p.status());
+                    assertNull(b.services().validatorRegistry().kind(key), "the excluded context is dropped on B");
                     assertTrue(b.services().validatorRegistry().isReady());
                     ctx.completeNow();
                 })));
     }
 
-    /** Spec 004 FR-006, research R4: a package stored through A can be named in ig on B. */
+    /**
+     * Spec 004 FR-006, research R4, spec 007 FR-021: a package stored and included through A can be named in ig on B,
+     * where it is a pinned context.
+     */
     @Test
-    void packageStoredOnOneInstanceCanBeNamedOnTheOther(Vertx vertx, VertxTestContext ctx) {
+    void packageStoredAndIncludedOnOneInstanceCanBeNamedOnTheOther(Vertx vertx, VertxTestContext ctx) {
         String url = "http://example.org/fhir/StructureDefinition/stored-on-a";
-        TestPackages.storePackage(a.services(), TestPackages.profilePackage("example.storedona", "1.0.0",
-                        TestPackages.requiredPatientElements(url, "gender")))
+        TestPackages.includePackage(a.services(), TestPackages.profilePackage("example.storedona", "1.0.0",
+                        TestPackages.requiredPatientElements(url, "gender")), "example.storedona", "1.0.0")
                 .compose(v -> Await.until(vertx, PROPAGATION_MS, "B can validate against it",
                         () -> bEnforces("example.storedona#1.0.0", url, "gender")
                                 .recover(err -> Future.succeededFuture(false))))
                 .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
-                    assertEquals(ValidatorRegistry.Kind.ON_DEMAND, b.services().validatorRegistry()
+                    assertEquals(ValidatorRegistry.Kind.PINNED, b.services().validatorRegistry()
                             .kind(SnapshotKey.of(SupportedFhirVersion.R4, "example.storedona#1.0.0")));
                     ctx.completeNow();
                 })));

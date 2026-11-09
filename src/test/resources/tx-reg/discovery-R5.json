@@ -1,0 +1,122 @@
+{
+    "last-update": "2026-11-09T17:16:03.770Z",
+    "master-url": "https://fhir.github.io/ig-registry/tx-servers.json",
+    "results": [
+        {
+            "server-name": "tx.fhir.org",
+            "server-code": "tx.fhir.org",
+            "registry-name": "HL7 Terminology Services",
+            "registry-code": "hl7",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-tx-servers.json",
+            "url": "http://tx.fhir.org/r5",
+            "fhirVersion": "5.0.0",
+            "error": null,
+            "last-success": 554571,
+            "systems": 2900,
+            "authoritative": [
+                "http://hl7.org/*",
+                "http://terminology.hl7.org/*"
+            ],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Europe Terminology Server",
+            "server-code": "hl7-eu",
+            "registry-name": "HL7 Europe Terminology Services",
+            "registry-code": "hl7-eu",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-eu-tx-servers.json",
+            "url": "http://tx.hl7europe.eu/r5",
+            "fhirVersion": "5.0.0",
+            "error": null,
+            "last-success": 536001,
+            "systems": 2843,
+            "authoritative": [
+                "http://hl7europe.org/fhir/terminology/ehdsi*"
+            ],
+            "authoritative-valuesets": [
+                "http://hl7europe.org/fhir/terminology/ehdsi/ValueSet*",
+                "http://standardterms.edqm.eu*",
+                "http://terminology.ehdsi.eu/ValueSet*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "TEHIK Terminology Server",
+            "server-code": "tehik-ee",
+            "registry-name": "TEHIK Terminology Server",
+            "registry-code": "tehik-ee",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-ee-tx-servers.json",
+            "url": "https://term.tehik.ee/fhir",
+            "fhirVersion": "5.0.0",
+            "error": null,
+            "last-success": 532382,
+            "systems": 1020,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000181102*",
+                "https://fhir.ee/CodeSystem*"
+            ],
+            "authoritative-valuesets": [
+                "https://fhir.ee/ValueSet*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Czech Republic Terminology Server",
+            "server-code": "hl7-cz",
+            "registry-name": "HL7 Czech Republic Terminology Services",
+            "registry-code": "hl7-cz",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-cz-tx-servers.json",
+            "url": "https://tx.hl7.cz/r5",
+            "fhirVersion": "5.0.0",
+            "error": null,
+            "last-success": 520664,
+            "systems": 2918,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000279109*",
+                "https://hl7.cz/terminology/CodeSystem*",
+                "https://ncez.mzcr.cz/nclp/CodeSystem*",
+                "https://ncez.mzcr.cz/terminology/CodeSystem*",
+                "https://sukl.cz/terminology/CodeSystem*",
+                "https://uzis.cz/terminology/CodeSystem*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/11000279109*",
+                "https://hl7.cz/terminology/ValueSet*",
+                "https://ncez.mzcr.cz/nclp/ValueSet*",
+                "https://ncez.mzcr.cz/terminology/ValueSet*",
+                "https://sukl.cz/terminology/ValueSet*",
+                "https://uzis.cz/terminology/ValueSet*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Korea Terminology Server",
+            "server-code": "hl7-kr",
+            "registry-name": "HL7 Korea Terminology Services",
+            "registry-code": "hl7-kr",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-kr-tx-servers.json",
+            "url": "https://tx.healthall.co.kr/fhir/r5",
+            "fhirVersion": "5.0.0",
+            "error": null,
+            "last-success": 442720,
+            "systems": 2803,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000267109*",
+                "http://www.hl7korea.or.kr/*",
+                "https://www.hl7korea.or.kr/*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/11000267109*",
+                "http://www.hl7korea.or.kr/*",
+                "https://www.hl7korea.or.kr/*"
+            ],
+            "security": "open",
+            "open": true
+        }
+    ]
+}

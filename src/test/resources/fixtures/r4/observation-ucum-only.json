@@ -1,0 +1,14 @@
+{
+  "resourceType": "Observation",
+  "id": "ucum-only",
+  "status": "final",
+  "code": {
+    "text": "Body weight"
+  },
+  "valueQuantity": {
+    "value": 70,
+    "unit": "kg",
+    "system": "http://unitsofmeasure.org",
+    "code": "kg"
+  }
+}

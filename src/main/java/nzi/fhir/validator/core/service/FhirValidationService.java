@@ -149,7 +149,9 @@ public class FhirValidationService {
     }
 
     private Future<SnapshotKey> resolve(Caller who, SupportedFhirVersion version, IgReference ig) {
-        return ig == null ? Future.succeededFuture(SnapshotKey.base(version)) : ig.resolve(version, catalog, who);
+        // Spec 007 FR-021: only included contexts serve a named IG; the included keys come from memory (no DB wait).
+        return ig == null ? Future.succeededFuture(SnapshotKey.base(version))
+                : ig.resolve(version, catalog, who, pinnedAccess.apply(version).asMap().keySet());
     }
 
     /**

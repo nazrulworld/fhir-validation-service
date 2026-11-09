@@ -192,6 +192,14 @@ public class SafePackageFetcher {
         return new ProblemException(400, "invalid-request", "The package source sent an invalid HTTP response");
     }
 
+    /**
+     * Whether {@code a} is loopback, link-local, private, unspecified, multicast, IPv6 unique-local, 0.0.0.0/8 or
+     * carrier-grade NAT. Shared with the terminology network guard (spec 007 FR-011).
+     */
+    public static boolean isNonPublicAddress(InetAddress a) {
+        return isNonPublic(a);
+    }
+
     static boolean isNonPublic(InetAddress a) {
         if (a.isLoopbackAddress() || a.isLinkLocalAddress() || a.isSiteLocalAddress() || a.isAnyLocalAddress()
                 || a.isMulticastAddress()) {

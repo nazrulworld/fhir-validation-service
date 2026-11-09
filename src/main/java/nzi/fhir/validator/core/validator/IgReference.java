@@ -4,12 +4,16 @@ import io.vertx.core.Future;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
+import nzi.fhir.validator.core.npm.PackageVersionComparator;
 import nzi.fhir.validator.core.npm.VersionSeries;
 import nzi.fhir.validator.core.security.AccessPolicy;
 import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.web.ProblemException;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -19,7 +23,7 @@ import java.util.stream.Collectors;
  * through the in-memory catalog view (no database wait on the hot path). A version series such as {@code 1.2.x} is
  * rejected with 400 (spec 006 FR-018).
  *
- * @param version {@code null} when absent or {@code latest}: the highest stored version
+ * @param version {@code null} when absent or {@code latest}: the highest included version (spec 007 FR-023)
  */
 public record IgReference(String name, String version) {
     public static final int MAX_LENGTH = 256;
@@ -73,18 +77,22 @@ public record IgReference(String name, String version) {
 
     /**
      * The validator context for this reference and {@code fhirVersion}, as {@code caller} may use it (spec 005 research
-     * R5): a versionless reference becomes the highest version the caller may use (the include rule, FR-002), an exact
-     * version the caller may not use is treated exactly like one that isn't stored, and only then are the declared FHIR
-     * versions checked (FR-004), so the 400 never reveals a package the caller can't see. A package the view doesn't
-     * know (or doesn't let the caller see) triggers one rate-limited catalog refresh before the request is rejected
-     * (research R4), so the timing matches "not stored".
+     * R5, spec 007 FR-021 to FR-023). Only included contexts serve validation: a versionless reference becomes the
+     * highest <em>included</em> version the caller may use; a stored, usable version that isn't included is refused
+     * with 400 (it would otherwise be built on demand, which 4.0.0 removed). An exact version the caller may not use is
+     * treated exactly like one that isn't stored, and the declared FHIR versions are checked before "not included"
+     * (FR-024), so no 400 ever reveals a package the caller can't see. A package the view doesn't know (or doesn't let
+     * the caller see) triggers one rate-limited catalog refresh before the request is rejected (spec 004 research R4),
+     * so the timing matches "not stored".
      *
+     * @param included the {@code name#version} keys included for {@code fhirVersion} (pinned contexts)
      * @return fails with 404 {@code package-not-found} or 400 {@code invalid-request}
      */
-    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller) {
+    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
+                                       Set<String> included) {
         Optional<SnapshotKey> known;
         try {
-            known = resolveIn(fhirVersion, catalog.current(), caller);
+            known = resolveIn(fhirVersion, catalog.current(), caller, included);
         } catch (ProblemException e) {
             return Future.failedFuture(e);
         }
@@ -93,18 +101,32 @@ public record IgReference(String name, String version) {
         }
         return catalog.refreshOnMiss()
                 .recover(err -> Future.succeededFuture(catalog.current()))
-                .compose(view -> resolveIn(fhirVersion, view, caller)
-                        .map(Future::succeededFuture)
-                        .orElseGet(() -> Future.failedFuture(ProblemException.igNotStored(label()))));
+                .compose(view -> {
+                    try {
+                        return resolveIn(fhirVersion, view, caller, included)
+                                .map(Future::succeededFuture)
+                                .orElseGet(() -> Future.failedFuture(ProblemException.igNotStored(label())));
+                    } catch (ProblemException e) {
+                        return Future.failedFuture(e);
+                    }
+                });
     }
 
     /**
+     * @param included the {@code name#version} keys included for {@code fhirVersion}
      * @return empty when the package (or, versionless, any version of it) is not in {@code view} or {@code caller}
      * may not use it
-     * @throws ProblemException 400 when the resolved package does not support {@code fhirVersion}
+     * @throws ProblemException 400 when the resolved package does not support {@code fhirVersion}, or (spec 007
+     *                          FR-022) when it is stored and usable but not included
      */
-    Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller) {
-        String concrete = version != null ? version : view.highestVisible(name, caller).orElse(null);
+    Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller,
+                                    Set<String> included) {
+        String concrete = version;
+        if (concrete == null) {
+            concrete = highestIncluded(view, caller, included)
+                    .or(() -> view.highestVisible(name, caller))
+                    .orElse(null);
+        }
         if (concrete == null) {
             return Optional.empty();
         }
@@ -117,6 +139,21 @@ public record IgReference(String name, String version) {
                     + view.declaredFhirVersions(key).stream().map(Enum::name).sorted().collect(Collectors.joining(", "))
                     + ", not " + fhirVersion.name());
         }
+        if (!included.contains(key)) {
+            throw ProblemException.igNotIncluded(key, fhirVersion);
+        }
         return Optional.of(SnapshotKey.of(fhirVersion, key));
+    }
+
+    /** The highest included version of {@code name} that is stored and {@code caller} may use. */
+    private Optional<String> highestIncluded(PackageCatalogView view, Caller caller, Set<String> included) {
+        String prefix = name + "#";
+        List<String> versions = new ArrayList<>();
+        for (String key : included) {
+            if (key.startsWith(prefix) && view.contains(key) && AccessPolicy.canUse(caller, view.access(key))) {
+                versions.add(key.substring(prefix.length()));
+            }
+        }
+        return PackageVersionComparator.max(versions);
     }
 }

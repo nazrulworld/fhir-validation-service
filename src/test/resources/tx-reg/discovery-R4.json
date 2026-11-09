@@ -1,0 +1,333 @@
+{
+    "last-update": "2026-11-09T17:16:03.770Z",
+    "master-url": "https://fhir.github.io/ig-registry/tx-servers.json",
+    "results": [
+        {
+            "server-name": "tx.fhir.org",
+            "server-code": "tx.fhir.org",
+            "registry-name": "HL7 Terminology Services",
+            "registry-code": "hl7",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-tx-servers.json",
+            "url": "http://tx.fhir.org/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 554646,
+            "systems": 3371,
+            "authoritative": [
+                "http://hl7.org/*",
+                "http://terminology.hl7.org/*"
+            ],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Australia Server",
+            "server-code": "hl7-au-test",
+            "registry-name": "HL7 Australia Terminology Services",
+            "registry-code": "hl7-au",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-au-tx-servers.json",
+            "url": "https://tx.hl7.org.au/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 548197,
+            "systems": 3516,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/32506021000036107*",
+                "http://www.abs.gov.au/ausstats/abs@.nsf/mf/1220.0|*",
+                "http://www.abs.gov.au/ausstats/abs@.nsf/mf/1292.0|*",
+                "https://healthterminologies.gov.au/fhir/CodeSystem*",
+                "https://www.humanservices.gov.au/organisations/health-professionals/enablers/air-vaccine-code-formats|*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/32506021000036107*",
+                "https://healthterminologies.gov.au/fhir/ValueSet*",
+                "https://www.rcpa.edu.au/fhir/ValueSet/*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "AEHRC Server",
+            "server-code": "aehrc-au-test",
+            "registry-name": "HL7 Australia Terminology Services",
+            "registry-code": "hl7-au",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-au-tx-servers.json",
+            "url": "https://tx.ontoserver.csiro.au/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 545042,
+            "systems": 3825,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/32506021000036107*",
+                "http://www.abs.gov.au/ausstats/abs@.nsf/mf/1220.0|*",
+                "http://www.abs.gov.au/ausstats/abs@.nsf/mf/1292.0|*",
+                "https://healthterminologies.gov.au/fhir/CodeSystem*",
+                "https://www.humanservices.gov.au/organisations/health-professionals/enablers/air-vaccine-code-formats|*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/32506021000036107*",
+                "https://healthterminologies.gov.au/fhir/ValueSet*",
+                "https://www.rcpa.edu.au/fhir/ValueSet/*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "Canada Health Infoway Terminology Server",
+            "server-code": "hl7-ca",
+            "registry-name": "HL7 Canada Terminology Services",
+            "registry-code": "hl7-ca",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-ca-tx-servers.json",
+            "url": "https://terminologystandardsservice.ca/tx/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 543662,
+            "systems": 606,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/20611000087101*",
+                "https://fhir.infoway-inforoute.ca/CodeSystem*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/20611000087101*",
+                "https://fhir.infoway-inforoute.ca/ValueSet*"
+            ],
+            "security": "api-key",
+            "token": true
+        },
+        {
+            "server-name": "Agence du Num\u00e9rique en Sant\u00e9 (ANS) Terminology Server",
+            "server-code": "ans-fr-tx",
+            "registry-name": "HL7 France Terminology Services",
+            "registry-code": "hl7-fr",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-fr-tx-servers.json",
+            "url": "https://smt.esante.gouv.fr/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 542254,
+            "systems": 721,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000315107*",
+                "https://mos.esante.gouv.fr/*",
+                "https://smt.esante.gouv.fr/*"
+            ],
+            "authoritative-valuesets": [
+                "https://mos.esante.gouv.fr*",
+                "https://smt.esante.gouv.fr*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "Federal Public Service Health, Food Chain Safety and Environment",
+            "server-code": "fps-be-tx",
+            "registry-name": "Federal Public Service Health, Food Chain and Environment Terminology Services",
+            "registry-code": "hl7-be",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-be-tx-servers.json",
+            "url": "https://178.104.103.200.sslip.io/tx/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 540370,
+            "systems": 3355,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000172109*"
+            ],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Europe Terminology Server",
+            "server-code": "hl7-eu",
+            "registry-name": "HL7 Europe Terminology Services",
+            "registry-code": "hl7-eu",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-eu-tx-servers.json",
+            "url": "http://tx.hl7europe.eu/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 537322,
+            "systems": 2570,
+            "authoritative": [
+                "http://hl7europe.org/fhir/terminology/ehdsi*"
+            ],
+            "authoritative-valuesets": [
+                "http://hl7europe.org/fhir/terminology/ehdsi/ValueSet*",
+                "http://standardterms.edqm.eu*",
+                "http://terminology.ehdsi.eu/ValueSet*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Switzerland Terminology Server",
+            "server-code": "hl7-ch",
+            "registry-name": "HL7 Switzerland Terminology Server",
+            "registry-code": "hl7-ch",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-ch-tx-servers.json",
+            "url": "https://tx.fhir.ch/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 533119,
+            "systems": 2646,
+            "authoritative": [
+                "http://fhir.ch/ig/ch-*",
+                "http://snomed.info/sct|http://snomed.info/sct/2011000195101*"
+            ],
+            "authoritative-valuesets": [
+                "http://fhir.ch/ig/ch-*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Nordics Terminology Server",
+            "server-code": "tx-nordics",
+            "registry-name": "HL7 Nordics Terminology Server",
+            "registry-code": "hl7-nordics",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-nordics-tx-servers.json",
+            "url": "https://tx-nordics.fhir.org/fhir/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 529685,
+            "systems": 2476,
+            "authoritative": [
+                "http://hl7.dk/fhir/core/CodeSystem/icd10-danish-extensions",
+                "http://npu-terminology.org",
+                "http://snomed.info/sct|http://snomed.info/sct/45991000052106*",
+                "http://snomed.info/sct|http://snomed.info/sct/51000202101*",
+                "http://snomed.info/sct|http://snomed.info/sct/554471000005108*",
+                "urn:oid:1.2.208.176.2.4",
+                "urn:oid:1.2.208.176.2.4.12"
+            ],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Germany Terminology Server",
+            "server-code": "hl7-de",
+            "registry-name": "HL7 Germany Terminology Server",
+            "registry-code": "hl7-de",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-de-tx-servers.json",
+            "url": "https://tx.fhir.de/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 526191,
+            "systems": 2179,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000274103*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/11000274103*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Czech Republic Terminology Server",
+            "server-code": "hl7-cz",
+            "registry-name": "HL7 Czech Republic Terminology Services",
+            "registry-code": "hl7-cz",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-cz-tx-servers.json",
+            "url": "https://tx.hl7.cz/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 522509,
+            "systems": 2644,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000279109*",
+                "https://hl7.cz/terminology/CodeSystem*",
+                "https://ncez.mzcr.cz/nclp/CodeSystem*",
+                "https://ncez.mzcr.cz/terminology/CodeSystem*",
+                "https://sukl.cz/terminology/CodeSystem*",
+                "https://uzis.cz/terminology/CodeSystem*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/11000279109*",
+                "https://hl7.cz/terminology/ValueSet*",
+                "https://ncez.mzcr.cz/nclp/ValueSet*",
+                "https://ncez.mzcr.cz/terminology/ValueSet*",
+                "https://sukl.cz/terminology/ValueSet*",
+                "https://uzis.cz/terminology/ValueSet*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "HL7 Korea Terminology Server",
+            "server-code": "hl7-kr",
+            "registry-name": "HL7 Korea Terminology Services",
+            "registry-code": "hl7-kr",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-kr-tx-servers.json",
+            "url": "https://tx.healthall.co.kr/fhir/r4",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 480629,
+            "systems": 2803,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/11000267109*",
+                "http://www.hl7korea.or.kr/*",
+                "https://www.hl7korea.or.kr/*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/11000267109*",
+                "http://www.hl7korea.or.kr/*",
+                "https://www.hl7korea.or.kr/*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "New Zealand Health Terminology Service (NZHTS)",
+            "server-code": "nzhts",
+            "registry-name": "HL7 New Zealand / New Zealand Health Terminology Service",
+            "registry-code": "hl7-nz",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/hl7-nz-tx-servers.json",
+            "url": "https://nzhts.digital.health.nz/fhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 439556,
+            "systems": 313,
+            "authoritative": [
+                "http://snomed.info/sct|http://snomed.info/sct/21000210109*"
+            ],
+            "authoritative-valuesets": [
+                "http://snomed.info/sct/21000210109*"
+            ],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "Taiwan CATY Terminology Server",
+            "server-code": "tw-caty",
+            "registry-name": "Taiwan KYHealth CATY Terminology Serve",
+            "registry-code": "tw-caty",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/tw-caty-tx-servers.json",
+            "url": "https://ts.caty.hdata.tw",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 437025,
+            "systems": 87,
+            "authoritative": [],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        },
+        {
+            "server-name": "Taiwan NHI Terminology Server(CATY)",
+            "server-code": "tw-nhi-caty",
+            "registry-name": "Taiwan KYHealth CATY Terminology Serve",
+            "registry-code": "tw-caty",
+            "registry-url": "https://raw.githubusercontent.com/FHIR/ig-registry/master/tw-caty-tx-servers.json",
+            "url": "https://fhir.nhi.gov.tw/nhi_tsfhir",
+            "fhirVersion": "4.0.1",
+            "error": null,
+            "last-success": 435356,
+            "systems": 42,
+            "authoritative": [],
+            "authoritative-valuesets": [],
+            "security": "open",
+            "open": true
+        }
+    ]
+}

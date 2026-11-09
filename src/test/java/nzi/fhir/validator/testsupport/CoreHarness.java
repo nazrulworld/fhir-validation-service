@@ -36,6 +36,7 @@ public final class CoreHarness {
         HealthService health = new HealthService(vertx, pool, config.healthDbStalenessMs());
         ServiceRegistry services = ServiceRegistry.create(vertx, config, pool, executors, health);
         return DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
+                .compose(v -> services.startTerminology())
                 .compose(v -> services.configSync().start())
                 .map(v -> new CoreHarness(services));
     }

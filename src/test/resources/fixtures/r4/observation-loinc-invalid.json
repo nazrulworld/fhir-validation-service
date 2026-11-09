@@ -1,0 +1,20 @@
+{
+  "resourceType": "Observation",
+  "id": "loinc-invalid",
+  "status": "final",
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "9999-9",
+        "display": "Not a LOINC code"
+      }
+    ]
+  },
+  "valueQuantity": {
+    "value": 72,
+    "unit": "beats/minute",
+    "system": "http://unitsofmeasure.org",
+    "code": "/min"
+  }
+}

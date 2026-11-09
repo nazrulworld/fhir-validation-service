@@ -6,6 +6,14 @@
 
 **Status**: Implemented (released in v3.0.0, 2026-11-06; convergence fixes in #47 and #48)
 
+**Amended by spec 007** (`specs/007-terminology-routing/spec.md`, 4.0.0): validation never builds a context. FR-010 to
+FR-012 and FR-014 to FR-016 (on-demand preparation, its wait, admission and eviction) are **superseded** by spec 007
+FR-021; a stored IG that isn't included is refused with 400. The on-demand parts of FR-017 (424 and 503 for a failed
+on-demand preparation) and FR-018 ("being prepared" state of an on-demand context) are superseded too; their
+included-context parts still apply. FR-013 is amended by spec 007 FR-020: a context in terminology mode `server` or
+`ecosystem` may wait on a terminology server, bounded by the per-call timeout and the request's terminology budget.
+`FV_IG_MAX_ON_DEMAND` and `FV_IG_BUILD_WAIT_MS` are retired (spec 007 FR-025).
+
 **Input**: User description: "@var/specify_instruction_ig_scoped_validation.md". In summary: let a client choose,
 on each validation request, the one Implementation Guide (`name#version`) the resource is validated against, the
 way `validator_cli.jar -version 4.0.1 -ig hl7.fhir.us.core#6.1.0` does. Replace the single shared validator

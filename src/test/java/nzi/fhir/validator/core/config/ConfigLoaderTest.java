@@ -68,23 +68,64 @@ class ConfigLoaderTest {
     }
 
     @Test
-    void igContextSettingsHaveBoundedDefaults() {
+    void retiredOnDemandSettingsWarnAndAreIgnored() {
+        // Spec 007 FR-025: the on-demand settings are gone; a deployment that still sets them starts with one WARN per
+        // variable instead of failing, whatever the value (even one the 3.x bounds refused).
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_IG_MAX_ON_DEMAND", "0",
+                    "FV_IG_BUILD_WAIT_MS", "30000"));
+            assertNotNull(cfg);
+            java.util.List<String> warnings = logs.from(ConfigLoader.class.getName()).stream()
+                    .filter(e -> e.level() == org.apache.logging.log4j.Level.WARN).map(e -> e.message())
+                    // LogCapture sees one event per attached logger config; count distinct messages.
+                    .distinct().toList();
+            assertEquals(1, warnings.stream().filter(m -> m.contains("FV_IG_MAX_ON_DEMAND")).count(), warnings.toString());
+            assertEquals(1, warnings.stream().filter(m -> m.contains("FV_IG_BUILD_WAIT_MS")).count(), warnings.toString());
+            assertTrue(warnings.stream().allMatch(m -> m.contains("deprecated") && m.contains("ignored")), warnings.toString());
+        }
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
+            assertTrue(logs.from(ConfigLoader.class.getName()).stream().noneMatch(e -> e.message().contains("deprecated")));
+        }
+    }
+
+    @Test
+    void terminologySettingsHaveBoundedDefaults() {
         ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
-        assertEquals(4, cfg.igMaxOnDemand());
-        // min(10 s, requestTimeout / 2) with the default 60 s request timeout
-        assertEquals(10_000, cfg.igBuildWaitMs());
-        ApplicationConfig shortTimeout = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_HTTP_REQUEST_TIMEOUT_MS", "6000"));
-        assertEquals(3_000, shortTimeout.igBuildWaitMs());
-        ApplicationConfig set = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_IG_MAX_ON_DEMAND", "12",
-                "FV_IG_BUILD_WAIT_MS", "30000"));
-        assertEquals(12, set.igMaxOnDemand());
-        assertEquals(30_000, set.igBuildWaitMs());
-        for (String[] bad : new String[][]{{"FV_IG_MAX_ON_DEMAND", "0"}, {"FV_IG_MAX_ON_DEMAND", "65"},
-                {"FV_IG_BUILD_WAIT_MS", "999"}, {"FV_IG_BUILD_WAIT_MS", "120001"}}) {
+        assertEquals(21_600_000L, cfg.txRegistryRefreshMs());
+        assertEquals(5_000L, cfg.txTimeoutMs());
+        assertEquals(10_000L, cfg.txRequestBudgetMs());
+        assertEquals(5_000, cfg.txCacheSize());
+        assertEquals(600_000L, cfg.txCacheTtlMs());
+        assertEquals(10, cfg.txMaxConnectionsPerServer());
+        ApplicationConfig set = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_TX_REGISTRY_REFRESH_MS", "300000",
+                "FV_TX_TIMEOUT_MS", "500", "FV_TX_REQUEST_BUDGET_MS", "120000", "FV_TX_CACHE_SIZE", "100",
+                "FV_TX_CACHE_TTL_MS", "86400000", "FV_TX_MAX_CONNECTIONS_PER_SERVER", "200"));
+        assertEquals(300_000L, set.txRegistryRefreshMs());
+        assertEquals(500L, set.txTimeoutMs());
+        assertEquals(120_000L, set.txRequestBudgetMs());
+        assertEquals(100, set.txCacheSize());
+        assertEquals(86_400_000L, set.txCacheTtlMs());
+        assertEquals(200, set.txMaxConnectionsPerServer());
+        for (String[] bad : new String[][]{
+                {"FV_TX_REGISTRY_REFRESH_MS", "299999"}, {"FV_TX_REGISTRY_REFRESH_MS", "604800001"},
+                {"FV_TX_TIMEOUT_MS", "499"}, {"FV_TX_TIMEOUT_MS", "60001"},
+                {"FV_TX_REQUEST_BUDGET_MS", "999"}, {"FV_TX_REQUEST_BUDGET_MS", "120001"},
+                {"FV_TX_CACHE_SIZE", "99"}, {"FV_TX_CACHE_SIZE", "1000001"},
+                {"FV_TX_CACHE_TTL_MS", "9999"}, {"FV_TX_CACHE_TTL_MS", "86400001"},
+                {"FV_TX_MAX_CONNECTIONS_PER_SERVER", "0"}, {"FV_TX_MAX_CONNECTIONS_PER_SERVER", "201"}}) {
             IllegalStateException e = assertThrows(IllegalStateException.class,
                     () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", bad[0], bad[1])));
             assertTrue(e.getMessage().contains(bad[0]), e.getMessage());
         }
+    }
+
+    @Test
+    void theRegistryAddressIsNotConfigurable() {
+        // Spec 007 FR-006: no variable can change the official registry address.
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_TX_REGISTRY", "http://evil.example",
+                "FV_TX_REGISTRY_URL", "http://evil.example"));
+        assertFalse(cfg.toString().contains("evil.example"));
     }
 
     @Test

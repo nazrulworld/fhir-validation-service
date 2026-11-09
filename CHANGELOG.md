@@ -6,6 +6,44 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.0.0] - unreleased
+
+Terminology servers per included IG (spec 007), and validation served only by included IG contexts. **Breaking** for
+clients that name an IG package that isn't included; see [docs/upgrade-4.0.md](docs/upgrade-4.0.md). Migration V9 runs
+automatically; every existing included context keeps mode `none` and behaves as before.
+
+### Changed (breaking)
+
+- **Validation never builds an IG context** (FR-021 to FR-025). `?ig=` naming a stored version that isn't included for
+  the FHIR version answers **400 `invalid-request`** ("IG package name#version is not included for R4; include it
+  first"); before, it was built on demand. `ig=name` / `name#latest` resolve to the highest **included** version the
+  caller may use. Excluding an IG drops its context; naming it is refused until it is included again. Packages that
+  aren't stored, or that the caller may not use, still answer 404.
+- **`FV_IG_MAX_ON_DEMAND` and `FV_IG_BUILD_WAIT_MS` are retired.** Set, they log a deprecation warning and are ignored.
+  The `on-demand` kind is gone from `/health` and `fv_validator_contexts`.
+
+### Added
+
+- **Terminology setting per included IG** (FR-001 to FR-005): mode `none` (default), `server` (one server, like
+  `validator_cli.jar -tx`) or `ecosystem` (each code system routed to the server the official HL7 registry names for
+  it; an optional own server replaces tx.fhir.org). Set it with `POST /{version}/include-ig` (`terminology`) and change
+  it with `PATCH /{version}/include-ig` (the owner or the system organisation); every instance rebuilds the context.
+- **Only official, open registry servers are contacted** (FR-006 to FR-012a): the list comes from
+  `https://ecosystem.hl7.org/tx-reg` (fixed), is refreshed every `FV_TX_REGISTRY_REFRESH_MS` and kept in the database;
+  servers must be listed for the FHIR version, healthy and open, on public addresses, and redirects are never followed.
+  An unlisted server is refused with 400 `tx-server-not-registered`; with no list yet, only the built-in
+  `tx.fhir.org` R4/R5 servers are allowed (503 `tx-registry-unavailable` otherwise).
+- **Codes are checked locally first** (FR-013); only the rest reach a server, which only checks codes: definitions
+  still come from packages only. The IG's own value sets (and code systems, as `tx-resource`) go with the request.
+- **A failing server never fails validation** (FR-019, FR-019a): each call is bounded by `FV_TX_TIMEOUT_MS`, each
+  request by `FV_TX_REQUEST_BUDGET_MS` of terminology time, and a failing server is skipped for a minute. Codes that
+  could not be checked are reported as warnings; the answer is still 200.
+- Configuration: `FV_TX_REGISTRY_REFRESH_MS`, `FV_TX_TIMEOUT_MS`, `FV_TX_REQUEST_BUDGET_MS`, `FV_TX_CACHE_SIZE`,
+  `FV_TX_CACHE_TTL_MS`, `FV_TX_MAX_CONNECTIONS_PER_SERVER`.
+- `/health` `terminology` section; metrics `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total`,
+  `fv_tx_allowlist_age_seconds`.
+- Dependency: `ca.uhn.hapi.fhir:hapi-fhir-client` (same HAPI version), needed by HAPI's remote terminology client.
+
 ## [3.2.1] - 2026-11-08
 
 Fixes to IG package version resolution after 3.2.0 (spec 006 FR-019 to FR-024). No contract shape or status code

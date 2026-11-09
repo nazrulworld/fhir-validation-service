@@ -240,8 +240,9 @@ class ProfileResolutionIT extends BaseTestContainer {
                         assertTrue(ar.failed(), "another stored package's profile is not visible through " + MAIN);
                         assertUnknown(ar.cause(), onlyInB);
                     });
-                    // Named as the ig, the stored (never included) package is built on demand (spec 004 FR-006).
-                    return validateIn("res.notincluded#1.0.0", TestPackages.minimalPatient(), onlyInB);
+                    // Named as the ig once it is included (spec 007 FR-021), its own profiles apply.
+                    return core.services().igPackageService().include(SupportedFhirVersion.R4, "res.notincluded", "1.0.0")
+                            .compose(v -> validateIn("res.notincluded#1.0.0", TestPackages.minimalPatient(), onlyInB));
                 })
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertTrue(TestPackages.hasError(o, "birthDate"));
@@ -286,7 +287,8 @@ class ProfileResolutionIT extends BaseTestContainer {
     void profileFromADependencyOfTheChosenIgIsApplied(VertxTestContext ctx) {
         core.services().igPackageService()
                 .registerIg(TestPackages.npmPackage("res.dependent", "1.0.0", java.util.Map.of("res.main", "1.0.0"), List.of()), false)
-                .compose(pkg -> validateIn("res.dependent#1.0.0", TestPackages.minimalPatient(), P))
+                .compose(pkg -> core.services().igPackageService().include(SupportedFhirVersion.R4, "res.dependent", "1.0.0"))
+                .compose(v -> validateIn("res.dependent#1.0.0", TestPackages.minimalPatient(), P))
                 .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
                     assertTrue(TestPackages.hasError(o, "birthDate"));
                     assertEquals(List.of(P), o.appliedProfiles());
@@ -337,6 +339,7 @@ class ProfileResolutionIT extends BaseTestContainer {
                         TestPackages.requiredPatientElements(x, "birthDate").put("version", "1.0.0")), false)
                 .compose(v -> ig.registerIg(TestPackages.npmPackage("dup.b", "1.0.0", java.util.Map.of("dup.a", "1.0.0"),
                         List.of(TestPackages.requiredPatientElements(x, "gender").put("version", "2.0.0"))), false))
+                .compose(v -> ig.include(SupportedFhirVersion.R4, "dup.b", "1.0.0"))
                 .compose(v -> CoreHarness.start(vertxB, connectOptions()));
         second.<io.vertx.core.CompositeFuture>compose(b -> Future.all(
                                 validateIn("dup.b#1.0.0", TestPackages.minimalPatient(), x),

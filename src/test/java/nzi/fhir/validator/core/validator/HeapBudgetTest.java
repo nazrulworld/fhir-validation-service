@@ -56,48 +56,43 @@ class HeapBudgetTest {
     }
 
     @Test
-    void reserveEvictsUntilTheBuildFits() {
-        AtomicLong used = new AtomicLong(1400 * MB);
-        AtomicInteger evictions = new AtomicInteger();
-        HeapBudget budget = new HeapBudget(() -> 1536 * MB, used::get, () -> { });
-        // Each eviction frees 200 MB; a 50 MB build needs about 364 MB and 136 MB are free.
-        long reserved = budget.reserve(50 * MB, () -> {
-            evictions.incrementAndGet();
-            used.addAndGet(-200 * MB);
-            return true;
-        });
-        assertEquals(2, evictions.get());
-        assertEquals(HeapBudget.estimate(50 * MB), reserved);
-    }
-
-    @Test
-    void nothingLeftToEvictIsInsufficientCapacity() {
+    void aBuildThatDoesNotFitNextToWhatIsLiveIsRefused() {
         HeapBudget budget = new HeapBudget(() -> 1536 * MB, () -> 1400 * MB, () -> { });
-        AtomicInteger asked = new AtomicInteger();
-        HeapBudget.InsufficientCapacityException e = assertThrows(HeapBudget.InsufficientCapacityException.class,
-                () -> budget.reserve(50 * MB, () -> asked.incrementAndGet() < 0));
-        assertEquals(1, asked.get());
+        HeapBudget.InsufficientHeapException e = assertThrows(HeapBudget.InsufficientHeapException.class,
+                () -> budget.reserve(50 * MB));
+        assertFalse(e instanceof HeapBudget.NeverFitsException);
         assertTrue(e.getMessage().contains("MB of heap"), e.getMessage());
     }
 
     @Test
-    void largerThanTheWholeHeapNeverFitsAndEvictsNothing() {
+    void largerThanTheWholeHeapNeverFits() {
         HeapBudget budget = new HeapBudget(() -> 1024 * MB, () -> 100 * MB, () -> { });
-        AtomicInteger asked = new AtomicInteger();
-        assertThrows(HeapBudget.NeverFitsException.class, () -> budget.reserve(200 * MB, () -> asked.incrementAndGet() > 0));
-        assertEquals(0, asked.get(), "no context is dropped for a build that can never fit");
+        assertThrows(HeapBudget.NeverFitsException.class, () -> budget.reserve(200 * MB));
     }
 
+    /** Spec 007: nothing is evictable any more, so an include that doesn't fit is 413. */
     @Test
-    void includeAdmissionEvictsOnDemandContextsFirst() {
-        AtomicLong used = new AtomicLong(1400 * MB);
-        HeapBudget budget = new HeapBudget(() -> 1536 * MB, used::get, () -> { });
-        budget.admitInclude(50 * MB, () -> {
-            used.set(500 * MB);
-            return true;
-        });
+    void includeAdmissionRefusesWhatDoesNotFit() {
+        new HeapBudget(() -> 1536 * MB, () -> 500 * MB, () -> { }).admitInclude(50 * MB);
         ProblemException e = assertThrows(ProblemException.class, () -> new HeapBudget(() -> 1536 * MB, () -> 1400 * MB, () -> { })
-                .admitInclude(50 * MB, HeapBudget.Evictor.NONE));
+                .admitInclude(50 * MB));
         assertEquals(413, e.status());
+    }
+
+    /** Spec 007 SC-009: a terminology context's code cache adds cacheSize × 1 KB (about 5 MB at the default 5000). */
+    @Test
+    void aTerminologyContextAddsItsCodeCacheBound() {
+        var none = nzi.fhir.validator.core.terminology.TerminologySettings.NONE;
+        var server = new nzi.fhir.validator.core.terminology.TerminologySettings(
+                nzi.fhir.validator.core.terminology.TerminologyMode.SERVER, "http://tx.fhir.org/r4");
+        var ecosystem = new nzi.fhir.validator.core.terminology.TerminologySettings(
+                nzi.fhir.validator.core.terminology.TerminologyMode.ECOSYSTEM, null);
+        long base = HeapBudget.estimate(10 * MB, none, 5_000);
+        assertEquals(HeapBudget.estimate(10 * MB), base, "mode none adds nothing");
+        assertEquals(base + 5_000 * 1024L, HeapBudget.estimate(10 * MB, server, 5_000));
+        assertEquals(base + 5_000 * 1024L, HeapBudget.estimate(10 * MB, ecosystem, 5_000));
+        assertTrue(5_000 * 1024L <= 5 * MB, "within the SC-009 per-context bound");
+        HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> 0, () -> { });
+        assertEquals(HeapBudget.estimate(10 * MB) + 5_000 * 1024L, budget.reserve(10 * MB, 5_000 * 1024L));
     }
 }

@@ -6,6 +6,11 @@
 
 **Status**: Implemented (released in v2.0.0, 2026-11-04)
 
+**Amended by spec 007** (`specs/007-terminology-routing/spec.md`, 4.0.0): SC-002 ("0 outbound network requests while
+serving validation") holds for contexts in terminology mode `none` and for the base context. A context in mode
+`server` or `ecosystem` may call allowlisted terminology servers, bounded per call and per request (spec 007 FR-019,
+FR-019a, FR-020). FR-002 is unchanged: profiles, value sets and code systems are still never fetched from the network.
+
 **Input**: User description: "@var/specify_instruction.md". In summary: make profile handling behave like
 the official HL7 FHIR Validator CLI used with `-ig` and `-profile`. Requested profiles are resolved only
 from StructureDefinitions already available through the IG packages included for that FHIR version, and

@@ -1,0 +1,26 @@
+{
+    "formatVersion": "1",
+    "registry-url": "https://example.org/tx-servers.json",
+    "authoritative": [
+        {
+            "server-name": "{{BASE2}}",
+            "url": "{{BASE2}}",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "test",
+            "content": "complete"
+        }
+    ],
+    "candidates": [
+        {
+            "server-name": "{{BASE}}",
+            "url": "{{BASE}}",
+            "fhirVersion": "4.0.1",
+            "security": "open",
+            "open": true,
+            "access_info": "test",
+            "content": "complete"
+        }
+    ]
+}

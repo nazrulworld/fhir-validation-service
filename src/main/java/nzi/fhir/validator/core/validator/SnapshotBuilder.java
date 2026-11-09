@@ -2,6 +2,7 @@ package nzi.fhir.validator.core.validator;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
+import ca.uhn.fhir.context.support.IValidationSupport;
 import ca.uhn.fhir.validation.FhirValidator;
 import io.vertx.core.Future;
 import nzi.fhir.validator.core.concurrency.AsyncLimiter;
@@ -12,6 +13,14 @@ import nzi.fhir.validator.core.npm.PackageCache;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
 import nzi.fhir.validator.core.service.CustomNpmPackageValidationSupport;
 import nzi.fhir.validator.core.service.FhirContextLoader;
+import nzi.fhir.validator.core.terminology.DeniedTerminologySupport;
+import nzi.fhir.validator.core.terminology.RoutedTerminologySupport;
+import nzi.fhir.validator.core.terminology.ServerTerminologySupport;
+import nzi.fhir.validator.core.terminology.TerminologyBudget;
+import nzi.fhir.validator.core.terminology.TerminologyMode;
+import nzi.fhir.validator.core.terminology.TerminologyOnlySupport;
+import nzi.fhir.validator.core.terminology.TerminologyServices;
+import nzi.fhir.validator.core.terminology.TerminologySettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
@@ -58,6 +67,7 @@ public class SnapshotBuilder {
     private final PackageCache cache;
     private final AsyncLimiter builds;
     private final HeapBudget heap;
+    private final TerminologyServices txServices;
     private volatile Runnable buildHook;
 
     /**
@@ -66,6 +76,16 @@ public class SnapshotBuilder {
      */
     public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache, int packageWorkers,
                            HeapBudget heap) {
+        this(executors, packages, cache, packageWorkers, heap, TerminologyServices.OFFLINE);
+    }
+
+    /**
+     * @param txServices shared terminology infrastructure (spec 007); {@link TerminologyServices#OFFLINE} keeps every
+     *                   context offline
+     */
+    public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache, int packageWorkers,
+                           HeapBudget heap, TerminologyServices txServices) {
+        this.txServices = txServices;
         this.executors = executors;
         this.packages = packages;
         this.cache = cache;
@@ -79,21 +99,18 @@ public class SnapshotBuilder {
     }
 
     public Future<ValidatorSnapshot> build(SupportedFhirVersion version, long revision, List<String> resolvedPackages) {
-        return build(SnapshotKey.base(version), revision, new ResolvedContext(resolvedPackages, java.util.Map.of()),
-                HeapBudget.Evictor.NONE);
+        return build(SnapshotKey.base(version), revision, new ResolvedContext(resolvedPackages, java.util.Map.of()));
     }
 
     /**
      * Builds the validator context {@code key} from exactly {@code resolved.packages()} (spec 004: one IG and its
-     * dependencies, or nothing for the base context).
-     *
-     * @param evictor frees memory by dropping on-demand contexts when the build does not fit (research R7)
+     * dependencies, or nothing for the base context), with its terminology setting (spec 007).
      */
-    public Future<ValidatorSnapshot> build(SnapshotKey key, long revision, ResolvedContext resolved, HeapBudget.Evictor evictor) {
-        return builds.run(() -> buildNow(key, revision, resolved, evictor));
+    public Future<ValidatorSnapshot> build(SnapshotKey key, long revision, ResolvedContext resolved) {
+        return builds.run(() -> buildNow(key, revision, resolved));
     }
 
-    private Future<ValidatorSnapshot> buildNow(SnapshotKey key, long revision, ResolvedContext resolved, HeapBudget.Evictor evictor) {
+    private Future<ValidatorSnapshot> buildNow(SnapshotKey key, long revision, ResolvedContext resolved) {
         SupportedFhirVersion version = key.fhirVersion();
         List<String> resolvedPackages = resolved.packages();
         List<Future<Loaded>> loaded = new ArrayList<>();
@@ -116,12 +133,20 @@ public class SnapshotBuilder {
             }
             // A build that cannot fit fails like any other (version STALE, reason in /health) instead of ending the
             // process with an OutOfMemoryError.
-            long reserved = heap.reserve(expandedBytes, evictor);
+            long reserved = heap.reserve(expandedBytes,
+                    HeapBudget.terminologyCacheBytes(resolved.terminology(), txServices.chainCache().getCacheSize()));
             try {
-                ValidatorSnapshot snapshot = assemble(key, revision, resolvedPackages, resolved.hashes(), npmPackages);
+                ValidatorSnapshot snapshot = assemble(key, revision, resolvedPackages, resolved.hashes(), npmPackages,
+                        resolved.terminology(), txServices);
                 snapshot.setPackageArchiveBytes(archiveBytes);
-                // Warm caches so the first real request does not pay HAPI's lazy initialisation.
-                snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
+                // Warm caches so the first real request does not pay HAPI's lazy initialisation. A budget of 0: the
+                // warm-up never calls a terminology server (spec 007 research R5).
+                TerminologyBudget.open(0);
+                try {
+                    snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
+                } finally {
+                    TerminologyBudget.close();
+                }
                 logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", key, revision,
                         npmPackages.size(), System.currentTimeMillis() - started);
                 return snapshot;
@@ -176,18 +201,85 @@ public class SnapshotBuilder {
 
     static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
                                       java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages) {
+        return assemble(key, revision, resolvedPackages, hashes, npmPackages, TerminologySettings.NONE,
+                TerminologyServices.OFFLINE);
+    }
+
+    /**
+     * Builds the chain for one context (spec 007). Order matters: the chain asks modules in turn, so everything that
+     * can be decided from packages and built-in code systems is answered locally, and only the rest can reach a
+     * terminology server (FR-013, research R4). A terminology module only answers terminology operations; it never
+     * supplies StructureDefinitions, ValueSets or CodeSystems, so definitions still come from packages only (FR-014,
+     * spec 003 FR-002).
+     *
+     * @param tx         the context's terminology setting; {@link TerminologyMode#NONE} keeps it fully offline
+     * @param txServices shared terminology infrastructure (allowlist, registry resolver, client pool, code cache)
+     */
+    static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
+                                      java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages,
+                                      TerminologySettings tx, TerminologyServices txServices) {
         SupportedFhirVersion version = key.fhirVersion();
         FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
-        ValidationSupportChain chain = new ValidationSupportChain(
-                new DefaultProfileValidationSupport(ctx),
-                new CustomNpmPackageValidationSupport(ctx, npmPackages),
-                new InMemoryTerminologyServerValidationSupport(ctx),
-                new CommonCodeSystemsTerminologyService(ctx),
-                new SnapshotGeneratingValidationSupport(ctx));
+        List<IValidationSupport> modules = new ArrayList<>();
+        modules.add(new DefaultProfileValidationSupport(ctx));
+        modules.add(new CustomNpmPackageValidationSupport(ctx, npmPackages));
+        // Spec 007 research R4 (verified by TerminologyRoutingIT): the terminology module goes before the in-memory
+        // one, which otherwise answers a value set it can't expand (an IG value set including LOINC) with an error
+        // before a server is asked. It declines every code system decided locally (complete package CodeSystems and
+        // the common code systems), so those are still checked in-process (FR-013).
+        switch (tx.mode()) {
+            case NONE -> {
+                // Spec 003 behaviour: no terminology server, zero outbound requests.
+            }
+            case SERVER -> modules.add(new TerminologyOnlySupport(serverModule(ctx, version, key, tx, txServices)));
+            case ECOSYSTEM -> modules.add(new TerminologyOnlySupport(ecosystemModule(ctx, version, key, tx, txServices)));
+        }
+        modules.add(new InMemoryTerminologyServerValidationSupport(ctx));
+        modules.add(new CommonCodeSystemsTerminologyService(ctx));
+        modules.add(new SnapshotGeneratingValidationSupport(ctx));
+        // Code results are cached per snapshot: a different server means a different setting, a new snapshot and a
+        // fresh cache, so answers are never shared between servers (FR-018).
+        ValidationSupportChain chain = new ValidationSupportChain(txServices.chainCache(), modules);
         // FR-002 / research R1: no IValidatorResourceFetcher is set, so the validator can never fetch a profile,
         // reference or other conformance resource over the network. Do not add one.
         FhirValidator validator = ctx.newValidator();
         validator.registerValidatorModule(new FhirInstanceValidator(chain));
-        return new ValidatorSnapshot(key, revision, resolvedPackages, hashes, ctx, validator, chain);
+        ValidatorSnapshot snapshot = new ValidatorSnapshot(key, revision, resolvedPackages, hashes, ctx, validator, chain);
+        snapshot.setTerminology(tx, txServices.requestBudgetMs());
+        return snapshot;
+    }
+
+    /**
+     * The module of a context in mode {@code ecosystem} (spec 007 FR-016). Its own server, when set, is checked again
+     * like a {@code server} setting; one that is no longer allowed fails closed for terminology only.
+     */
+    private static RoutedTerminologySupport ecosystemModule(FhirContext ctx, SupportedFhirVersion version, SnapshotKey key,
+                                                            TerminologySettings tx, TerminologyServices txServices) {
+        if (tx.server() != null) {
+            try {
+                txServices.allowlist().current().require(tx.server(), version);
+            } catch (nzi.fhir.validator.web.ProblemException e) {
+                logger.warn("Terminology server of context {} is not on the allowlist; its codes are not checked by a server", key);
+                return new DeniedTerminologySupport(ctx, version);
+            }
+        }
+        return new nzi.fhir.validator.core.terminology.EcosystemRoutingTerminologySupport(ctx, version, tx.server(),
+                txServices.resolver(), txServices.clients());
+    }
+
+    /**
+     * The module of a context in mode {@code server} (spec 007 FR-015). The server is checked against the allowlist
+     * again here, because the allowlist may have changed since the setting was saved (FR-010 b); a server that is no
+     * longer allowed makes the build fail closed for terminology only (US4 scenario 4).
+     */
+    private static RoutedTerminologySupport serverModule(FhirContext ctx, SupportedFhirVersion version, SnapshotKey key,
+                                                         TerminologySettings tx, TerminologyServices txServices) {
+        try {
+            txServices.allowlist().current().require(tx.server(), version);
+            return new ServerTerminologySupport(ctx, version, txServices.clients(), tx.server());
+        } catch (nzi.fhir.validator.web.ProblemException e) {
+            logger.warn("Terminology server of context {} is not on the allowlist; its codes are not checked by a server", key);
+            return new DeniedTerminologySupport(ctx, version);
+        }
     }
 }

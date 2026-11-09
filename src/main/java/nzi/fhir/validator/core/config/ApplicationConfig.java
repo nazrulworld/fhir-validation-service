@@ -89,11 +89,23 @@ public final class ApplicationConfig {
 
     public long syncPollIntervalMs() { return section("sync").getLong("pollIntervalMs"); }
 
-    /** Most on-demand validator contexts one instance keeps ({@code FV_IG_MAX_ON_DEMAND}, spec 004 FR-015). */
-    public int igMaxOnDemand() { return section("ig").getInteger("maxOnDemand"); }
+    /** How often the terminology registry's server list is fetched ({@code FV_TX_REGISTRY_REFRESH_MS}, spec 007 FR-007). */
+    public long txRegistryRefreshMs() { return section("tx").getLong("registryRefreshMs"); }
 
-    /** How long a request waits for an on-demand context build ({@code FV_IG_BUILD_WAIT_MS}, spec 004 FR-012). */
-    public long igBuildWaitMs() { return section("ig").getLong("buildWaitMs"); }
+    /** Connect and read timeout of one terminology call ({@code FV_TX_TIMEOUT_MS}, spec 007 FR-019). */
+    public long txTimeoutMs() { return section("tx").getLong("timeoutMs"); }
+
+    /** Terminology time budget of one validation request ({@code FV_TX_REQUEST_BUDGET_MS}, spec 007 FR-019a). */
+    public long txRequestBudgetMs() { return section("tx").getLong("requestBudgetMs"); }
+
+    /** Code results cached per context ({@code FV_TX_CACHE_SIZE}, spec 007 FR-018). */
+    public int txCacheSize() { return section("tx").getInteger("cacheSize"); }
+
+    /** Lifetime of a cached code result ({@code FV_TX_CACHE_TTL_MS}, spec 007 FR-018). */
+    public long txCacheTtlMs() { return section("tx").getLong("cacheTtlMs"); }
+
+    /** Pooled connections per terminology server ({@code FV_TX_MAX_CONNECTIONS_PER_SERVER}). */
+    public int txMaxConnectionsPerServer() { return section("tx").getInteger("maxConnectionsPerServer"); }
 
     public boolean anonymousValidate() { return section("auth").getBoolean("anonymousValidate"); }
     public String bootstrapAdminKey() { return section("auth").getString("bootstrapAdminKey"); }

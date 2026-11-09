@@ -186,7 +186,7 @@ class IncludeExcludeIT extends BaseTestContainer {
     }
 
     @Test
-    void excludeDemotesToOnDemandAndTheIgStaysNameable(VertxTestContext ctx) {
+    void excludeDropsTheContextAndTheIgIsRefusedUntilIncludedAgain(VertxTestContext ctx) {
         ValidatorRegistry reg = services().validatorRegistry();
         include("inc.p", "1.0.0")
                 .compose(r -> include("inc.p", "2.0.0"))
@@ -197,14 +197,17 @@ class IncludeExcludeIT extends BaseTestContainer {
                         JsonObject body = r.bodyAsJsonObject();
                         assertEquals("inc.p#1.0.0", body.getString("excluded"));
                         assertEquals(new JsonArray().add("inc.p#2.0.0"), body.getJsonArray("included"));
-                        assertEquals(ValidatorRegistry.Kind.ON_DEMAND, reg.kind(key("inc.p#1.0.0")));
+                        assertNull(reg.kind(key("inc.p#1.0.0")), "spec 007 FR-021: dropped, not kept on demand");
                         assertEquals(ValidatorRegistry.Kind.PINNED, reg.kind(key("inc.p#2.0.0")), "other keys unaffected");
-                        assertTrue(app.bootstrap().services().healthService().readiness().encode().contains("\"on-demand\""));
+                        assertFalse(app.bootstrap().services().healthService().readiness().encode().contains("\"on-demand\""));
                     });
-                    return validate("inc.p#1.0.0", P1);
+                    return validate("inc.p#1.0.0", P1).transform(Future::succeededFuture);
                 })
-                .onComplete(ctx.succeeding(o -> ctx.verify(() -> {
-                    assertTrue(TestPackages.hasError(o, "birthDate"), "an excluded IG can still be named in ig");
+                .onComplete(ctx.succeeding(ar -> ctx.verify(() -> {
+                    nzi.fhir.validator.web.ProblemException p = assertInstanceOf(nzi.fhir.validator.web.ProblemException.class,
+                            ar.cause());
+                    assertEquals(400, p.status(), "an excluded IG is refused until it is included again");
+                    assertTrue(p.detail().contains("not included"), p.detail());
                     ctx.completeNow();
                 })));
     }
@@ -229,7 +232,7 @@ class IncludeExcludeIT extends BaseTestContainer {
      * request for it is refused with 424 like any other on-demand request for that package.
      */
     @Test
-    void excludedIgWithAMissingDependencyIsDroppedAndThen424(VertxTestContext ctx) {
+    void excludedIgWithAMissingDependencyIsDroppedAndThenRefusedAsNotIncluded(VertxTestContext ctx) {
         ValidatorRegistry reg = services().validatorRegistry();
         TestPackages.storePackage(services(), TestPackages.npmPackage("inc.needsdep", "1.0.0",
                         java.util.Map.of("inc.absent", "1.0.0"), List.of(TestPackages.requiredPatientElements(P1, "birthDate"))))
@@ -250,9 +253,10 @@ class IncludeExcludeIT extends BaseTestContainer {
                     return validate("inc.needsdep#1.0.0", P1).transform(Future::succeededFuture);
                 })
                 .onComplete(ctx.succeeding(ar -> ctx.verify(() -> {
+                    // Spec 007 FR-021: nothing is built on demand, so the missing dependency no longer matters here.
                     nzi.fhir.validator.web.ProblemException p = assertInstanceOf(nzi.fhir.validator.web.ProblemException.class, ar.cause());
-                    assertEquals(424, p.status());
-                    assertEquals("dependency-not-found", p.type());
+                    assertEquals(400, p.status());
+                    assertTrue(p.detail().contains("not included"), p.detail());
                     ctx.completeNow();
                 })));
     }

@@ -90,6 +90,7 @@ class ObservabilityIT extends BaseTestContainer {
                             "fv_package_cache_misses_total \\d")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
+                    assertFalse(body.contains("loinc") || body.contains("snomed"), "no client codes or systems in labels");
                     // Custom profile registration is gone in 2.0.0 (spec 003, SC-008).
                     assertFalse(body.contains("fv_profile_count"), "fv_profile_count must no longer be exposed");
                     ctx.completeNow();
@@ -137,23 +138,20 @@ class ObservabilityIT extends BaseTestContainer {
                 })));
     }
 
-    /** Spec 004 FR-033: context gauges, builds, evictions, lookups and the package_not_found outcome are exported. */
+    /** Spec 004 FR-033: context gauges, builds, lookups and the package_not_found outcome are exported (pinned only, spec 007). */
     @Test
     void contextMetricsAreExposed(VertxTestContext ctx) {
         var services = app.bootstrap().services();
-        nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+        nzi.fhir.validator.testsupport.TestPackages.includePackage(services,
                         nzi.fhir.validator.testsupport.TestPackages.profilePackage("obs.ig", "1.0.0",
                                 nzi.fhir.validator.testsupport.TestPackages.requiredPatientElements(
-                                        "http://example.org/fhir/StructureDefinition/obs", "birthDate")))
+                                        "http://example.org/fhir/StructureDefinition/obs", "birthDate")), "obs.ig", "1.0.0")
                 .compose(v -> validateIg("obs.ig#1.0.0"))
                 .compose(r -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     return validateIg("obs.ig#1.0.0");
                 })
-                .compose(r -> {
-                    assertTrue(services.validatorRegistry().evictOne(null), "evict the on-demand context");
-                    return validateIg("not.stored#1.0.0");
-                })
+                .compose(r -> validateIg("not.stored#1.0.0"))
                 .compose(r -> {
                     assertEquals(404, r.statusCode());
                     return app.client().get(app.port(), "localhost", "/metrics").send();
@@ -162,13 +160,12 @@ class ObservabilityIT extends BaseTestContainer {
                     String body = r.bodyAsString();
                     for (String metric : List.of(
                             "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"base\",?\\} 1\\.0",
-                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"on-demand\",?\\} 0\\.0",
-                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"pinned\",?\\} 0\\.0",
-                            "fv_validator_context_builds_total\\{fhir_version=\"R4\",kind=\"on-demand\",outcome=\"success\",?\\} 1\\.0",
-                            "fv_validator_context_evictions_total\\{fhir_version=\"R4\",reason=\"memory\",?\\} 1\\.0",
-                            "fv_validator_context_lookups_total\\{fhir_version=\"R4\",result=\"built\",?\\} 1\\.0",
+                            "fv_validator_contexts\\{fhir_version=\"R4\",kind=\"pinned\",?\\} 1\\.0",
+                            "fv_validator_context_builds_total\\{fhir_version=\"R4\",kind=\"pinned\",outcome=\"success\",?\\} 1\\.0",
                             "fv_validator_context_lookups_total\\{fhir_version=\"R4\",result=\"hit\",?\\} [1-9]",
-                            "fv_validations_total\\{outcome=\"package_not_found\",version=\"R4\",?\\} 1\\.0")) {
+                            "fv_validations_total\\{outcome=\"package_not_found\",version=\"R4\",?\\} 1\\.0",
+                            // Spec 007 FR-026: the allowlist age per version and source (the test JVM never fetches).
+                            "fv_tx_allowlist_age_seconds\\{fhir_version=\"R4\",source=\"built-in\",?\\} NaN")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
                     ctx.completeNow();
@@ -181,86 +178,4 @@ class ObservabilityIT extends BaseTestContainer {
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
     }
 
-    /**
-     * Convergence T068 (Constitution VII): log lines of an on-demand build carry the id of the request that started it,
-     * also when the build waited in the build queue behind another request's build (default: one build at a time).
-     */
-    @Test
-    void onDemandBuildLogLinesCarryTheStartingRequestsId(VertxTestContext ctx) {
-        var services = app.bootstrap().services();
-        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
-        java.util.concurrent.atomic.AtomicBoolean first = new java.util.concurrent.atomic.AtomicBoolean(true);
-        Future.all(store("obs.first"), store("obs.queued"))
-                .compose(v -> {
-                    logs = LogCapture.start();
-                    services.snapshotBuilder().setBuildHook(() -> {
-                        if (first.getAndSet(false)) {
-                            try {
-                                release.await(30, java.util.concurrent.TimeUnit.SECONDS);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-                    });
-                    Future<io.vertx.ext.web.client.HttpResponse<Buffer>> a = validateIg("obs.first#1.0.0", "req-first-build");
-                    Future<io.vertx.ext.web.client.HttpResponse<Buffer>> b =
-                            metricsVertx.timer(300).compose(t -> validateIg("obs.queued#1.0.0", "req-queued-build"));
-                    metricsVertx.setTimer(800, t -> release.countDown());
-                    return Future.all(a, b);
-                })
-                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
-                    services.snapshotBuilder().setBuildHook(null);
-                    for (int i = 0; i < 2; i++) {
-                        assertEquals(200, ((io.vertx.ext.web.client.HttpResponse<?>) all.resultAt(i)).statusCode());
-                    }
-                    List<String> firstIds = builtLogIds("R4:obs.first#1.0.0");
-                    List<String> queuedIds = builtLogIds("R4:obs.queued#1.0.0");
-                    assertFalse(firstIds.isEmpty() || queuedIds.isEmpty(), firstIds + " / " + queuedIds);
-                    assertTrue(firstIds.stream().allMatch("req-first-build"::equals), firstIds.toString());
-                    assertTrue(queuedIds.stream().allMatch("req-queued-build"::equals),
-                            "the queued build logs the request that started it, not the one whose build finished first: " + queuedIds);
-                    ctx.completeNow();
-                })));
-    }
-
-    private Future<Void> store(String name) {
-        return nzi.fhir.validator.testsupport.TestPackages.storePackage(app.bootstrap().services(),
-                nzi.fhir.validator.testsupport.TestPackages.profilePackage(name, "1.0.0",
-                        nzi.fhir.validator.testsupport.TestPackages.requiredPatientElements(
-                                "http://example.org/fhir/StructureDefinition/" + name, "birthDate")));
-    }
-
-    private List<String> builtLogIds(String key) {
-        return logs.events().stream().filter(e -> e.message().startsWith("Built validator for " + key + " "))
-                .map(LogCapture.Captured::requestId).toList();
-    }
-
-    private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> validateIg(String ig, String requestId) {
-        return app.client().post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", ig)
-                .putHeader("X-Request-Id", requestId).putHeader("Content-Type", "application/json").timeout(30_000)
-                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
-    }
-
-    /**
-     * T068 follow-up: when the ig lookup misses the in-memory catalog and waits for a refresh from PostgreSQL, the
-     * build and the validation still log the request's id (the continuation must return to the request's context).
-     */
-    @Test
-    void buildAfterACatalogMissKeepsTheRequestId(VertxTestContext ctx) {
-        var services = app.bootstrap().services();
-        // Store without updating this instance's catalog view, so the request takes the lookup-miss path.
-        services.igPackageService().cacheManager().setStoreListener(null);
-        store("obs.missed")
-                .compose(v -> {
-                    logs = LogCapture.start();
-                    return validateIg("obs.missed#1.0.0", "req-after-miss");
-                })
-                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
-                    assertEquals(200, r.statusCode(), r.bodyAsString());
-                    List<String> ids = builtLogIds("R4:obs.missed#1.0.0");
-                    assertFalse(ids.isEmpty(), "the build was logged");
-                    assertTrue(ids.stream().allMatch("req-after-miss"::equals), "build log ids: " + ids);
-                    ctx.completeNow();
-                })));
-    }
 }

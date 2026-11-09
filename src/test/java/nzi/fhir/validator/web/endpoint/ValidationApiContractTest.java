@@ -116,6 +116,35 @@ class ValidationApiContractTest extends BaseTestContainer {
                 })));
     }
 
+    /** Spec 007 FR-022 (contracts §1): a stored IG that isn't included is a 400 problem, whatever Accept asks for. */
+    @Test
+    void aStoredButNotIncludedIgIs400(VertxTestContext ctx) {
+        nzi.fhir.validator.testsupport.TestPackages.storePackage(app.bootstrap().services(),
+                        nzi.fhir.validator.testsupport.TestPackages.profilePackage("contract.notincl", "1.0.0",
+                                nzi.fhir.validator.testsupport.TestPackages.requiredPatientElements(
+                                        "http://example.org/fhir/StructureDefinition/contract-notincl", "birthDate")))
+                .compose(v -> post("/R4/validate").addQueryParam("ig", "contract.notincl#1.0.0")
+                        .putHeader("Content-Type", "application/fhir+json").putHeader("Accept", "application/fhir+xml")
+                        .sendBuffer(Buffer.buffer(PATIENT)))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject body = assertProblem(r, 400, "invalid-request");
+                    assertEquals("IG package contract.notincl#1.0.0 is not included for R4; include it first "
+                            + "(POST /R4/include-ig)", body.getString("detail"));
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Spec 007 (contracts §1, §4): the contract no longer promises on-demand contexts. */
+    @Test
+    void theContractNoLongerDescribesOnDemandContexts() throws java.io.IOException {
+        try (java.io.InputStream in = getClass().getResourceAsStream("/openapi.yaml")) {
+            String yaml = new String(java.util.Objects.requireNonNull(in).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            assertFalse(yaml.contains("built on demand"), "openapi.yaml still mentions on-demand builds");
+            assertFalse(yaml.contains("built on first use"));
+            assertTrue(yaml.contains("Validation requests naming it are refused with 400 invalid-request"));
+        }
+    }
+
     @Test
     void absentAcceptDefaultsToJson(VertxTestContext ctx) {
         validate("R4", "application/fhir+json", null, PATIENT)

@@ -324,6 +324,11 @@ public class PostgresPackageCacheManager {
                             if (change.invalid() != null) {
                                 return Future.failedFuture(new ProblemException(400, "invalid-request", change.invalid()));
                             }
+                            if (change.terminology().isPresent()) {
+                                // Spec 007: terminology belongs to an included context, not to a stored package.
+                                return Future.failedFuture(new ProblemException(400, "invalid-request",
+                                        "Unknown field 'terminology'"));
+                            }
                             return resolveTargetOrganisation(tx, change);
                         })
                         .compose(newOwner -> tx.preparedQuery("UPDATE " + TABLE + " SET owner = coalesce($3, owner), "

@@ -30,6 +30,8 @@ import java.util.Map;
  *     included IG, each resolved from the catalog view).</li>
  *     <li>{@code IG_ACCESS} (spec 005): re-reads that version's row and swaps the access of its included contexts;
  *     the included set is unchanged, so nothing is rebuilt.</li>
+ *     <li>{@code IG_TERMINOLOGY} (spec 007): re-reads that version's row; the context whose terminology setting changed
+ *     is rebuilt with it, the old one serving until the new one is ready.</li>
  *     <li>{@code PACKAGE}: refreshes the catalog view, invalidates contexts and cached packages whose content changed,
  *     then re-applies every version (a changed dependency set rebuilds the affected pinned contexts).</li>
  * </ul>
@@ -115,7 +117,7 @@ public class ConfigSync {
                             pinnedAccess.put(version, row.access());
                         }
                         PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.access();
-                        builds.add(registry.applyPinned(version, revision, resolveAll(included, view, access))
+                        builds.add(registry.applyPinned(version, revision, resolveAll(row, included, view, access))
                                 .recover(err -> Future.succeededFuture()));
                     }
                     return Future.join(builds).mapEmpty();
@@ -130,9 +132,19 @@ public class ConfigSync {
      * FR-024). The owner comes from the shared configuration, so every instance resolves the same context.
      */
     static Map<String, ResolvedContext> resolveAll(List<String> included, PackageCatalogView view, PinnedAccess access) {
+        return resolveAll(null, included, view, access);
+    }
+
+    /**
+     * As {@link #resolveAll(List, PackageCatalogView, PinnedAccess)}, with each context's terminology setting from
+     * {@code row} (spec 007 FR-004): it is part of what the context is built from, so a changed setting rebuilds it.
+     */
+    static Map<String, ResolvedContext> resolveAll(ConfigRevisionRepository.ConfigRow row, List<String> included,
+                                                   PackageCatalogView view, PinnedAccess access) {
         Map<String, ResolvedContext> contexts = new LinkedHashMap<>();
         for (String key : included) {
-            contexts.put(key, ResolvedContext.forKey(key, view, access));
+            ResolvedContext ctx = ResolvedContext.forKey(key, view, access);
+            contexts.put(key, row == null ? ctx : ctx.withTerminology(row.terminologyOf(key)));
         }
         return contexts;
     }
@@ -260,7 +272,8 @@ public class ConfigSync {
                     Future<PackageCatalogView> view = unknown
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
-                    return view.compose(v -> registry.applyPinned(version, row.revision(), resolveAll(row.included(), v, row.access())));
+                    return view.compose(v -> registry.applyPinned(version, row.revision(),
+                            resolveAll(row, row.included(), v, row.access())));
                 });
     }
 

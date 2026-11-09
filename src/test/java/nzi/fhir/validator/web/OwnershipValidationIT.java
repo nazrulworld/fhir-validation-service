@@ -73,10 +73,14 @@ class OwnershipValidationIT extends BaseTestContainer {
     private Future<Void> setUpData() {
         ServiceRegistry services = app.bootstrap().services();
         Pool pool = services.pool();
+        java.util.concurrent.atomic.AtomicReference<UUID> orgA = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<UUID> orgB = new java.util.concurrent.atomic.AtomicReference<>();
         return Future.all(TestPackages.createOrganisation(pool, "orga"), TestPackages.createOrganisation(pool, "orgb"))
                 .compose(cf -> {
                     UUID a = cf.resultAt(0);
                     UUID b = cf.resultAt(1);
+                    orgA.set(a);
+                    orgB.set(b);
                     return TestPackages.createKey(pool, a, "orga-val", "VALIDATE")
                             .compose(k -> {
                                 keyA = k;
@@ -103,7 +107,21 @@ class OwnershipValidationIT extends BaseTestContainer {
                             .compose(x -> TestPackages.setPackageAccess(pool, "own.fuser#1.0.0", a, true));
                 })
                 // The local store listener refreshes this instance's catalog; the access updates arrive by notification.
-                .compose(v -> services.configSync().syncCatalogNow());
+                .compose(v -> services.configSync().syncCatalogNow())
+                // Spec 007 FR-021: only included contexts can be named in ig. Each is included by an organisation that
+                // may use all its packages, with the sharing the tests expect.
+                .compose(v -> include(orgA.get(), "orga", "own.a", "1.0.0", false))
+                .compose(v -> include(orgB.get(), "orgb", "own.b", "1.0.0", true))
+                .compose(v -> include(orgA.get(), "orga", "own.p", "1.0.0", true))
+                .compose(v -> include(orgA.get(), "orga", "own.p", "2.0.0", false))
+                .compose(v -> include(orgB.get(), "orgb", "own.user", "1.0.0", true))
+                .compose(v -> include(orgA.get(), "orga", "own.fuser", "1.0.0", true));
+    }
+
+    private Future<Void> include(UUID org, String shortName, String name, String version, boolean shareable) {
+        return app.bootstrap().services().igPackageService().include(
+                nzi.fhir.validator.core.security.Caller.of(org, shortName, nzi.fhir.validator.core.security.ApiKeyRepository.Role.ADMIN),
+                nzi.fhir.validator.core.enums.SupportedFhirVersion.R4, name, version, java.util.Optional.of(shareable)).mapEmpty();
     }
 
     private Future<Void> store(String name, String version, UUID owner, boolean shareable) {
@@ -273,11 +291,11 @@ class OwnershipValidationIT extends BaseTestContainer {
     }
 
     /**
-     * Spec 006 FR-024: an on-demand context resolves a floating dependency as the IG package's owner, so another
-     * organisation's private highest match is never chosen and the request isn't refused with 424.
+     * Spec 006 FR-024: an included context resolves a floating dependency as its owner, so another organisation's
+     * private highest match is never chosen and the request isn't refused with 424.
      */
     @Test
-    void aFloatingDependencySkipsAPrivateVersionOnDemand(VertxTestContext ctx) {
+    void aFloatingDependencySkipsAPrivateVersion(VertxTestContext ctx) {
         Future.all(validate("R4", "own.fuser#1.0.0", keyA), validate("R4", "own.fuser#1.0.0", keyB))
                 .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
                     HttpResponse<Buffer> a = cf.resultAt(0);
@@ -285,9 +303,9 @@ class OwnershipValidationIT extends BaseTestContainer {
                     assertEquals(200, a.statusCode(), a.bodyAsString());
                     assertEquals(200, b.statusCode(), b.bodyAsString());
                     assertEquals("own.fuser#1.0.0", a.getHeader(ValidationApi.VALIDATION_CONTEXT_HEADER));
-                    // An on-demand context's packages: the same resolution its build and the access check use.
-                    java.util.List<String> built = nzi.fhir.validator.core.validator.ResolvedContext.of("own.fuser#1.0.0",
-                            app.bootstrap().services().configSync().catalog().current()).packages();
+                    java.util.List<String> built = app.bootstrap().services().validatorRegistry().peekResolvedPackages(
+                            nzi.fhir.validator.core.validator.SnapshotKey.of(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4,
+                                    "own.fuser#1.0.0")).orElseThrow();
                     assertTrue(built.contains("own.fdep#1.0.3") && !built.contains("own.fdep#1.0.5"), built.toString());
                     ctx.completeNow();
                 })));

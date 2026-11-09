@@ -4,6 +4,7 @@ import nzi.fhir.validator.core.npm.DependencyResolver;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.AccessPolicy;
+import nzi.fhir.validator.core.terminology.TerminologySettings;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,27 +18,41 @@ import java.util.UUID;
  *
  * @param packages sorted {@code name#version} list; empty for the base context
  * @param hashes   content hash per package, where one is recorded
- * @param missing  required dependencies that are not stored (skipped from {@code packages}); an on-demand context
- *                 with missing dependencies is refused with 424 (FR-017), an included one builds without them, with
- *                 a warning, as include always has
+ * @param missing  required dependencies that are not stored (skipped from {@code packages}); found at include time,
+ *                 when the included context builds without them, with a warning, as include always has (validation
+ *                 never builds a context since spec 007)
+ * @param terminology the context's terminology setting (spec 007 FR-004): part of what the context is built from, so
+ *                    a changed setting rebuilds it; {@link TerminologySettings#NONE} for the base context
  */
-public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing) {
+public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing,
+                              TerminologySettings terminology) {
     public static final ResolvedContext EMPTY = new ResolvedContext(List.of(), Map.of());
 
     public ResolvedContext {
         packages = List.copyOf(packages);
         hashes = Map.copyOf(hashes);
         missing = List.copyOf(missing);
+        terminology = terminology == null ? TerminologySettings.NONE : terminology;
+    }
+
+    public ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing) {
+        this(packages, hashes, missing, TerminologySettings.NONE);
     }
 
     public ResolvedContext(List<String> packages, Map<String, byte[]> hashes) {
         this(packages, hashes, List.of());
     }
 
+    /** The same packages with terminology setting {@code settings}. */
+    public ResolvedContext withTerminology(TerminologySettings settings) {
+        return new ResolvedContext(packages, hashes, missing, settings);
+    }
+
     /**
      * The context of {@code igPackage} as its build resolves it (spec 006 FR-024): an included context as its owner in
-     * {@code pinned}, any other (on-demand) context as the IG package's owner. Every place that needs a context's
-     * packages without its snapshot uses this, so it matches the build.
+     * {@code pinned}. A key that isn't included (only possible in tests and in the moment an exclude is applied) is
+     * resolved as the IG package's owner. Every place that needs a context's packages without its snapshot uses this,
+     * so it matches the build.
      */
     public static ResolvedContext forKey(String igPackage, PackageCatalogView view, PinnedAccess pinned) {
         Access context = pinned == null || igPackage == null ? null : pinned.get(igPackage);
@@ -45,7 +60,7 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
     }
 
     /**
-     * The context of an on-demand IG package: resolved as the package's owner (spec 006 FR-024).
+     * The context of an IG package resolved as the package's owner (spec 006 FR-024).
      *
      * @param igPackage a concrete {@code name#version}, or {@code null} for the base context
      */
@@ -91,9 +106,13 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
         return new ResolvedContext(resolved, hashes, missing);
     }
 
-    /** Same packages with the same content (hashes compared by value). */
+    /**
+     * Same packages with the same content (hashes compared by value) and the same terminology setting: a context
+     * whose setting changed must be rebuilt (spec 007 FR-004, research R12).
+     */
     public boolean sameAs(ResolvedContext other) {
-        if (other == null || !packages.equals(other.packages) || !hashes.keySet().equals(other.hashes.keySet())) {
+        if (other == null || !packages.equals(other.packages) || !hashes.keySet().equals(other.hashes.keySet())
+                || !terminology.equals(other.terminology)) {
             return false;
         }
         for (Map.Entry<String, byte[]> e : hashes.entrySet()) {
