@@ -40,27 +40,27 @@ java -jar target/fhir-validation-service-*.jar &
 
 1. **Allowlist loaded:**
    ```bash
-   curl -s localhost:8080/health -H "Authorization: Bearer $KEY" | jq .terminology
+   curl -s localhost:8880/health -H "Authorization: Bearer $KEY" | jq .terminology
    ```
    Expect `R4.source = "registry"`, with `servers` > 0.
 
 2. **Unlisted server refused:**
    ```bash
-   curl -s -XPOST localhost:8080/R4/include-ig -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+   curl -s -XPOST localhost:8880/R4/validator -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
      -d '{"igPackageId":"hl7.fhir.uv.ips","igPackageVersion":"2.0.0","terminology":{"mode":"server","server":"http://10.0.0.5/fhir"}}'
    ```
    Expect 400 `tx-server-not-registered`.
 
 3. **Include with ecosystem routing:**
    ```bash
-   curl -s -XPOST localhost:8080/R4/include-ig -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+   curl -s -XPOST localhost:8880/R4/validator -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
      -d '{"igPackageId":"hl7.fhir.uv.ips","igPackageVersion":"2.0.0","terminology":{"mode":"ecosystem"}}' | jq .terminology
    ```
    Expect `{"mode":"ecosystem"}`.
 
 4. **Invalid LOINC code:** validate an Observation with LOINC code `9999-9` against the IG.
    ```bash
-   curl -s -XPOST 'localhost:8080/R4/validate?ig=hl7.fhir.uv.ips%232.0.0' -H 'Content-Type: application/fhir+json' \
+   curl -s -XPOST 'localhost:8880/R4/validate?ig=hl7.fhir.uv.ips%232.0.0' -H 'Content-Type: application/fhir+json' \
      -d @src/test/resources/fixtures/r4/observation-bad-loinc.json | jq '.issue[] | select(.severity=="error")'
    ```
    Expect an error naming the unknown LOINC code. Compare it with
@@ -72,13 +72,13 @@ java -jar target/fhir-validation-service-*.jar &
 
 6. **Not-included IG refused:**
    ```bash
-   curl -s -XPOST 'localhost:8080/R4/validate?ig=hl7.fhir.uv.ips%231.1.0' ...
+   curl -s -XPOST 'localhost:8880/R4/validate?ig=hl7.fhir.uv.ips%231.1.0' ...
    ```
    With 1.1.0 stored but not included, expect 400 `invalid-request` "…is not included for R4…".
 
 7. **Back to offline:**
    ```bash
-   curl -s -XPATCH 'localhost:8080/R4/include-ig?ig=hl7.fhir.uv.ips%232.0.0' -H "Authorization: Bearer $KEY" \
+   curl -s -XPATCH 'localhost:8880/R4/validator?ig=hl7.fhir.uv.ips%232.0.0' -H "Authorization: Bearer $KEY" \
      -H 'Content-Type: application/json' -d '{"terminology":{"mode":"none"}}'
    ```
    Then re-validate: the LOINC code is reported as not checked by a server, and `fv_tx_calls_total` doesn't move.
