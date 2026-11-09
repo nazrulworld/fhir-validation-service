@@ -104,7 +104,7 @@ class EventLoopResponsivenessIT extends BaseTestContainer {
                 .sendMultipartForm(MultipartForm.create().binaryFileUpload("file", "us-core.tgz", usCore.toString(), "application/gzip"))
                 .compose(upload -> {
                     ctx.verify(() -> assertEquals(200, upload.statusCode(), upload.bodyAsString()));
-                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig"))
+                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator"))
                             .putHeader("Content-Type", "application/json")
                             .sendJsonObject(new JsonObject().put("igPackageId", "hl7.fhir.us.core").put("igPackageVersion", "7.0.0"));
                 })

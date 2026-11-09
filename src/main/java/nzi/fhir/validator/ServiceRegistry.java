@@ -31,6 +31,7 @@ import nzi.fhir.validator.core.validator.HeapBudget;
 import nzi.fhir.validator.core.validator.SnapshotBuilder;
 import nzi.fhir.validator.core.validator.ValidatorRegistry;
 import nzi.fhir.validator.web.endpoint.ValidationApi;
+import nzi.fhir.validator.web.endpoint.ValidatorApi;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -50,6 +51,7 @@ public final class ServiceRegistry {
     private final ConfigSync configSync;
     private final FhirValidationService validationService;
     private final ValidationApi validationApi;
+    private final ValidatorApi validatorApi;
     private final ApiKeyRepository apiKeys;
     private final OrganisationRepository organisations;
     private TxRegistry txRegistry;
@@ -81,7 +83,8 @@ public final class ServiceRegistry {
         this.apiKeys = new ApiKeyRepository(pool);
         this.organisations = new OrganisationRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
-        this.validationApi = new ValidationApi(validationService, igPackageService);
+        this.validationApi = new ValidationApi(validationService);
+        this.validatorApi = new ValidatorApi(igPackageService);
     }
 
     public static ServiceRegistry create(Vertx vertx, ApplicationConfig config, Pool pool, Executors executors,
@@ -218,6 +221,11 @@ public final class ServiceRegistry {
 
     public FhirValidationService validationService() {
         return validationService;
+    }
+
+    /** The validator context endpoints, {@code /{version}/validator} (4.0.0). */
+    public ValidatorApi validatorApi() {
+        return validatorApi;
     }
 
     public ValidationApi validationApi() {

@@ -311,7 +311,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
                     assertTrue(base.bodyAsJsonObject().containsKey(field), field);
                 }
                 // Spec 007 FR-021: an IG is named in validation only once it is included.
-                var include = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/R4/include-ig"))
+                var include = join(nzi.fhir.validator.testsupport.AppHarness.asAdmin(client.post(app.port(), "localhost", "/R4/validator"))
                         .sendJsonObject(new io.vertx.core.json.JsonObject().put("igPackageId", "upgrade.ig").put("igPackageVersion", "1.0.0")));
                 assertEquals(200, include.statusCode(), include.bodyAsString());
                 for (String field : List.of("status", "fhirVersion", "key", "revision", "included", "resolved", "warnings")) {

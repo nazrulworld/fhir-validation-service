@@ -55,6 +55,7 @@ public class HttpVerticle extends AbstractVerticle {
                     routerBuilder.rootHandler(new AdminAdmissionHandler(services.adminAdmission()));
 
                     services.validationApi().includeRoutes(routerBuilder);
+                    services.validatorApi().includeRoutes(routerBuilder);
                     new IgPackageApi(services.igPackageService(), services.fetcher()).includeRoutes(routerBuilder);
                     new HealthApi(routerBuilder, vertx, services.healthService());
                     new MetricsApi(routerBuilder, services.metrics());

@@ -24,7 +24,7 @@ import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * HTTP contract of {@code /{version}/validate} and {@code /{version}/include-ig} (FR-017 to FR-021, SC-005): header
+ * HTTP contract of {@code /{version}/validate} and {@code /{version}/validator} (FR-017 to FR-021, SC-005): header
  * variants, status mapping, error shape, and every request answered promptly.
  */
 @ExtendWith(VertxExtension.class)
@@ -129,7 +129,7 @@ class ValidationApiContractTest extends BaseTestContainer {
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     JsonObject body = assertProblem(r, 400, "invalid-request");
                     assertEquals("IG package contract.notincl#1.0.0 is not included for R4; include it first "
-                            + "(POST /R4/include-ig)", body.getString("detail"));
+                            + "(POST /R4/validator)", body.getString("detail"));
                     ctx.completeNow();
                 })));
     }
@@ -381,7 +381,7 @@ class ValidationApiContractTest extends BaseTestContainer {
     @Test
     void includeStoredIgSucceeds(VertxTestContext ctx) {
         app.bootstrap().services().igPackageService().registerIg(Fixtures.bytes(Fixtures.DK_CORE_IG))
-                .compose(p -> AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject()
+                .compose(p -> AppHarness.asAdmin(post("/R4/validator")).sendJsonObject(new JsonObject()
                         .put("igPackageId", "hl7.fhir.dk.core").put("igPackageVersion", "3.4.0")))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
@@ -400,7 +400,7 @@ class ValidationApiContractTest extends BaseTestContainer {
         app.bootstrap().services().igPackageService()
                 .registerIg(nzi.fhir.validator.testsupport.TestPackages.profilePackage("ct.inc", "1.2.3"))
                 .compose(p -> app.bootstrap().services().configSync().syncCatalogNow())
-                .compose(v -> AppHarness.asAdmin(post("/R4/include-ig").timeout(60_000)).sendJsonObject(new JsonObject()
+                .compose(v -> AppHarness.asAdmin(post("/R4/validator").timeout(60_000)).sendJsonObject(new JsonObject()
                         .put("igPackageId", "ct.inc").put("igPackageVersion", "1.2.x")))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
@@ -416,7 +416,7 @@ class ValidationApiContractTest extends BaseTestContainer {
     /** Spec 006 FR-002: a malformed series on include is a client error. */
     @Test
     void includeWithAMalformedSeriesIs400(VertxTestContext ctx) {
-        AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject()
+        AppHarness.asAdmin(post("/R4/validator")).sendJsonObject(new JsonObject()
                         .put("igPackageId", "ct.inc").put("igPackageVersion", "1.x.3"))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     JsonObject problem = assertProblem(r, 400, "invalid-request");
@@ -433,7 +433,7 @@ class ValidationApiContractTest extends BaseTestContainer {
                 .sendBuffer(Buffer.buffer(PATIENT))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     JsonObject problem = assertProblem(r, 400, "invalid-request");
-                    assertEquals("The ig parameter needs an exact version (for example the version reported by include-ig), "
+                    assertEquals("The ig parameter needs an exact version (for example the version reported when it was included), "
                             + "not a version series", problem.getString("detail"));
                     assertNull(r.getHeader("X-Validation-Context"));
                     ctx.completeNow();
@@ -442,7 +442,7 @@ class ValidationApiContractTest extends BaseTestContainer {
 
     @Test
     void includeOfUnstoredIgIs404(VertxTestContext ctx) {
-        AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject().put("igPackageId", "hl7.fhir.us.core").put("igPackageVersion", "3.1.1"))
+        AppHarness.asAdmin(post("/R4/validator")).sendJsonObject(new JsonObject().put("igPackageId", "hl7.fhir.us.core").put("igPackageVersion", "3.1.1"))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 404, "package-not-found");
                     ctx.completeNow();
@@ -451,7 +451,7 @@ class ValidationApiContractTest extends BaseTestContainer {
 
     @Test
     void includeWithoutPackageIdIs400(VertxTestContext ctx) {
-        AppHarness.asAdmin(post("/R4/include-ig")).sendJsonObject(new JsonObject().put("igVersion", "3.1.1"))
+        AppHarness.asAdmin(post("/R4/validator")).sendJsonObject(new JsonObject().put("igVersion", "3.1.1"))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 400, "invalid-request");
                     ctx.completeNow();
@@ -464,7 +464,7 @@ class ValidationApiContractTest extends BaseTestContainer {
         app.bootstrap().services().igPackageService()
                 .registerIg(nzi.fhir.validator.testsupport.TestPackages.npmPackage("contract.ig", "1.0.0", java.util.Map.of(),
                         java.util.List.of()), false)
-                .compose(p -> AppHarness.asAdmin(post("/R4/include-ig"))
+                .compose(p -> AppHarness.asAdmin(post("/R4/validator"))
                         .sendJsonObject(new JsonObject().put("igPackageId", "contract.ig").put("igPackageVersion", "1.0.0")))
                 .compose(included -> {
                     ctx.verify(() -> {
@@ -479,7 +479,7 @@ class ValidationApiContractTest extends BaseTestContainer {
                         assertEquals("system", body.getString("owner"), "the bootstrap key's organisation (spec 005 FR-006)");
                         assertEquals(Boolean.TRUE, body.getBoolean("shareable"), "shareable by default (FR-016)");
                     });
-                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000))
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/validator").timeout(5_000))
                             .addQueryParam("ig", "contract.ig#1.0.0").send();
                 })
                 .compose(excluded -> {
@@ -491,12 +491,12 @@ class ValidationApiContractTest extends BaseTestContainer {
                             assertTrue(body.containsKey(field), field);
                         }
                     });
-                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000))
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/validator").timeout(5_000))
                             .addQueryParam("ig", "contract.ig#1.0.0").send();
                 })
                 .compose(again -> {
                     ctx.verify(() -> assertProblem(again, 404, "package-not-found"));
-                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/include-ig").timeout(5_000)).send();
+                    return AppHarness.asAdmin(app.client().delete(app.port(), "localhost", "/R4/validator").timeout(5_000)).send();
                 })
                 .onComplete(ctx.succeeding(missingIg -> ctx.verify(() -> {
                     assertEquals(400, missingIg.statusCode(), "ig is required on DELETE: " + missingIg.bodyAsString());

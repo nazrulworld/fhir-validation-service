@@ -14,6 +14,10 @@ automatically; every existing included context keeps mode `none` and behaves as 
 
 ### Changed (breaking)
 
+- **`/{version}/include-ig` is renamed to `/{version}/validator`** (POST to include, PATCH to change sharing, owner or
+  terminology, DELETE to exclude). Bodies, query parameters (`?ig=name#version`) and responses are unchanged; the old
+  path answers 404. In `openapi.yaml` the operations are `validatorApiIncludeIg`, `validatorApiChangeIncludedIg` and
+  `validatorApiExcludeIg`. The endpoint handlers moved from `ValidationApi` to the new `ValidatorApi`.
 - **Validation never builds an IG context** (FR-021 to FR-025). `?ig=` naming a stored version that isn't included for
   the FHIR version answers **400 `invalid-request`** ("IG package name#version is not included for R4; include it
   first"); before, it was built on demand. `ig=name` / `name#latest` resolve to the highest **included** version the
@@ -26,8 +30,8 @@ automatically; every existing included context keeps mode `none` and behaves as 
 
 - **Terminology setting per included IG** (FR-001 to FR-005): mode `none` (default), `server` (one server, like
   `validator_cli.jar -tx`) or `ecosystem` (each code system routed to the server the official HL7 registry names for
-  it; an optional own server replaces tx.fhir.org). Set it with `POST /{version}/include-ig` (`terminology`) and change
-  it with `PATCH /{version}/include-ig` (the owner or the system organisation); every instance rebuilds the context.
+  it; an optional own server replaces tx.fhir.org). Set it with `POST /{version}/validator` (`terminology`) and change
+  it with `PATCH /{version}/validator` (the owner or the system organisation); every instance rebuilds the context.
 - **Only official, open registry servers are contacted** (FR-006 to FR-012a): the list comes from
   `https://ecosystem.hl7.org/tx-reg` (fixed), is refreshed every `FV_TX_REGISTRY_REFRESH_MS` and kept in the database;
   servers must be listed for the FHIR version, healthy and open, on public addresses, and redirects are never followed.

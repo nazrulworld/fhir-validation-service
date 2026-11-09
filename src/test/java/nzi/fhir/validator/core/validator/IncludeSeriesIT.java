@@ -27,7 +27,7 @@ import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@code POST /{version}/include-ig} with a version series (spec 006 US2, US4; FR-011 to FR-015, SC-004, SC-005).
+ * {@code POST /{version}/validator} with a version series (spec 006 US2, US4; FR-011 to FR-015, SC-004, SC-005).
  */
 @ExtendWith(VertxExtension.class)
 @Timeout(value = 180, timeUnit = TimeUnit.SECONDS)
@@ -80,7 +80,7 @@ class IncludeSeriesIT extends BaseTestContainer {
     }
 
     private Future<HttpResponse<Buffer>> include(String id, String version) {
-        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+        return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator").timeout(60_000))
                 .sendJsonObject(new JsonObject().put("igPackageId", id).put("igPackageVersion", version));
     }
 
@@ -176,7 +176,7 @@ class IncludeSeriesIT extends BaseTestContainer {
                         assertEquals("inc.p#1.2.0", igPackage(exact));
                         assertEquals("1.2.0", exact.bodyAsJsonObject().getString("requestedVersion"));
                     });
-                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig").timeout(60_000))
+                    return AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator").timeout(60_000))
                             .sendJsonObject(new JsonObject().put("igPackageId", "inc.p"));
                 })
                 .onComplete(ctx.succeeding(latest -> ctx.verify(() -> {

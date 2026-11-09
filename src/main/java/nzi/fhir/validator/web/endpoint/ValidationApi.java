@@ -2,7 +2,6 @@ package nzi.fhir.validator.web.endpoint;
 
 import ca.uhn.fhir.parser.DataFormatException;
 import io.vertx.core.Future;
-import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.openapi.RouterBuilder;
 import io.vertx.ext.web.validation.BodyProcessorException;
@@ -15,7 +14,6 @@ import nzi.fhir.validator.core.model.ValidationRequestOptions;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.service.FhirValidationService;
-import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.core.validator.IgReference;
 import nzi.fhir.validator.core.validator.OutcomeRenderer;
 import nzi.fhir.validator.web.ErrorResponder;
@@ -26,7 +24,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 
 /**
- * Validation and IG inclusion endpoints.
+ * The validation endpoint, {@code POST /{version}/validate}. The validator context endpoints (include, change,
+ * exclude) are in {@link ValidatorApi}.
  * <p>
  * Status mapping for validation (research R12): 200 for a completed validation, valid or not, with
  * {@code X-Validation-Context} naming the IG package used (or {@code base}); 400 {@code invalid-resource} for a body
@@ -42,11 +41,9 @@ import java.util.List;
 public class ValidationApi {
     private static final Logger logger = LogManager.getLogger(ValidationApi.class);
     private final FhirValidationService validationService;
-    private final IgPackageService igPackageService;
 
-    public ValidationApi(FhirValidationService validationService, IgPackageService igPackageService) {
+    public ValidationApi(FhirValidationService validationService) {
         this.validationService = validationService;
-        this.igPackageService = igPackageService;
     }
 
     /**
@@ -59,15 +56,6 @@ public class ValidationApi {
         routerBuilder.operation("validationApiValidate")
                 .handler(this::handleDoValidation)
                 .failureHandler(ValidationApi::handleValidateFailure);
-        // Method: POST, Path: "/:version/include-ig"
-        routerBuilder.operation("validationApiIncludeIg")
-                .handler(this::handleIncludeImplementationGuide);
-        // Method: DELETE, Path: "/:version/include-ig?ig=name#version"
-        routerBuilder.operation("validationApiExcludeIg")
-                .handler(this::handleExcludeImplementationGuide);
-        // Method: PATCH, Path: "/:version/include-ig?ig=name#version" (spec 005: sharing and ownership)
-        routerBuilder.operation("validationApiChangeIncludedIgAccess")
-                .handler(this::handleChangeIncludedIgAccess);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -195,87 +183,5 @@ public class ValidationApi {
             return;
         }
         ErrorResponder.fail(ctx, ctx.failure(), ctx.statusCode());
-    }
-
-    private void handleIncludeImplementationGuide(RoutingContext ctx) {
-        SupportedFhirVersion version;
-        JsonObject body;
-        try {
-            version = version(ctx);
-            body = ctx.body().asJsonObject();
-        } catch (ProblemException e) {
-            ErrorResponder.fail(ctx, e);
-            return;
-        } catch (RuntimeException e) {
-            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "The body must be a JSON object"));
-            return;
-        }
-        if (body == null || body.getString("igPackageId") == null) {
-            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "igPackageId is required"));
-            return;
-        }
-        Object shareable = body.getValue("shareable");
-        if (shareable != null && !(shareable instanceof Boolean)) {
-            ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
-            return;
-        }
-        // Spec 007 FR-003: the new context's terminology setting (contracts §2).
-        java.util.Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology;
-        try {
-            Object raw = body.getValue("terminology");
-            if (raw != null && !(raw instanceof JsonObject)) {
-                throw new ProblemException(400, "invalid-request", "terminology must be an object with a mode");
-            }
-            terminology = raw == null ? java.util.Optional.empty()
-                    : java.util.Optional.of(nzi.fhir.validator.core.terminology.TerminologySettings.parse((JsonObject) raw));
-        } catch (ProblemException e) {
-            ErrorResponder.fail(ctx, e);
-            return;
-        }
-        String requestedVersion = body.getString("igPackageVersion", "latest");
-        // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
-        ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
-                body.getString("igPackageId"), requestedVersion,
-                java.util.Optional.ofNullable((Boolean) shareable), terminology)
-                .map(json -> json.put("requestedVersion", requestedVersion)));
-    }
-
-    /** {@code PATCH /{version}/include-ig?ig=name#version} (spec 005 FR-019, contracts §4). */
-    private void handleChangeIncludedIgAccess(RoutingContext ctx) {
-        SupportedFhirVersion version;
-        List<String> values = ctx.queryParam("ig");
-        try {
-            version = version(ctx);
-            if (values == null || values.size() != 1) {
-                throw new ProblemException(400, "invalid-request", "Exactly one ig=name#version is required");
-            }
-        } catch (ProblemException e) {
-            ErrorResponder.fail(ctx, e);
-            return;
-        }
-        JsonObject body;
-        try {
-            body = ctx.body().asJsonObject();
-        } catch (RuntimeException e) {
-            body = null;
-        }
-        ErrorResponder.respond(ctx, igPackageService.changeSnapshotAccess(ApiKeyAuthHandler.caller(ctx), version,
-                values.get(0), nzi.fhir.validator.core.security.AccessChange.parse(body)));
-    }
-
-    /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/include-ig?ig=name#version}. */
-    private void handleExcludeImplementationGuide(RoutingContext ctx) {
-        SupportedFhirVersion version;
-        List<String> values = ctx.queryParam("ig");
-        try {
-            version = version(ctx);
-            if (values == null || values.size() != 1) {
-                throw new ProblemException(400, "invalid-request", "Exactly one ig=name#version is required");
-            }
-        } catch (ProblemException e) {
-            ErrorResponder.fail(ctx, e);
-            return;
-        }
-        ErrorResponder.respond(ctx, igPackageService.exclude(ApiKeyAuthHandler.caller(ctx), version, values.get(0)));
     }
 }

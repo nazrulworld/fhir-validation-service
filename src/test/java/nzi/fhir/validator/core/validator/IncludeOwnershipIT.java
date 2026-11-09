@@ -159,7 +159,7 @@ class IncludeOwnershipIT extends BaseTestContainer {
         service().include(a, R4, "inc.a", "1.0.0", Optional.empty())
                 .compose(r -> service().include(a, R4, "inc.a", "1.0.0", Optional.of(false)))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
-                    assertTrue(r.getJsonArray("warnings").contains("Already included; change sharing with PATCH /{version}/include-ig"),
+                    assertTrue(r.getJsonArray("warnings").contains("Already included; change sharing with PATCH /{version}/validator"),
                             r.encode());
                     assertTrue(r.getBoolean("shareable"), "nothing changed");
                     ctx.completeNow();

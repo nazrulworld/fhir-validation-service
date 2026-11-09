@@ -124,7 +124,7 @@ class ObservabilityIT extends BaseTestContainer {
         logs = LogCapture.start();
         String requestId = "obs-test-0001-request";
         app.bootstrap().services().igPackageService().registerIg(Fixtures.bytes(Fixtures.DK_CORE_IG))
-                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/include-ig"))
+                .compose(p -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator"))
                         .putHeader("X-Request-Id", requestId)
                         .sendJsonObject(new JsonObject().put("igPackageId", "hl7.fhir.dk.core").put("igPackageVersion", "3.4.0")))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {

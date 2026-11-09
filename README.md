@@ -58,7 +58,7 @@ openssl rand -hex 32
 ```
 
 Without `FV_ADMIN_API_KEY` the service still validates, but refuses every administrative call (IG upload, register,
-include-ig).
+and including, changing or excluding IGs at `/{version}/validator`).
 
 ### Option A: Docker Compose with the published image
 
@@ -354,13 +354,13 @@ curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us
 
 # Pre-build it for R4 on every instance. Other versions of the same package stay included.
 curl -H "$AUTH" -H 'Content-Type: application/json' \
-  --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/include-ig
+  --data '{"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"}' http://127.0.0.1:8880/R4/validator
 # A series here picks the newest *stored* match you may use, without contacting a registry, and pins that version.
 curl -H "$AUTH" -H 'Content-Type: application/json' \
-  --data '{"igPackageId":"hl7.fhir.us.core","igPackageVersion":"6.x"}' http://127.0.0.1:8880/R4/include-ig
+  --data '{"igPackageId":"hl7.fhir.us.core","igPackageVersion":"6.x"}' http://127.0.0.1:8880/R4/validator
 
 # Stop pre-building it (the package stays stored; ?ig= naming it is refused with 400 until it is included again)
-curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.dk.core%233.4.0'
+curl -H "$AUTH" -X DELETE 'http://127.0.0.1:8880/R4/validator?ig=hl7.fhir.dk.core%233.4.0'
 ```
 
 A request validates against the IG it names, its dependencies and the core specification; no other stored or included
@@ -391,10 +391,10 @@ like `validator_cli.jar -tx`:
 # Set it when including ...
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.uv.ips","igPackageVersion":"2.0.0","terminology":{"mode":"ecosystem"}}' \
-  http://127.0.0.1:8880/R4/include-ig
+  http://127.0.0.1:8880/R4/validator
 # ... or change it later (the context's owner or the system organisation); every instance rebuilds the context.
 curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminology":{"mode":"none"}}' \
-  'http://127.0.0.1:8880/R4/include-ig?ig=hl7.fhir.uv.ips%232.0.0'
+  'http://127.0.0.1:8880/R4/validator?ig=hl7.fhir.uv.ips%232.0.0'
 ```
 
 - **Only registry servers.** The service contacts only open servers that the official registry
@@ -467,7 +467,7 @@ Change sharing, or (system organisation only) transfer ownership, over HTTP or w
 curl -H "Authorization: Bearer $ACME_ADMIN" -X PATCH -H 'Content-Type: application/json' \
   --data '{"shareable": false}' http://127.0.0.1:8880/igs/acme.core/1.0.0
 curl -H "Authorization: Bearer $FV_ADMIN_API_KEY" -X PATCH -H 'Content-Type: application/json' \
-  --data '{"owner": "beta"}' 'http://127.0.0.1:8880/R4/include-ig?ig=acme.core%231.0.0'
+  --data '{"owner": "beta"}' 'http://127.0.0.1:8880/R4/validator?ig=acme.core%231.0.0'
 $APP package share --ig acme.core#1.0.0 --shareable true
 $APP snapshot transfer --fhir-version R4 --ig acme.core#1.0.0 --to beta
 ```

@@ -38,14 +38,14 @@ class ApiKeyAuthHandlerTest {
         Router router = Router.router(vertx);
         router.route().handler(new RequestIdHandler());
         router.route().handler(auth.rootHandler());
-        router.post("/R4/include-ig").handler(rc -> rc.response().end("ok"));
+        router.post("/R4/validator").handler(rc -> rc.response().end("ok"));
         ErrorResponder.install(router);
 
         vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
             WebClient client = WebClient.create(vertx);
             List<Future<HttpResponse<Buffer>>> calls = new ArrayList<>();
             for (int i = 0; i < 5 * MAX_CACHED; i++) {
-                calls.add(client.post(server.actualPort(), "localhost", "/R4/include-ig")
+                calls.add(client.post(server.actualPort(), "localhost", "/R4/validator")
                         .putHeader("Authorization", "Bearer invalid-key-%040d".formatted(i))
                         .send());
             }
@@ -111,7 +111,7 @@ class ApiKeyAuthHandlerTest {
             WebClient client = WebClient.create(vertx);
             return Future.all(
                     client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + key).send(),
-                    client.post(server.actualPort(), "localhost", "/R4/include-ig").putHeader("Authorization", "Bearer " + key).send(),
+                    client.post(server.actualPort(), "localhost", "/R4/validator").putHeader("Authorization", "Bearer " + key).send(),
                     client.patch(server.actualPort(), "localhost", "/igs/a/1.0.0").putHeader("Authorization", "Bearer " + key).send());
         }).onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
             for (int i = 0; i < 3; i++) {
