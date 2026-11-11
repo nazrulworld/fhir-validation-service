@@ -354,9 +354,12 @@ totals with the records.
   with an existing organisation that already uses the short name `trial` MUST fail startup with an error.
 - **FR-026**: When a trial validator key is configured, startup MUST check that it is well-formed and install or
   update it with its fixed identifier, the name "trial validator", the VALIDATE role, the trial organisation as
-  owner and the well-known expiry. When none is configured, startup MUST log a warning. The configured secret MUST
-  never appear in configuration dumps or logs.
-- **FR-027**: The bootstrap admin key SHOULD get the fixed well-known identifier and the name "system administrator",
+  owner and the well-known expiry, unless that value was ever revoked: a revoked value of a seeded key MUST never be
+  installed again (startup logs an ERROR naming the variable, never the value, and leaves the stored key unchanged), so
+  a leaked key can't come back, also after a rotation. When none is configured, startup MUST log a warning. The
+  configured secret MUST never appear in configuration dumps or logs.
+- **FR-027**: The bootstrap admin key SHOULD get the fixed well-known identifier and the name "system administrator"
+  (a revoked value is never installed again, as in FR-026),
   with the existing bootstrap key renamed by the upgrade.
 - **FR-028**: Startup seeding and the upgrade MUST be idempotent: repeating them MUST leave organisations and keys
   unchanged.

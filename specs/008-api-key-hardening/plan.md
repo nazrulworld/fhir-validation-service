@@ -136,6 +136,7 @@ src/main/java/nzi/fhir/validator/
 ├── web/HttpVerticle.java                     # CHANGE: mount ClientAddress root handler before the auth handler
 ├── core/Constant.java                        # CHANGE: trial validator key constants, parsed UUIDs/Instant, ISO expiry
 ├── core/StartupException.java                # NEW: fatal warm-up error
+├── core/PgErrors.java                        # NEW: shared PostgreSQL error checks (unique violations)
 ├── core/org/Organisations.java               # CHANGE: SYSTEM_ID / DEFAULT_SYSTEM_SHORT_NAME delegate to Constant
 ├── core/org/OrganisationRepository.java      # CHANGE: ensureWellKnown() (insert-if-missing, clash detection)
 ├── core/security/
@@ -166,7 +167,7 @@ src/main/java/nzi/fhir/validator/
 src/main/resources/
 ├── openapi.yaml                              # CHANGE: security on keyed ops, 401/403 texts, scheme description
 ├── log4j2.xml                                # CHANGE: nzi.fhir.validator.usage logger (additivity=false)
-└── db/migration/V10__…sql, V11__…sql, V12__…sql   # NEW
+└── db/migration/V10__…sql, V11__…sql, V12__…sql, V13__revoked_well_known_key_hashes.sql   # NEW
 
 src/test/java/nzi/fhir/validator/
 ├── core/security/CidrTest.java, ClientAddressTest.java, ApiKeyAuthHandlerTest.java (malformed → no lookup)

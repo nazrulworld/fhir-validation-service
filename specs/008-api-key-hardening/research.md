@@ -146,9 +146,14 @@ the current code.
 ## R10. Measuring a validation cycle (FR-011 to FR-013)
 
 - **Decision**: `core/usage/UsageMeter`, one per request.
-  - **Created** at the top of `ValidationApi.handleDoValidation` and stored in the routing context. It holds the
-    caller (`apiKeyId`, `apiKeyName`, `orgId` from `Caller`), the request id, the client address, the FHIR version
-    path parameter, the content type and the body size.
+  - **Created** once per request, at entry, by the root handler `ValidationApi.usageFallbackHandler()` →
+    `meterFor(ctx)` (mounted right after authorisation, for every authorised `POST /{version}/validate`), and stored in
+    the routing context; `handleDoValidation` and the failure handler reuse it. It holds the caller (`apiKeyId`,
+    `apiKeyName`, `orgId` from `Caller`), the request id, the client address (formatted only when a sink keeps records),
+    the FHIR version, the content type and the body size. When the response ends, the meter records it and also closes
+    the work side unless the validation service was started (`WORK_STARTED_KEY`, whose future signals it): so a
+    request answered without validating (a router refusal, a timeout, an early 4xx) is recorded exactly once, timed
+    from entry (code review).
   - **Passed** to a new `FhirValidationService.validate(…, UsageMeter meter, finisher)` overload; the old overloads
     delegate with `UsageMeter.NONE`. Marks:
     - `admitted` when the admission supplier runs;
@@ -212,12 +217,14 @@ the current code.
     `nzi.fhir.validator.usage`, declared in `log4j2.xml` with `additivity="false"` and its own appender
     (`UsageConsole`, `%msg%n`), so operators can point it at a file or a separate stream without touching the
     application log.
-    - `write` (on the event loop) only offers the line to a bounded queue (8 192). When the queue is full, the line is
-      dropped and counted as `log_full`.
-    - One long-running task on the named worker pool `fv-usage-log` (size 1, constitution I) writes the queue to the
-      logger.
-    - `close()` stops accepting lines and completes once the waiting ones are written, or after 5 s, when the rest are
-      dropped and counted as `closed`.
+    - `write` (on the event loop) only offers the `UsageRecord` to a bounded queue (8 192). When the queue is full, the
+      record is dropped and counted as `log_full`.
+    - One long-running task on the writer's own named worker pool `fv-usage-log-N` (size 1, constitution I; one pool
+      per writer, so two writers in one Vert.x both run) encodes each record to JSON and writes it to the logger, so no
+      encoding happens on the event loop.
+    - `close()` stops accepting records and completes once the waiting ones are written, or after 5 s, when the rest
+      are dropped and counted as `closed`. A record offered while `close()` finishes is taken back and counted as
+      `closed`, never stranded.
   - **`DbUsageWriter`**:
     - An `ArrayBlockingQueue` (`FV_USAGE_QUEUE_SIZE`, 100 to 1 000 000, default 10 000). `write` calls `offer`,
       never `put`; on overflow it counts `queue_full`.
