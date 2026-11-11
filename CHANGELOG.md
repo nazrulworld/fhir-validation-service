@@ -32,17 +32,18 @@ stop every 4.0 instance first.
   already taken or a configured key conflicts. Unsetting a seeded key's variable revokes the key at the next start.
 - **Admin network allowlist** `FV_AUTH_ADMIN_CIDRS`: administrative operations from other networks get 403 for every
   key, before any key lookup.
-- **Trusted proxies** `FV_AUTH_TRUSTED_PROXIES`: `Forwarded` / `X-Forwarded-For` are believed only from these peers
-  (right-most untrusted address); otherwise they are ignored.
+- **Trusted proxies** `FV_AUTH_TRUSTED_PROXIES`: the forwarding header is believed only from these peers (right-most
+  untrusted address); `FV_AUTH_FORWARDED_HEADER` names the one header they write (`x-forwarded-for` by default, or
+  `forwarded`), and the other is never read. A peer address that can't be parsed is refused on administrative paths.
 - **Key expiry**: `fv-admin key create --expires <ISO-8601 instant>`; an expired key gets 401, also while cached.
-  `key list` shows `expiresAt` and `lastUsedIp` (written at once when a key is used from a new address).
+  `key list` shows `expiresAt` and `lastUsedIp` (written within a second when a key is used from a new address).
 - **Usage accounting** `FV_USAGE_SINK` (`none` by default, `log`, `db`, `log,db`): one record per authorised validation
   with key, organisation, outcome, issue counts, phase timings, CPU time and allocated bytes. The `log` sink writes one
   JSON line on the `nzi.fhir.validator.usage` logger; the `db` sink batches into `validation_usage` through a bounded
   queue (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`) and never blocks a request. Retention is
   the operator's job. `fv-admin usage summary --org|--key [--since]` aggregates the table.
 - **Metrics**: `fv_validation_cpu_seconds` and `fv_validation_allocated_bytes` (by version and outcome, whatever the
-  sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}`, `fv_usage_queue_size`. No metric is labelled by
+  sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}` (`queue_full`, `write_failed`, `closed`, `unattributed`), `fv_usage_queue_size`. No metric is labelled by
   key or organisation.
 
 ### Changed

@@ -74,6 +74,8 @@ public final class ConfigLoader {
             // Spec 008 (FR-002, FR-003): comma-separated IPv4/IPv6 CIDRs; unset = no restriction / headers ignored.
             new Entry("FV_AUTH_ADMIN_CIDRS", "auth.adminCidrs", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_AUTH_TRUSTED_PROXIES", "auth.trustedProxies", Kind.STRING, NO_MIN, NO_MAX),
+            // The one header the trusted proxies write: x-forwarded-for (default) or forwarded.
+            new Entry("FV_AUTH_FORWARDED_HEADER", "auth.forwardedHeader", Kind.STRING, NO_MIN, NO_MAX),
             // Spec 008 (FR-014, FR-016): usage accounting.
             new Entry("FV_USAGE_SINK", "usage.sink", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_USAGE_QUEUE_SIZE", "usage.queueSize", Kind.INT, 100, 1_000_000),
@@ -314,6 +316,11 @@ public final class ConfigLoader {
                 throw new IllegalStateException("Invalid " + cidrs[0] + ": " + e.getMessage().replace("invalid network",
                         "invalid " + cidrs[0] + " entry"));
             }
+        }
+        try {
+            nzi.fhir.validator.core.security.ClientAddress.Header.parse(section(c, "auth").getString("forwardedHeader"));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Invalid FV_AUTH_FORWARDED_HEADER: " + e.getMessage());
         }
         JsonObject usage = section(c, "usage");
         ApplicationConfig.usageSinks(usage.getString("sink"));

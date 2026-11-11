@@ -113,7 +113,7 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 })
                 .compose(adminOk -> {
                     ctx.verify(() -> assertEquals(200, adminOk.statusCode(), adminOk.bodyAsString()));
-                    return app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE);
+                    return app.bootstrap().services().apiKeys().create("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.org.Organisations.SYSTEM_ID);
                 })
                 .compose(v -> req("POST", "/R4/validator", VALIDATE_KEY)
                         .sendJsonObject(new JsonObject().put("igPackageId", "example.auth").put("igPackageVersion", "1.0.0")))
@@ -154,7 +154,7 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 .compose(a -> validate(null))
                 .compose(anonymous -> {
                     ctx.verify(() -> assertProblem(anonymous, 401, "unauthorized"));
-                    return app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE);
+                    return app.bootstrap().services().apiKeys().create("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.org.Organisations.SYSTEM_ID);
                 })
                 .compose(v -> validate(VALIDATE_KEY))
                 .compose(withKey -> {
@@ -219,7 +219,7 @@ class ApiKeyAuthIT extends BaseTestContainer {
     @Test
     void packageAccessChangeNeedsAnAdminKey(Vertx vertx, VertxTestContext ctx) {
         start(vertx, new JsonObject())
-                .compose(a -> app.bootstrap().services().apiKeys().save("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE))
+                .compose(a -> app.bootstrap().services().apiKeys().create("validator", VALIDATE_KEY, ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.org.Organisations.SYSTEM_ID))
                 .compose(v -> Future.all(
                         req("PATCH", "/igs/a/1.0.0", null).sendJsonObject(new JsonObject().put("shareable", false)),
                         req("PATCH", "/igs/a/1.0.0", VALIDATE_KEY).sendJsonObject(new JsonObject().put("shareable", false)),
@@ -305,11 +305,17 @@ class ApiKeyAuthIT extends BaseTestContainer {
         start(vertx, new JsonObject().put("adminCidrs", "10.0.0.0/8").put("trustedProxies", "127.0.0.1/32, ::1"))
                 .compose(a -> Future.all(adminFromLoopback(AppHarness.ADMIN_KEY, "10.1.2.3"),
                         adminFromLoopback(AppHarness.ADMIN_KEY, "10.1.2.3, 198.51.100.9"),
-                        adminFromLoopback(AppHarness.ADMIN_KEY, null)))
+                        adminFromLoopback(AppHarness.ADMIN_KEY, null),
+                        // Review regression: a client-supplied Forwarded header is never read when the proxies write
+                        // X-Forwarded-For (the default), so it can't pick an allowlisted address.
+                        app.client().post(app.port(), "127.0.0.1", "/R4/validator").timeout(5_000)
+                                .putHeader("Authorization", AppHarness.ADMIN_AUTH).putHeader("Forwarded", "for=10.0.0.5")
+                                .sendJsonObject(new JsonObject().put("igPackageId", "x"))))
                 .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
                     assertPastTheAllowlist(cf.resultAt(0));
                     assertNetworkRefusal(cf.resultAt(1));
                     assertNetworkRefusal(cf.resultAt(2));
+                    assertNetworkRefusal(cf.resultAt(3));
                     ctx.completeNow();
                 })));
     }
@@ -352,12 +358,13 @@ class ApiKeyAuthIT extends BaseTestContainer {
                         .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT)))
                 .compose(r -> Await.until(vertx, 5_000, "last_used_ip = 127.0.0.1",
                         () -> keyColumn(sql).map(v -> v.equals(List.of("127.0.0.1")))))
-                // Same key, a new client behind the trusted proxy: written without waiting for the 60 s throttle.
-                .compose(v -> app.client().post(app.port(), "127.0.0.1", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
-                        .putHeader("X-Forwarded-For", "203.0.113.9")
-                        .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT)))
-                .compose(r -> Await.until(vertx, 5_000, "last_used_ip = 203.0.113.9",
-                        () -> keyColumn(sql).map(v -> v.equals(List.of("203.0.113.9")))))
+                // Same key, a new client behind the trusted proxy: written within about a second, without waiting for
+                // the 60 s throttle (address changes are written at most once a second per key).
+                .compose(v -> Await.until(vertx, 5_000, "last_used_ip = 203.0.113.9",
+                        () -> app.client().post(app.port(), "127.0.0.1", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
+                                .putHeader("X-Forwarded-For", "203.0.113.9")
+                                .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT))
+                                .compose(r -> keyColumn(sql)).map(v2 -> v2.equals(List.of("203.0.113.9")))))
                 .onComplete(ctx.succeedingThenComplete());
     }
 

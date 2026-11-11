@@ -37,15 +37,17 @@ the current code.
   (`ClientAddress.KEY`). Rules:
   1. Let `peer = request.remoteAddress().hostAddress()`. If no trusted proxies are configured, or the peer isn't in
      one, the client is the peer and all headers are ignored.
-  2. Otherwise read the chain from `Forwarded` (RFC 7239, the `for=` parameters in order). Only when `Forwarded` is
-     absent, read it from `X-Forwarded-For`. Multiple header lines are joined in order. Only one of the two headers
-     is ever used.
+  2. Otherwise read the chain from the one header the proxies write, named by `FV_AUTH_FORWARDED_HEADER`:
+     `X-Forwarded-For` (default) or `Forwarded` (RFC 7239, the `for=` parameters in order). The other header is never
+     read (code review): a proxy that appends to one passes a client-supplied copy of the other through unchanged, so
+     choosing by presence would let any client pick its address. Multiple header lines are joined in order.
   3. Append the peer and walk the chain from right to left. Skip addresses inside a trusted proxy network. The
      first address that is not trusted is the client.
   4. An entry that can't be parsed (such as `unknown`, an obfuscated `_id`, or garbage) stops the walk. The client
      is then the last trusted hop seen, so a forged entry can never be chosen.
   5. If every hop is trusted, the left-most address is the client.
-  6. Ports and IPv6 brackets are stripped. IPv4-mapped IPv6 addresses are treated as IPv4.
+  6. Ports, IPv6 brackets and IPv6 zones (`%eth0`) are stripped. IPv4-mapped IPv6 addresses are treated as IPv4.
+  7. A peer whose address still can't be parsed has no address (never loopback): the admin allowlist refuses it.
 - **Rationale**: Vert.x `Router.allowForward(...)` trusts the headers from any peer, so a client could spoof them.
   Right-most-untrusted is the standard safe rule. Resolving once means the allowlist, the audit and usage
   accounting can't disagree (FR-004).

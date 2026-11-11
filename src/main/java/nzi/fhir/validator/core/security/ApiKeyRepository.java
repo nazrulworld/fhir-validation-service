@@ -68,16 +68,16 @@ public class ApiKeyRepository {
     private record Touched(long at, String ip) {
     }
 
-    /** Bound of the touch throttle (constitution VI: no unbounded map; least recently used evicted first). */
+    /** Bound of the touch throttle (constitution VI: no unbounded map). */
     static final int MAX_TOUCHED_KEYS = 10_000;
+    /**
+     * A key used from a new address is written at once, but at most once per this interval: a key shared by many
+     * clients (the trial key, a NAT pool) would otherwise cost one write of the same row per request.
+     */
+    static final long ADDRESS_CHANGE_INTERVAL_MS = 1_000;
 
     private final Pool pool;
-    private final Map<UUID, Touched> lastTouched = new java.util.LinkedHashMap<>(16, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<UUID, Touched> eldest) {
-            return size() > MAX_TOUCHED_KEYS;
-        }
-    };
+    private final Map<UUID, Touched> lastTouched = new java.util.concurrent.ConcurrentHashMap<>();
 
     public ApiKeyRepository(Pool pool) {
         this.pool = pool;
@@ -173,27 +173,6 @@ public class ApiKeyRepository {
     }
 
     /**
-     * Creates or replaces the key called {@code name} (un-revoking it), owned by the system organisation.
-     */
-    public Future<Void> save(String name, String key, Role role) {
-        return save(name, key, role, Organisations.SYSTEM_ID);
-    }
-
-    /**
-     * Creates or replaces the key called {@code name} (un-revoking it), owned by {@code owner}.
-     */
-    public Future<Void> save(String name, String key, Role role, UUID owner) {
-        if (!isWellFormed(key)) {
-            return Future.failedFuture(new IllegalArgumentException("API keys must be 32-128 characters of [A-Za-z0-9_-]"));
-        }
-        return pool.preparedQuery("INSERT INTO " + TABLE + " (name, key_hash, role, owner) VALUES ($1, $2, $3, $4) "
-                        + "ON CONFLICT (name) DO UPDATE SET key_hash = EXCLUDED.key_hash, role = EXCLUDED.role, "
-                        + "owner = EXCLUDED.owner, revoked_at = NULL")
-                .execute(Tuple.of(name, Buffer.buffer(hash(key)), role.name(), owner))
-                .mapEmpty();
-    }
-
-    /**
      * Creates a new key; unlike {@link #save} it never replaces an existing one.
      *
      * @return fails with 409 {@code conflict} when a key of that name exists (revoked or not)
@@ -264,28 +243,46 @@ public class ApiKeyRepository {
     }
 
     /**
-     * Records use of a key and the client address it came from (spec 008 FR-007): at most once per minute per key,
-     * except that a new address is written at once, so a key used from a new place shows up immediately. Failures are
-     * ignored.
+     * Records use of a key and the client address it came from (spec 008 FR-007): at most once per minute per key, and
+     * at once (but at most once per {@value #ADDRESS_CHANGE_INTERVAL_MS} ms) when the address changed, so a key used
+     * from a new place shows up immediately without a shared key writing its row on every request. Lock-free on the
+     * request path. Failures are ignored.
      */
     public void touch(UUID id, java.net.InetAddress client) {
-        long now = System.currentTimeMillis();
-        String ip = client == null ? null : client.getHostAddress();
-        synchronized (lastTouched) {
-            Touched previous = lastTouched.get(id);
-            if (previous != null && now - previous.at() < TOUCH_INTERVAL_MS && java.util.Objects.equals(previous.ip(), ip)) {
-                return;
-            }
-            lastTouched.put(id, new Touched(now, ip));
+        if (shouldTouch(id, client == null ? null : client.getHostAddress(), System.currentTimeMillis())) {
+            String ip = client == null ? null : client.getHostAddress();
+            pool.preparedQuery("UPDATE " + TABLE + " SET last_used_at = now(), last_used_ip = $2::text::inet WHERE id = $1")
+                    .execute(Tuple.of(id, ip));
         }
-        pool.preparedQuery("UPDATE " + TABLE + " SET last_used_at = now(), last_used_ip = $2::text::inet WHERE id = $1")
-                .execute(Tuple.of(id, ip));
+    }
+
+    /** The throttle decision: records the write when it says yes (atomic per key). */
+    boolean shouldTouch(UUID id, String ip, long now) {
+        boolean[] write = {false};
+        lastTouched.compute(id, (k, previous) -> {
+            long since = previous == null ? Long.MAX_VALUE : now - previous.at();
+            boolean moved = previous != null && !java.util.Objects.equals(previous.ip(), ip);
+            if (previous == null || since >= TOUCH_INTERVAL_MS || (moved && since >= ADDRESS_CHANGE_INTERVAL_MS)) {
+                write[0] = true;
+                return new Touched(now, ip);
+            }
+            return previous;
+        });
+        if (write[0] && lastTouched.size() > MAX_TOUCHED_KEYS) {
+            // Rare: drop some other entry (it is only a throttle; the worst case is one extra write for that key).
+            java.util.Iterator<UUID> it = lastTouched.keySet().iterator();
+            while (lastTouched.size() > MAX_TOUCHED_KEYS && it.hasNext()) {
+                UUID other = it.next();
+                if (!other.equals(id)) {
+                    it.remove();
+                }
+            }
+        }
+        return write[0];
     }
 
     /** Entries in the touch throttle (tests, sizing). */
     int touchedKeys() {
-        synchronized (lastTouched) {
-            return lastTouched.size();
-        }
+        return lastTouched.size();
     }
 }

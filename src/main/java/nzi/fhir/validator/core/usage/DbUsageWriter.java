@@ -56,13 +56,26 @@ public final class DbUsageWriter implements UsageWriter {
         this.timer = vertx.setPeriodic(flushMs, id -> flush());
     }
 
+    /**
+     * Offers the record; never waits. A dropped record is counted by why: {@code unattributed} (no organisation),
+     * {@code closed} (after shutdown began) or {@code queue_full}.
+     */
     @Override
     public void write(UsageRecord record) {
-        if (record.orgId() == null || closed.get() || !queue.offer(record)) {
+        if (record.orgId() == null) {
+            dropped("unattributed", 1);
+            return;
+        }
+        if (closed.get()) {
+            dropped("closed", 1);
+            return;
+        }
+        if (!queue.offer(record)) {
             dropped("queue_full", 1);
             return;
         }
-        if (queue.size() >= batchSize) {
+        // A running flush reschedules itself while a full batch waits, so only an idle writer needs a nudge.
+        if (queue.size() >= batchSize && !flushing.get()) {
             vertx.runOnContext(v -> flush());
         }
     }

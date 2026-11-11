@@ -115,6 +115,10 @@ public final class ApplicationConfig {
     public nzi.fhir.validator.core.security.CidrList adminCidrs() {
         return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("adminCidrs"));
     }
+    /** The header the trusted proxies write ({@code FV_AUTH_FORWARDED_HEADER}); the other one is never read. */
+    public nzi.fhir.validator.core.security.ClientAddress.Header forwardedHeader() {
+        return nzi.fhir.validator.core.security.ClientAddress.Header.parse(section("auth").getString("forwardedHeader"));
+    }
     /** Proxies whose forwarded headers are believed ({@code FV_AUTH_TRUSTED_PROXIES}, spec 008); empty = none. */
     public nzi.fhir.validator.core.security.CidrList trustedProxies() {
         return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("trustedProxies"));

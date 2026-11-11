@@ -119,6 +119,7 @@ trial constants). `Organisations.SYSTEM_ID` and `DEFAULT_SYSTEM_SHORT_NAME` dele
 |---|---|---|---|
 | `FV_AUTH_ADMIN_CIDRS` | `auth.adminCidrs` | comma-separated CIDRs; invalid entry → startup error | unset = unrestricted |
 | `FV_AUTH_TRUSTED_PROXIES` | `auth.trustedProxies` | comma-separated CIDRs | unset = headers ignored |
+| `FV_AUTH_FORWARDED_HEADER` | `auth.forwardedHeader` | `x-forwarded-for` \| `forwarded` | `x-forwarded-for` |
 | `FV_VALIDATOR_API_KEY` | `auth.validatorKey` | STRING, redacted in the safe dump | unset = WARN |
 | `FV_USAGE_SINK` | `usage.sink` | `none` \| `log` \| `db` \| `log,db` | `none` |
 | `FV_USAGE_QUEUE_SIZE` | `usage.queueSize` | INT 100 – 1 000 000 | 10 000 |

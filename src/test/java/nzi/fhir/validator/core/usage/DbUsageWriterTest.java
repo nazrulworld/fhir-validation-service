@@ -142,6 +142,45 @@ class DbUsageWriterTest extends BaseTestContainer {
                     assertEquals(7, n);
                     w.write(record(null, 8));
                     assertEquals(0, w.queued(), "a closed writer keeps nothing");
+                    // Review regression: counted by why it was lost, not as queue_full.
+                    assertEquals(1, counter("fv.usage.dropped", "reason", "closed"));
+                    assertEquals(0, counter("fv.usage.dropped", "reason", "queue_full"));
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Review regression: a record without an organisation is dropped as "unattributed", not "queue_full". */
+    @Test
+    void unattributedRecordsAreCountedAsSuch(Vertx vertx, VertxTestContext ctx) {
+        writer = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        writer.write(new UsageRecord("r", Instant.now(), null, null, null, "R4", null, 0, null, 0, "valid", 200,
+                0, 0, 0, 0, null, 1, 0, 0, 0, 0, 0));
+        ctx.verify(() -> {
+            assertEquals(0, writer.queued());
+            assertEquals(1, counter("fv.usage.dropped", "reason", "unattributed"));
+            assertEquals(0, counter("fv.usage.dropped", "reason", "queue_full"));
+        });
+        ctx.completeNow();
+    }
+
+    /** Review regression: client-controlled values longer than their columns never fail a batch. */
+    @Test
+    void oversizedValuesAreCutAndNeverLoseTheBatch(Vertx vertx, VertxTestContext ctx) {
+        writer = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        writer.write(record(null, 1));
+        writer.write(new UsageRecord("r".repeat(100), Instant.now(), null, null, Constant.SYSTEM_ORG_UUID,
+                "R4" + "x".repeat(40), "a".repeat(256), 0, "JSON", 10, "rejected", 400, 0, 0, 0, 0, null, 1, -1, -1, -1, -1, -1));
+        writer.write(record(null, 3));
+        writer.flush()
+                .compose(v -> pool.query("SELECT length(ig), length(fhir_version), length(request_id) FROM " + TABLE
+                        + " ORDER BY id").execute())
+                .onComplete(ctx.succeeding(rs -> ctx.verify(() -> {
+                    assertEquals(3, rs.size(), "the whole batch was written");
+                    assertEquals(0, counter("fv.usage.dropped", "reason", "write_failed"));
+                    io.vertx.sqlclient.Row long_ = java.util.stream.StreamSupport.stream(rs.spliterator(), false).toList().get(1);
+                    assertEquals(192, long_.getInteger(0));
+                    assertEquals(16, long_.getInteger(1));
+                    assertEquals(64, long_.getInteger(2));
                     ctx.completeNow();
                 })));
     }

@@ -63,7 +63,8 @@ The service stops (exit 1) instead of running half-configured when:
 |---|---|---|
 | `FV_VALIDATOR_API_KEY` | *(unset: warning at startup)* | the trial organisation's shared VALIDATE key |
 | `FV_AUTH_ADMIN_CIDRS` | *(unset: no restriction)* | comma-separated IPv4/IPv6 networks administrative operations may come from; others get 403 for every key |
-| `FV_AUTH_TRUSTED_PROXIES` | *(unset: forwarded headers ignored)* | proxies whose `Forwarded` / `X-Forwarded-For` headers are believed (right-most untrusted address wins) |
+| `FV_AUTH_TRUSTED_PROXIES` | *(unset: forwarded headers ignored)* | proxies whose forwarding header is believed (right-most untrusted address wins) |
+| `FV_AUTH_FORWARDED_HEADER` | `x-forwarded-for` | which header those proxies write (`forwarded` for RFC 7239); the other one is never read |
 | `FV_USAGE_SINK` | `none` | `log`, `db` or `log,db`: where usage records go |
 | `FV_USAGE_QUEUE_SIZE` / `FV_USAGE_BATCH_SIZE` / `FV_USAGE_FLUSH_MS` | 10000 / 500 / 1000 | the `db` sink's bounded queue and batching; the batch may not exceed the queue |
 

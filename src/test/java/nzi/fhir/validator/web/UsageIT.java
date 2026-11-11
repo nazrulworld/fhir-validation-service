@@ -148,6 +148,30 @@ class UsageIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Review regression: a well-formed but 250-character {@code ig} and a bogus version path segment are longer than
+     * their columns; they are cut, and the other requests' rows in the same batch are still written.
+     */
+    @Test
+    void oversizedClientValuesNeverLoseOtherRows(Vertx vertx, VertxTestContext ctx) {
+        String longIg = "a" + "b".repeat(240) + "#1.0.0";
+        start(vertx, "db", null)
+                .compose(a -> Future.all(
+                        validateRequest(AppHarness.VALIDATOR_AUTH).addQueryParam("ig", longIg).sendBuffer(Buffer.buffer(PATIENT)),
+                        app.client().post(app.port(), "127.0.0.1", "/R4xxxxxxxxxxxxxxxxxxxxxx/validate")
+                                .putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
+                                .putHeader("Content-Type", "application/fhir+json").sendBuffer(Buffer.buffer(PATIENT)),
+                        validateRequest(AppHarness.VALIDATOR_AUTH).sendBuffer(Buffer.buffer(PATIENT))))
+                .compose(responses -> awaitRows(vertx, 3))
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(3, rows.size());
+                    assertTrue(rows.stream().anyMatch(r -> r.getString(12) != null && r.getString(12).length() == 192), "ig cut to 192");
+                    assertTrue(rows.stream().anyMatch(r -> r.getString(11) != null && r.getString(11).length() == 16), "version cut to 16");
+                    assertTrue(rows.stream().anyMatch(r -> r.getInteger(4) == 200), "the ordinary validation is there too");
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void aTimedOutValidationIsRecordedOnceWithItsCpuTime(Vertx vertx, VertxTestContext ctx) {
         start(vertx, "db", 1_000)

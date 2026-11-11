@@ -459,7 +459,8 @@ Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints; sin
 rotate a key without downtime, create the new one under a second name, switch the client over, then revoke the old one.
 Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so revocations and organisation deactivations
 take effect within that time; an expired key is refused at its expiry, cached or not. `key list` shows each key's
-`lastUsedIp`, written at once when a key is used from a new address, so a stolen key used elsewhere stands out.
+`lastUsedIp`, written within a second when a key is used from a new address, so a stolen key used elsewhere stands
+out.
 
 The names `system administrator` and `trial validator` are reserved for the keys installed from `FV_ADMIN_API_KEY` and
 `FV_VALIDATOR_API_KEY`. They are rotated by changing the variable and restarting, and revoked by unsetting it and
@@ -469,10 +470,12 @@ restarting; `key revoke` refuses them.
 
 - `FV_AUTH_ADMIN_CIDRS` (comma-separated IPv4/IPv6 networks) limits administrative operations to those networks: any
   other client gets 403, whatever key it sends, before the key is even looked up. Unset, nothing is restricted.
-- `FV_AUTH_TRUSTED_PROXIES` names the reverse proxies whose `Forwarded` (preferred) or `X-Forwarded-For` headers are
-  believed. The client is the right-most address that isn't a trusted proxy. Without it, or from any other peer, the
-  headers are ignored, so a client can't fake its address. The same address is used for the allowlist, `lastUsedIp`
-  and usage records.
+- `FV_AUTH_TRUSTED_PROXIES` names the reverse proxies whose forwarding header is believed, and
+  `FV_AUTH_FORWARDED_HEADER` says which one they write: `x-forwarded-for` (default) or `forwarded`. Only that header is
+  read: a proxy that appends to one passes a client's copy of the other through unchanged. The client is the
+  right-most address that isn't a trusted proxy. From any other peer the header is ignored, so a client can't fake its
+  address; a peer whose address can't be parsed is refused on administrative paths. The same address is used for the
+  allowlist, `lastUsedIp` and usage records.
 
 #### Who may use what
 
@@ -555,6 +558,7 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_ADMIN_API_KEY`                                                           | *(unset: admin operations refused)*                             | bootstrap administrator key                                       |
 | `FV_VALIDATOR_API_KEY`                                                       | *(unset: warning)*                                              | the trial organisation's shared VALIDATE key (4.1.0)              |
 | `FV_AUTH_ADMIN_CIDRS` / `FV_AUTH_TRUSTED_PROXIES`                            | *(unset)*                                                       | admin network allowlist / proxies whose headers count (4.1.0)     |
+| `FV_AUTH_FORWARDED_HEADER`                                                   | `x-forwarded-for`                                               | the header the trusted proxies write (`forwarded` for RFC 7239)   |
 | `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db` (4.1.0)              |
 | `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching (4.1.0)                |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |

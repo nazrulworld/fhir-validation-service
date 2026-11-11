@@ -25,6 +25,23 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
                           int issuesInformation, String clientIp, int totalMs, int queueMs, int contextMs, int validateMs,
                           long cpuTimeNs, long allocatedBytes) {
 
+    /**
+     * Strings are cut to their {@code validation_usage} column sizes (V12), so one oversized client value (a long
+     * {@code ig}, a bogus version path segment) can't fail a batch insert and lose other clients' records.
+     */
+    public UsageRecord {
+        requestId = cut(requestId, 64);
+        apiKeyName = cut(apiKeyName, 64);
+        fhirVersion = cut(fhirVersion, 16);
+        ig = cut(ig, 192);
+        contentType = cut(contentType, 16);
+        outcome = cut(outcome, 32);
+    }
+
+    private static String cut(String s, int max) {
+        return s == null || s.length() <= max ? s : s.substring(0, max);
+    }
+
     /** The usage log line (contracts/operations.md §4), keys in that order. */
     public JsonObject toJson() {
         return new JsonObject()

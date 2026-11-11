@@ -109,6 +109,13 @@ class ConfigLoaderTest {
         assertEquals(2, ok.adminCidrs().networks().size());
         assertEquals(1, ok.trustedProxies().networks().size());
         assertTrue(ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).adminCidrs().isEmpty(), "unset = no restriction");
+        assertEquals(nzi.fhir.validator.core.security.ClientAddress.Header.X_FORWARDED_FOR,
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).forwardedHeader());
+        assertEquals(nzi.fhir.validator.core.security.ClientAddress.Header.FORWARDED,
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_FORWARDED_HEADER", "forwarded")).forwardedHeader());
+        IllegalStateException header = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_FORWARDED_HEADER", "both")));
+        assertTrue(header.getMessage().contains("FV_AUTH_FORWARDED_HEADER"), header.getMessage());
     }
 
     /** Spec 008 FR-009: the anonymous-validation setting is removed; setting it only logs a warning. */

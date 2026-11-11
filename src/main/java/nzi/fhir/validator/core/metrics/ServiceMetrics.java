@@ -216,7 +216,7 @@ public class ServiceMetrics {
         counter("fv.usage.written", "Usage records written").increment(n);
     }
 
-    /** Usage records dropped: {@code queue_full} or {@code write_failed}. */
+    /** Usage records dropped: {@code queue_full}, {@code write_failed}, {@code closed} or {@code unattributed}. */
     public void usageDropped(String reason, long n) {
         counter("fv.usage.dropped", "Usage records dropped", "reason", reason).increment(n);
     }

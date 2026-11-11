@@ -88,17 +88,29 @@ public final class Bootstrap {
                     running = b;
                     logger().info("FHIR validation service started ({} HTTP instance(s))", config.httpInstances());
                     // Spec 008 (research R14): a fatal warm-up error stops the process; others leave it unready.
-                    b.warmUp().onFailure(err -> {
-                        if (err instanceof nzi.fhir.validator.core.StartupException) {
-                            logger().error("Startup failed: {}", err.getMessage(), err);
-                            vertx.close().onComplete(v -> System.exit(1));
-                        }
-                    });
+                    b.warmUp().onFailure(err -> exitOnFatal(err, System::exit));
                 })
                 .onFailure(err -> {
                     logger().error("Failed to start FHIR validation service", err);
                     vertx.close().onComplete(v -> System.exit(1));
                 });
+    }
+
+    /**
+     * Exits with status 1 when {@code err} is a {@link nzi.fhir.validator.core.StartupException}. The exit runs on its
+     * own thread: this is called from a Vert.x callback, and closing Vert.x from one of its own callbacks never
+     * completes. {@code System.exit} runs the shutdown hook, which drains and closes Vert.x from a non-Vert.x thread.
+     *
+     * @return the exiting thread, or {@code null} when {@code err} isn't fatal
+     */
+    static Thread exitOnFatal(Throwable err, java.util.function.IntConsumer exit) {
+        if (!(err instanceof nzi.fhir.validator.core.StartupException)) {
+            return null;
+        }
+        logger().error("Startup failed: {}", err.getMessage(), err);
+        Thread t = new Thread(() -> exit.accept(1), "fv-startup-failure");
+        t.start();
+        return t;
     }
 
     /**
