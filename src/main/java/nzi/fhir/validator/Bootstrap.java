@@ -92,7 +92,9 @@ public final class Bootstrap {
                 })
                 .onFailure(err -> {
                     logger().error("Failed to start FHIR validation service", err);
-                    vertx.close().onComplete(v -> System.exit(1));
+                    // Never close Vert.x from one of its own callbacks (it never completes): exit from another
+                    // thread; the shutdown hook closes Vert.x.
+                    exitFromOwnThread(System::exit, 1);
                 });
     }
 
@@ -108,7 +110,16 @@ public final class Bootstrap {
             return null;
         }
         logger().error("Startup failed: {}", err.getMessage(), err);
-        Thread t = new Thread(() -> exit.accept(1), "fv-startup-failure");
+        return exitFromOwnThread(exit, 1);
+    }
+
+    /**
+     * Calls {@code exit} with {@code status} on a new thread, so a Vert.x callback can end the process: closing Vert.x
+     * from one of its own callbacks never completes, while {@code System.exit} runs the shutdown hook, which drains and
+     * closes Vert.x from a non-Vert.x thread.
+     */
+    static Thread exitFromOwnThread(java.util.function.IntConsumer exit, int status) {
+        Thread t = new Thread(() -> exit.accept(status), "fv-exit");
         t.start();
         return t;
     }

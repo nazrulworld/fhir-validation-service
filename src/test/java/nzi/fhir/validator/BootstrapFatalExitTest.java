@@ -39,4 +39,23 @@ class BootstrapFatalExitTest {
             ctx.completeNow();
         });
     }
+
+    /** The start-failure path of {@code main} exits the same way: off the event loop, with status 1. */
+    @Test
+    void exitFromOwnThreadNeverRunsOnTheEventLoop(Vertx vertx, VertxTestContext ctx) {
+        AtomicInteger status = new AtomicInteger(-1);
+        AtomicBoolean onVertxThread = new AtomicBoolean(true);
+        vertx.runOnContext(v -> {
+            Thread t = Bootstrap.exitFromOwnThread(code -> {
+                status.set(code);
+                onVertxThread.set(Context.isOnVertxThread());
+            }, 1);
+            ctx.verify(() -> {
+                t.join(5_000);
+                assertEquals(1, status.get());
+                assertFalse(onVertxThread.get());
+            });
+            ctx.completeNow();
+        });
+    }
 }
