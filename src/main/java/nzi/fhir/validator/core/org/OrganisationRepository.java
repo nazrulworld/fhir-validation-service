@@ -1,7 +1,6 @@
 package nzi.fhir.validator.core.org;
 
 import io.vertx.core.Future;
-import io.vertx.pgclient.PgException;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.SqlClient;
@@ -54,6 +53,37 @@ public class OrganisationRepository {
 
     public OrganisationRepository(Pool pool) {
         this.pool = pool;
+    }
+
+    /**
+     * Makes sure the system and trial organisations exist with their well-known ids (spec 008 FR-025): each is inserted
+     * when missing, and an existing row is never changed ({@code FV_SYSTEM_ORG_*} is applied afterwards). Safe when
+     * several instances start at once.
+     *
+     * @return fails with {@link nzi.fhir.validator.core.StartupException} when another organisation already uses a
+     * well-known short name
+     */
+    public Future<Void> ensureWellKnown() {
+        return ensure(nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID, nzi.fhir.validator.core.Constant.SYSTEM_ORG_SHORT_NAME,
+                nzi.fhir.validator.core.Constant.SYSTEM_ORG_LONG_NAME, nzi.fhir.validator.core.Constant.SYSTEM_ORG_TYPE)
+                .compose(v -> ensure(nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_SHORT_NAME, nzi.fhir.validator.core.Constant.TRIAL_ORG_LONG_NAME,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_TYPE));
+    }
+
+    private Future<Void> ensure(UUID id, String nameShort, String nameLong, String type) {
+        return pool.preparedQuery("INSERT INTO " + TABLE + " (id, name_short, name_long, type, is_active) "
+                        + "VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO NOTHING")
+                .execute(Tuple.of(id, nameShort, nameLong, type))
+                .<Void>mapEmpty()
+                .recover(err -> {
+                    if (isShortNameTaken(err)) {
+                        return Future.failedFuture(new nzi.fhir.validator.core.StartupException("An organisation named '"
+                                + nameShort + "' already exists with another id; rename it before starting 4.1.0 "
+                                + "(the well-known '" + nameShort + "' organisation has id " + id + ")"));
+                    }
+                    return Future.failedFuture(err);
+                });
     }
 
     /**
@@ -198,6 +228,11 @@ public class OrganisationRepository {
         return update(Organisations.SYSTEM_ID, patch, fields.keySet());
     }
 
+    /** A unique violation of the short name (shared by {@link #ensureWellKnown} and {@link #mapConflict}). */
+    private static boolean isShortNameTaken(Throwable err) {
+        return nzi.fhir.validator.core.PgErrors.isUniqueViolation(err, NAME_SHORT_UNIQUE);
+    }
+
     // --- mapping ------------------------------------------------------------------------------------------------
 
     static Organisation toOrganisation(Row r) {
@@ -231,8 +266,7 @@ public class OrganisationRepository {
     }
 
     private static <T> Future<T> mapConflict(Throwable err) {
-        if (err instanceof PgException pg && "23505".equals(pg.getSqlState())
-                && pg.getConstraint() != null && pg.getConstraint().equals(NAME_SHORT_UNIQUE)) {
+        if (isShortNameTaken(err)) {
             return Future.failedFuture(new ProblemException(409, ProblemException.TYPE_CONFLICT,
                     "An organisation with this short name already exists (names are compared ignoring case)"));
         }

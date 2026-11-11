@@ -25,15 +25,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class NoSecretsInLogsTest extends BaseTestContainer {
     private static final String PASSWORD = "Qx7Zr9Wk2Lp4Nm8T";
     private static final String ADMIN_KEY = "Kz8Hq3Vn6Tb1Wx5Rj9Pd2Lc7Mf4Gs0Ya";
+    private static final String VALIDATOR_KEY = "Vb3Jm8Qx1Rz6Tn4Hw9Kc2Pf7Ld5Gy0Sa";
 
     @Test
     void secretsNeverReachTheLogs(Vertx vertx, VertxTestContext ctx) {
         LogCapture logs = LogCapture.start();
         JsonObject config = AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE, POSTGRES_USERNAME, PASSWORD);
-        config.getJsonObject("auth").put("bootstrapAdminKey", ADMIN_KEY);
+        config.getJsonObject("auth").put("bootstrapAdminKey", ADMIN_KEY).put("validatorKey", VALIDATOR_KEY);
         ApplicationConfig parsed = ApplicationConfig.of(config);
         assertFalse(parsed.toString().contains(PASSWORD));
         assertFalse(parsed.toString().contains(ADMIN_KEY));
+        assertFalse(parsed.toString().contains(VALIDATOR_KEY), "spec 008: FV_VALIDATOR_API_KEY is redacted");
         // Wrong password on purpose: the startup path logs connection failures and retries.
         AppHarness.start(vertx, config)
                 .compose(app -> vertx.timer(4_000).compose(t -> app.stop()))
@@ -48,6 +50,9 @@ class NoSecretsInLogsTest extends BaseTestContainer {
                         }
                         for (int i = 0; i + 4 <= ADMIN_KEY.length(); i++) {
                             assertFalse(line.contains(ADMIN_KEY.substring(i, i + 4)), "admin key fragment logged: " + line);
+                        }
+                        for (int i = 0; i + 4 <= VALIDATOR_KEY.length(); i++) {
+                            assertFalse(line.contains(VALIDATOR_KEY.substring(i, i + 4)), "validator key fragment logged: " + line);
                         }
                     }
                     ctx.completeNow();

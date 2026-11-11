@@ -2,6 +2,12 @@
 
 Constitution Principle VI: attach these results to any PR that changes the validation hot path.
 
+`perf/compare-run.sh` runs `validate.js` once against a fresh PostgreSQL + service container pair (4 CPUs, 4 GB) with
+the `grafana/k6` image; the 4.1.0 release comparison in [results-4.1.0.md](results-4.1.0.md) used it.
+
+Since 4.1.0 validation always needs a key (spec 008). Every script reads it from `FV_KEY`, for example
+`k6 run -e FV_KEY="$FV_VALIDATOR_API_KEY" perf/validate.js`. Without it, every validation is refused with 401.
+
 ## Throughput scaling (SC-003: 4 cores ≥ 3× one core, p95 < 200 ms)
 
 Keep the number of virtual users at or below the admission limit (`FV_VALIDATION_MAX_PENDING`, default 4 × workers,

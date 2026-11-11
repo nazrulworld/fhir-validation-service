@@ -32,7 +32,7 @@ class ConfigLoaderTest {
         assertTrue(cfg.validationWorkers() >= 1);
         assertEquals(4 * cfg.validationWorkers(), cfg.validationMaxPending());
         assertTrue(cfg.httpInstances() >= 1 && cfg.httpInstances() <= 8);
-        assertTrue(cfg.anonymousValidate());
+        assertNull(cfg.json().getJsonObject("auth").getValue("anonymousValidate"), "spec 008: removed");
     }
 
     @Test
@@ -65,6 +65,83 @@ class ConfigLoaderTest {
 
         ApplicationConfig both = ConfigLoader.load(env("PG_HOST", "db1", "FV_PG_HOST", "db2", "FV_PG_PASSWORD", "pw"));
         assertEquals("db2", both.pgHost());
+    }
+
+    /** Spec 008 FR-014, FR-016: usage sink values, bounds and defaults. */
+    @Test
+    void usageSettings() {
+        ApplicationConfig defaults = ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
+        assertEquals(java.util.Set.of(), defaults.usageSinks());
+        assertEquals(10_000, defaults.usageQueueSize());
+        assertEquals(500, defaults.usageBatchSize());
+        assertEquals(1_000, defaults.usageFlushMs());
+        for (String[] ok : new String[][]{{"none", ""}, {"log", "log"}, {"db", "db"}, {"log,db", "db,log"}, {"db, log", "db,log"}}) {
+            java.util.Set<String> sinks = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_SINK", ok[0])).usageSinks();
+            assertEquals(ok[1].isEmpty() ? java.util.Set.of() : java.util.Set.of(ok[1].split(",")), sinks, ok[0]);
+        }
+        for (String bad : new String[]{"kafka", "none,db", "log,"}) {
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_SINK", bad)), bad);
+            assertTrue(e.getMessage().contains("FV_USAGE_SINK"), e.getMessage());
+        }
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_QUEUE_SIZE", "99")));
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_QUEUE_SIZE", "1000001")));
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_BATCH_SIZE", "9")));
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_BATCH_SIZE", "5001")));
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_FLUSH_MS", "99")));
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_USAGE_FLUSH_MS", "60001")));
+        IllegalStateException cross = assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                "FV_USAGE_QUEUE_SIZE", "100", "FV_USAGE_BATCH_SIZE", "500")));
+        assertTrue(cross.getMessage().contains("FV_USAGE_BATCH_SIZE (500) must not exceed FV_USAGE_QUEUE_SIZE (100)"), cross.getMessage());
+    }
+
+    /** Spec 008 FR-005: an invalid network in either list fails startup naming the variable and the entry. */
+    @Test
+    void invalidNetworksFailStartup() {
+        IllegalStateException admin = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_ADMIN_CIDRS", "10.0.0.0/8, 10.0.0.0/33")));
+        assertTrue(admin.getMessage().contains("invalid FV_AUTH_ADMIN_CIDRS entry '10.0.0.0/33'"), admin.getMessage());
+        IllegalStateException proxies = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_TRUSTED_PROXIES", "proxy.local")));
+        assertTrue(proxies.getMessage().contains("invalid FV_AUTH_TRUSTED_PROXIES entry 'proxy.local'"), proxies.getMessage());
+        ApplicationConfig ok = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_ADMIN_CIDRS", "10.0.0.0/8,::1",
+                "FV_AUTH_TRUSTED_PROXIES", "127.0.0.1"));
+        assertEquals(2, ok.adminCidrs().networks().size());
+        assertEquals(1, ok.trustedProxies().networks().size());
+        assertTrue(ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).adminCidrs().isEmpty(), "unset = no restriction");
+        assertEquals(nzi.fhir.validator.core.security.ClientAddress.Header.X_FORWARDED_FOR,
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).forwardedHeader());
+        assertEquals(nzi.fhir.validator.core.security.ClientAddress.Header.FORWARDED,
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_FORWARDED_HEADER", "forwarded")).forwardedHeader());
+        IllegalStateException header = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_FORWARDED_HEADER", "both")));
+        assertTrue(header.getMessage().contains("FV_AUTH_FORWARDED_HEADER"), header.getMessage());
+    }
+
+    /** Spec 008 FR-009: the anonymous-validation setting is removed; setting it only logs a warning. */
+    @Test
+    void anonymousValidateIsIgnoredWithAWarning() {
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_AUTH_ANONYMOUS_VALIDATE", "true"));
+            assertNull(cfg.json().getJsonObject("auth").getValue("anonymousValidate"));
+            java.util.List<String> warnings = logs.from(ConfigLoader.class.getName()).stream()
+                    .filter(e -> e.level() == org.apache.logging.log4j.Level.WARN).map(e -> e.message()).distinct().toList();
+            assertEquals(java.util.List.of("FV_AUTH_ANONYMOUS_VALIDATE is deprecated and ignored: removed in 4.1.0, "
+                    + "validation always requires a VALIDATE or ADMIN key"), warnings);
+        }
+    }
+
+    /** Code review regression: the removed setting in a configuration file is ignored with a warning too. */
+    @Test
+    void anonymousValidateInAConfigFileIsIgnoredWithAWarning(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("auth", new JsonObject().put("anonymousValidate", true)).encode());
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString()));
+            assertNull(cfg.json().getJsonObject("auth").getValue("anonymousValidate"));
+            assertTrue(logs.from(ConfigLoader.class.getName()).stream().anyMatch(e -> e.level() == org.apache.logging.log4j.Level.WARN
+                    && e.message().contains("auth.anonymousValidate") && e.message().contains("ignored")));
+        }
     }
 
     @Test

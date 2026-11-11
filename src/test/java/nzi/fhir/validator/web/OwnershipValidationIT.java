@@ -141,15 +141,17 @@ class OwnershipValidationIT extends BaseTestContainer {
         if (ig != null) {
             req.addQueryParam("ig", ig);
         }
-        if (key != null) {
-            AppHarness.as(req, key);
-        }
+        // Spec 008: validation always needs a key. "No key of the owner" (null) is now the trial organisation's key: an
+        // outsider that may use shareable content only, as anonymous callers could before 4.1.0.
+        AppHarness.as(req, key != null ? key : AppHarness.VALIDATOR_KEY);
         return req.sendBuffer(Buffer.buffer(TestPackages.minimalPatient()));
     }
 
     private Future<HttpResponse<Buffer>> get(String path, String key) {
         HttpRequest<Buffer> req = app.client().get(app.port(), "localhost", path).timeout(30_000);
-        return (key == null ? req : AppHarness.as(req, key)).send();
+        // Spec 008: package reads need a key too; null means the trial organisation (an outsider), see validate().
+        return (key == null && path.startsWith("/igs/") ? AppHarness.as(req, AppHarness.VALIDATOR_KEY)
+                : key == null ? req : AppHarness.as(req, key)).send();
     }
 
     /** A problem body without its per-request fields and with {@code label} replaced, for comparing two refusals. */

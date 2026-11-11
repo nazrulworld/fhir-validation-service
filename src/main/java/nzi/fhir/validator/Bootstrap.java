@@ -54,6 +54,8 @@ public final class Bootstrap {
     }
 
     private static volatile Bootstrap running;
+    /** Set by a fatal startup error: the shutdown hook then closes Vert.x without the graceful drain. */
+    static final java.util.concurrent.atomic.AtomicBoolean FATAL = new java.util.concurrent.atomic.AtomicBoolean();
 
     public static void main(String[] args) {
         // Spec 005: "org|key|package|snapshot ..." runs one administrative command instead of the server.
@@ -87,18 +89,50 @@ public final class Bootstrap {
                 .onSuccess(b -> {
                     running = b;
                     logger().info("FHIR validation service started ({} HTTP instance(s))", config.httpInstances());
+                    // Spec 008 (research R14): a fatal warm-up error stops the process; others leave it unready.
+                    b.warmUp().onFailure(err -> exitOnFatal(err, System::exit));
                 })
                 .onFailure(err -> {
                     logger().error("Failed to start FHIR validation service", err);
-                    vertx.close().onComplete(v -> System.exit(1));
+                    // Never close Vert.x from one of its own callbacks (it never completes): exit from another
+                    // thread; the shutdown hook closes Vert.x.
+                    exitFromOwnThread(System::exit, 1);
                 });
+    }
+
+    /**
+     * Exits with status 1 when {@code err} is a {@link nzi.fhir.validator.core.StartupException}. The exit runs on its
+     * own thread: this is called from a Vert.x callback, and closing Vert.x from one of its own callbacks never
+     * completes. {@code System.exit} runs the shutdown hook, which drains and closes Vert.x from a non-Vert.x thread.
+     *
+     * @return the exiting thread, or {@code null} when {@code err} isn't fatal
+     */
+    static Thread exitOnFatal(Throwable err, java.util.function.IntConsumer exit) {
+        if (!(err instanceof nzi.fhir.validator.core.StartupException)) {
+            return null;
+        }
+        logger().error("Startup failed: {}", err.getMessage(), err);
+        // The instance never became ready: no pre-drain window or grace period, just stop.
+        FATAL.set(true);
+        return exitFromOwnThread(exit, 1);
+    }
+
+    /**
+     * Calls {@code exit} with {@code status} on a new thread, so a Vert.x callback can end the process: closing Vert.x
+     * from one of its own callbacks never completes, while {@code System.exit} runs the shutdown hook, which drains and
+     * closes Vert.x from a non-Vert.x thread.
+     */
+    static Thread exitFromOwnThread(java.util.function.IntConsumer exit, int status) {
+        Thread t = new Thread(() -> exit.accept(status), "fv-exit");
+        t.start();
+        return t;
     }
 
     /**
      * JVM shutdown hook (SIGTERM): drain, stop, close Vert.x. Waits on a latch, never on a future (Principle I).
      */
     private static void shutdown(Vertx vertx, ApplicationConfig config) {
-        Bootstrap b = running;
+        Bootstrap b = FATAL.get() ? null : running;
         long timeoutMs = config.shutdownPreDrainMs() + config.shutdownGraceMs() + 5_000;
         try {
             if (b != null) {
@@ -136,8 +170,10 @@ public final class Bootstrap {
         return vertx.deployVerticle(() -> new HttpVerticle(services), new DeploymentOptions().setInstances(config.httpInstances()))
                 .map(id -> {
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
+                            .compose(v -> services.organisations().ensureWellKnown())
                             .compose(v -> installSystemOrganisation(services))
                             .compose(v -> installBootstrapKey(services))
+                            .compose(v -> installTrialValidatorKey(services))
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
@@ -160,13 +196,48 @@ public final class Bootstrap {
                 .mapEmpty();
     }
 
+    /** The system administrator key from {@code FV_ADMIN_API_KEY} (spec 005 FR-006, spec 008). */
     private static Future<Void> installBootstrapKey(ServiceRegistry services) {
-        String key = services.config().bootstrapAdminKey();
+        return installWellKnownKey(services, "FV_ADMIN_API_KEY", services.config().bootstrapAdminKey(),
+                nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME,
+                nzi.fhir.validator.core.security.ApiKeyRepository.Role.ADMIN, nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID);
+    }
+
+    /** Spec 008 FR-026: the trial organisation's shared VALIDATE key, from {@code FV_VALIDATOR_API_KEY}. */
+    private static Future<Void> installTrialValidatorKey(ServiceRegistry services) {
+        return installWellKnownKey(services, "FV_VALIDATOR_API_KEY", services.config().validatorKey(),
+                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME,
+                nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID);
+    }
+
+    /**
+     * Installs (or rotates) a key from configuration under its fixed id. An unset variable changes nothing in the
+     * database: instances may be configured differently (e.g. only admin-facing ones get {@code FV_ADMIN_API_KEY}), so
+     * one instance's missing variable must not revoke a key the others rely on. Seeded keys are revoked with
+     * {@code fv-admin key revoke}; a revoked value is never installed again (V13), only a new one.
+     */
+    private static Future<Void> installWellKnownKey(ServiceRegistry services, String variable, String key, java.util.UUID id,
+                                                    String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,
+                                                    java.util.UUID owner) {
         if (key == null || key.isBlank()) {
-            logger().warn("FV_ADMIN_API_KEY is not set: administrative operations are refused");
+            // Spec 008 US2/AC4: without the trial key, validation still needs a key created with 'key create'.
+            logger().warn("{} is not set: {}this instance installs no '{}' key (one stored earlier stays valid until revoked)",
+                    variable, role == nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE
+                            ? "validation is key-only and " : "", name);
             return Future.succeededFuture();
         }
-        return services.apiKeys().upsertBootstrap(key).onSuccess(v -> logger().info("Bootstrap admin API key installed"));
+        return services.apiKeys().upsertWellKnown(id, name, key, role, owner, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
+                .onSuccess(installed -> {
+                    if (installed) {
+                        logger().info("'{}' API key installed ({})", name, variable);
+                    } else {
+                        // V13: a revoked value is never installed again; the stored key is left as it is.
+                        logger().error("{} is set to a value that was revoked: this instance does not install it, and the "
+                                + "stored '{}' key is unchanged. Configure a new value.", variable, name);
+                    }
+                })
+                .mapEmpty();
     }
 
     private Future<Void> awaitIdle(long deadline) {
@@ -202,6 +273,8 @@ public final class Bootstrap {
                     return awaitIdle(System.currentTimeMillis() + config.shutdownGraceMs());
                 })
                 .onComplete(ar -> logger().info("drain complete ({} request(s) still in flight)", services.inFlight().get()))
+                // Spec 008 FR-018: buffered usage records are written before the pool closes.
+                .eventually(() -> services.usage().close())
                 .eventually(() -> services.stop())
                 .eventually(() -> vertx.undeploy(deploymentId))
                 .eventually(() -> services.pool().close())

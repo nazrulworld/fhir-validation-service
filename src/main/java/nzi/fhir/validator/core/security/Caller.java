@@ -13,15 +13,24 @@ import java.util.UUID;
  * @param orgShortName the organisation's short name (logs only), {@code null} for anonymous callers
  * @param role         the key's role, {@code null} for anonymous callers
  * @param system       the caller acts for the system organisation (sees and may change everything)
+ * @param apiKeyId     the key's id (spec 008: usage attribution without another lookup), {@code null} when there is no
+ *                     key
+ * @param apiKeyName   the key's name, {@code null} when there is no key
  */
-public record Caller(UUID orgId, String orgShortName, ApiKeyRepository.Role role, boolean system, boolean anonymous) {
+public record Caller(UUID orgId, String orgShortName, ApiKeyRepository.Role role, boolean system, boolean anonymous,
+                     UUID apiKeyId, String apiKeyName) {
 
     /** A request without an API key: may use shareable content only. */
-    public static final Caller ANONYMOUS = new Caller(null, null, null, false, true);
+    public static final Caller ANONYMOUS = new Caller(null, null, null, false, true, null, null);
 
-    /** A key of organisation {@code orgId}. */
+    /** A key of organisation {@code orgId}, without the key's identity. */
     public static Caller of(UUID orgId, String orgShortName, ApiKeyRepository.Role role) {
-        return new Caller(orgId, orgShortName, role, Organisations.SYSTEM_ID.equals(orgId), false);
+        return of(orgId, orgShortName, role, null, null);
+    }
+
+    /** The key {@code apiKeyId} ({@code apiKeyName}) of organisation {@code orgId}. */
+    public static Caller of(UUID orgId, String orgShortName, ApiKeyRepository.Role role, UUID apiKeyId, String apiKeyName) {
+        return new Caller(orgId, orgShortName, role, Organisations.SYSTEM_ID.equals(orgId), false, apiKeyId, apiKeyName);
     }
 
     /**
@@ -29,7 +38,7 @@ public record Caller(UUID orgId, String orgShortName, ApiKeyRepository.Role role
      * trusted), and tests that need full access. Never a default for requests.
      */
     public static Caller system(String shortName) {
-        return new Caller(Organisations.SYSTEM_ID, shortName, ApiKeyRepository.Role.ADMIN, true, false);
+        return new Caller(Organisations.SYSTEM_ID, shortName, ApiKeyRepository.Role.ADMIN, true, false, null, null);
     }
 
     /** Whether {@code owner} is this caller's organisation. */

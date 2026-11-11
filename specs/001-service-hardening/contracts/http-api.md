@@ -19,13 +19,13 @@ security: []           # default: anonymous; set per operation below
 | Operation | Security | Required role |
 |-----------|----------|---------------|
 | `healthApiHealth`, `healthApiLiveness`, `healthApiReadiness` (new), `metrics` (new) | none | — |
-| `validationApiValidate` | `apiKey` (optional when `FV_AUTH_ANONYMOUS_VALIDATE=true`) | `VALIDATE` or `ADMIN` |
+| `validationApiValidate` | `apiKey` (required since 4.1.0, spec 008; optional before when `FV_AUTH_ANONYMOUS_VALIDATE=true`) | `VALIDATE` or `ADMIN` |
 | `validationApiIncludeIg` ⚠, `profileApiRegisterProfile` ⚠, `igPackageApiUploadIg` ⚠, `igPackageApiRegisterIg` ⚠ | `apiKey` | `ADMIN` |
 
 Administrative operations (the four rows above with `ADMIN`) have their own admission limit, `FV_ADMIN_MAX_PENDING`
 (default 4), separate from validation. A request holds its slot until its response ends. Beyond the limit it gets 503
 `Problem` (type `overloaded`) with `Retry-After`, after authorisation, so unauthenticated calls never take a slot.
-| `igPackageApiGetDependenciesGraph`, `igPackageApiGenerateConformanceReport` | `apiKey` (optional when `FV_AUTH_ANONYMOUS_VALIDATE=true`, like validation) | `VALIDATE` or `ADMIN` |
+| `igPackageApiGetDependenciesGraph`, `igPackageApiGenerateConformanceReport` | `apiKey` (required since 4.1.0, spec 008, like validation) | `VALIDATE` or `ADMIN` |
 
 ## New operations
 

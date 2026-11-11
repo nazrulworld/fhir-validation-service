@@ -58,7 +58,9 @@ class ValidationApiContractTest extends BaseTestContainer {
     }
 
     private HttpRequest<Buffer> post(String path) {
-        return app.client().post(app.port(), "localhost", path).timeout(5_000);
+        HttpRequest<Buffer> req = app.client().post(app.port(), "localhost", path).timeout(5_000);
+        // Spec 008: validation always needs a key (administrative calls add the admin key on top).
+        return path.contains("/validate") && !path.contains("/validator") ? AppHarness.asValidator(req) : req;
     }
 
     private Future<HttpResponse<Buffer>> validate(String version, String contentType, String accept, String body) {

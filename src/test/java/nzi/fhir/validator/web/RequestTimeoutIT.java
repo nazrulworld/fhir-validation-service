@@ -50,7 +50,7 @@ class RequestTimeoutIT extends BaseTestContainer {
     @Test
     void slowValidationIsAnsweredWith503AtTheTimeout(VertxTestContext ctx) {
         long start = System.currentTimeMillis();
-        app.client().post(app.port(), "localhost", "/R4/validate").timeout(60_000)
+        app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(60_000)
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer(TestPackages.patientBundle(8000)))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {

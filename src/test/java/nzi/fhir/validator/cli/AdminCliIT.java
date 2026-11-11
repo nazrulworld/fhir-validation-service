@@ -168,7 +168,8 @@ class AdminCliIT extends BaseTestContainer {
         }
         Run list = cli("org", "list");
         assertExit(list, 0);
-        assertEquals(List.of("acme2", "system"), list.array().stream().map(o -> ((JsonObject) o).getString("nameShort")).toList());
+        // Spec 008: the trial organisation is seeded by the migration.
+        assertEquals(List.of("acme2", "system", "trial"), list.array().stream().map(o -> ((JsonObject) o).getString("nameShort")).toList());
         assertExit(cli("org", "list", "--active", "false"), 0);
         assertEquals(0, cli("org", "list", "--active", "false").array().size());
     }
@@ -184,7 +185,12 @@ class AdminCliIT extends BaseTestContainer {
         assertTrue(key.matches("[A-Za-z0-9_-]{43}"));
         assertEquals("acme", created.json().getString("org"));
 
-        assertExit(cli("key", "create", "--org", "acme", "--name", "bootstrap", "--role", "ADMIN"), 4);
+        // Spec 008: the keys installed from configuration have reserved names; 'bootstrap' is an ordinary name now.
+        assertExit(cli("key", "create", "--org", "acme", "--name", "system administrator", "--role", "ADMIN"), 4);
+        assertExit(cli("key", "create", "--org", "acme", "--name", "Trial Validator", "--role", "VALIDATE"), 4);
+        // Seeded keys may be revoked by name (none is installed here: no server has started, so 3 = not found).
+        assertExit(cli("key", "revoke", "--name", "trial validator"), 3);
+        assertExit(cli("key", "create", "--org", "acme", "--name", "bootstrap", "--role", "VALIDATE"), 0);
         assertExit(cli("key", "create", "--org", "acme", "--name", "acme-ci", "--role", "ADMIN"), 4);
         assertExit(cli("key", "create", "--org", "nobody", "--name", "x-ci", "--role", "ADMIN"), 3);
         Run fromStdin = cliWithStdin("own-key-0123456789abcdefghijklmnopqrstu\n",
@@ -192,15 +198,31 @@ class AdminCliIT extends BaseTestContainer {
         assertExit(fromStdin, 0);
         assertFalse(fromStdin.json().containsKey("key"), "a key from stdin is not echoed");
 
+        // Spec 008 FR-006: --expires takes a future ISO-8601 instant.
+        Run expiring = cli("key", "create", "--org", "acme", "--name", "acme-temp", "--role", "VALIDATE",
+                "--expires", "2099-01-01T00:00:00Z");
+        assertExit(expiring, 0);
+        assertEquals("2099-01-01T00:00:00Z", expiring.json().getString("expiresAt"));
+        assertExit(cli("key", "create", "--org", "acme", "--name", "acme-past", "--role", "VALIDATE",
+                "--expires", "2000-01-01T00:00:00Z"), 2);
+        assertExit(cli("key", "create", "--org", "acme", "--name", "acme-bad", "--role", "VALIDATE", "--expires", "tomorrow"), 2);
+        Run temp = cli("key", "list", "--org", "acme");
+        assertExit(temp, 0);
+        JsonObject tempRow = temp.array().stream().map(o -> (JsonObject) o).filter(o -> o.getString("name").equals("acme-temp"))
+                .findFirst().orElseThrow();
+        assertEquals("2099-01-01T00:00:00Z", tempRow.getString("expiresAt"));
+        assertTrue(tempRow.containsKey("lastUsedIp") && tempRow.getValue("lastUsedIp") == null, tempRow.encode());
+        assertExit(cli("key", "revoke", "--name", "acme-temp"), 0);
+
         Run list = cli("key", "list", "--org", "acme");
         assertExit(list, 0);
         assertFalse(list.out().contains(key), "the key is never listed");
         assertFalse(list.out().contains("own-key-0123"), "the key is never listed");
         assertFalse(list.out().toLowerCase().contains("hash"));
-        assertEquals(2, list.array().size());
+        assertEquals(4, list.array().size());
 
         JsonObject config = AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE, POSTGRES_USERNAME, POSTGRES_PASSWORD);
-        config.getJsonObject("auth").put("anonymousValidate", false).put("cacheTtlMs", 200);
+        config.getJsonObject("auth").put("cacheTtlMs", 200);
         app = await(AppHarness.start(vertx, config));
         await(app.awaitReady(90_000));
         assertEquals(200, validate(key).statusCode(), "the printed key authenticates");
@@ -215,6 +237,44 @@ class AdminCliIT extends BaseTestContainer {
         assertTrue(revoked.json().getBoolean("revoked"));
         eventually(10_000, "the revoked key is refused", () -> status(key) == 401);
         assertExit(cli("key", "revoke", "--name", "no-such-key"), 3);
+    }
+
+    /** Spec 008 FR-022: usage summary per organisation or key, since a time. */
+    @Test
+    void usageSummaryByOrgAndKey() throws Exception {
+        assertExit(createAcme(), 0);
+        assertExit(cli("key", "create", "--org", "acme", "--name", "acme-ci", "--role", "VALIDATE"), 0);
+        String org = "(SELECT id FROM fhir_validator_schema.organisations WHERE name_short = 'acme')";
+        String key = "(SELECT id FROM fhir_validator_schema.api_keys WHERE name = 'acme-ci')";
+        String insert = "INSERT INTO fhir_validator_schema.validation_usage (started_at, request_id, api_key_id, api_key_name, "
+                + "org_id, profile_count, request_bytes, outcome, http_status, total_ms, queue_ms, context_ms, validate_ms, "
+                + "cpu_time_ns, allocated_bytes) VALUES ";
+        try (java.sql.Connection c = java.sql.DriverManager.getConnection(getPostgresJdbcUrl(), POSTGRES_USERNAME, POSTGRES_PASSWORD);
+             java.sql.Statement st = c.createStatement()) {
+            st.execute(insert + "(now(), 'a', " + key + ", 'acme-ci', " + org + ", 0, 1, 'valid', 200, 10, 0, 0, 8, 1000, 100), "
+                    + "(now(), 'b', " + key + ", 'acme-ci', " + org + ", 0, 1, 'valid', 200, 20, 0, 0, 18, 2000, 200), "
+                    + "(now(), 'c', " + key + ", 'acme-ci', " + org + ", 0, 1, 'invalid', 200, 30, 0, 0, 28, -1, -1), "
+                    + "(now(), 'd', NULL, NULL, '" + nzi.fhir.validator.core.Constant.SYSTEM_ORG_ID + "', 0, 1, 'valid', 200, 99, 0, 0, 90, 5, 5)");
+            // Code review: --since filters on when the request started, not when its batch was inserted.
+            st.execute(insert + "('2026-01-01T23:59:59.9Z', 'e', " + key + ", 'acme-ci', " + org
+                    + ", 0, 1, 'valid', 200, 1000, 0, 0, 999, 7, 7)");
+        }
+        for (String[] scope : new String[][]{{"--org", "acme"}, {"--key", "acme-ci"}}) {
+            Run r = cli("usage", "summary", scope[0], scope[1], "--since", "2026-01-02T00:00:00Z");
+            assertExit(r, 0);
+            JsonObject s = r.json();
+            assertEquals(3, s.getLong("validations"), r.out());
+            assertEquals(new JsonObject().put("invalid", 1L).put("valid", 2L), s.getJsonObject("byOutcome"));
+            assertEquals(60, s.getLong("totalMs"));
+            assertEquals(20.0, s.getDouble("avgMs"));
+            assertEquals(54, s.getLong("validateMs"));
+            assertEquals(3000, s.getLong("cpuTimeNs"), "-1 counts as 0");
+            assertEquals(300, s.getLong("allocatedBytes"));
+        }
+        assertExit(cli("usage", "summary", "--org", "acme", "--key", "acme-ci"), 2);
+        assertExit(cli("usage", "summary"), 2);
+        assertExit(cli("usage", "summary", "--org", "acme", "--since", "yesterday"), 2);
+        assertExit(cli("usage", "summary", "--org", "nobody"), 3);
     }
 
     private HttpResponse<Buffer> validate(String key) throws Exception {

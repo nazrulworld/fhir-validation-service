@@ -56,17 +56,19 @@ public final class CliArgs {
         COMMANDS.put("org activate", SELECTOR);
         COMMANDS.put("org show", SELECTOR);
         COMMANDS.put("org list", Set.of("active"));
-        COMMANDS.put("key create", Set.of("org", "name", "role", "key-stdin"));
+        COMMANDS.put("key create", Set.of("org", "name", "role", "key-stdin", "expires"));
         COMMANDS.put("key revoke", Set.of("name"));
         COMMANDS.put("key list", Set.of("org"));
         COMMANDS.put("package share", Set.of("ig", "shareable"));
         COMMANDS.put("package transfer", Set.of("ig", "to"));
         COMMANDS.put("snapshot share", Set.of("fhir-version", "ig", "shareable"));
         COMMANDS.put("snapshot transfer", Set.of("fhir-version", "ig", "to"));
+        // Spec 008 FR-022.
+        COMMANDS.put("usage summary", Set.of("org", "key", "since"));
     }
 
     /** The command groups; {@code Bootstrap.main} runs the command line when the first argument is one of them. */
-    public static final Set<String> GROUPS = Set.of("org", "key", "package", "snapshot");
+    public static final Set<String> GROUPS = Set.of("org", "key", "package", "snapshot", "usage");
 
     private static Set<String> union(Set<String> a, Set<String> b) {
         Set<String> u = new LinkedHashSet<>(a);

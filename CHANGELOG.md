@@ -6,6 +6,55 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-11-11
+
+API key hardening, key-only validation, usage accounting and well-known organisations (spec 008). A **minor release
+with breaking changes**, documented as constitution 1.3.0 (Principle IV) requires; see
+[docs/upgrade-4.1.md](docs/upgrade-4.1.md). Migrations V10 to V13 run automatically, but **not as a rolling upgrade**:
+stop every 4.0 instance first.
+
+### Breaking
+
+- **Validation needs a key.** `POST /{version}/validate` and the package reads (`/igs/{name}/{version}/dependencies`,
+  `/conformance`) answer **401** without a VALIDATE or ADMIN key. `openapi.yaml` now declares `security: apiKey` on
+  every keyed operation.
+- **`FV_AUTH_ANONYMOUS_VALIDATE` is removed** (also `auth.anonymousValidate` in `FV_CONFIG_FILE`); set, it logs a
+  deprecation warning and is ignored.
+- **The system organisation's id changes** to `00000000-0000-0000-0000-100000000001` (V11, with every owner reference
+  and column default). 4.0 instances must not run against the upgraded database.
+- **The bootstrap key is renamed** to `system administrator` with the fixed id `00000000-0000-0000-0000-200000000001`.
+  `system administrator` and `trial validator` are reserved names for `fv-admin key create`. They can be revoked by
+  name; a revoked value is never installed again (V13), so a leaked key can't come back, also after a rotation.
+
+### Added
+
+- **Trial organisation and key**: the `trial` organisation (`…-100000000002`) is seeded; `FV_VALIDATOR_API_KEY`
+  installs its shared VALIDATE key (`trial validator`) at every start. Startup fails loudly when a well-known name is
+  already taken or a configured key conflicts, and exits without the graceful drain. An instance without the variable
+  leaves the stored key unchanged.
+- **Admin network allowlist** `FV_AUTH_ADMIN_CIDRS`: administrative operations from other networks get 403 for every
+  key, before any key lookup.
+- **Trusted proxies** `FV_AUTH_TRUSTED_PROXIES`: the forwarding header is believed only from these peers (right-most
+  untrusted address); `FV_AUTH_FORWARDED_HEADER` names the one header they write (`x-forwarded-for` by default, or
+  `forwarded`), and the other is never read. When the client can't be determined (no header, every hop trusted, an
+  unparseable entry or peer), administrative calls are refused.
+- **Key expiry**: `fv-admin key create --expires <ISO-8601 instant>`; an expired key gets 401, also while cached.
+  `key list` shows `expiresAt` and `lastUsedIp` (written within a second when a key is used from a new address).
+- **Usage accounting** `FV_USAGE_SINK` (`none` by default, `log`, `db`, `log,db`): one record per authorised validation
+  with key, organisation, outcome, issue counts, phase timings, CPU time and allocated bytes. The `log` sink writes one
+  JSON line on the `nzi.fhir.validator.usage` logger; the `db` sink batches into `validation_usage` through a bounded
+  queue (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`) and never blocks a request. Retention is
+  the operator's job. `fv-admin usage summary --org|--key [--since]` aggregates the table by request start time.
+- **Metrics**: `fv_validation_cpu_seconds` and `fv_validation_allocated_bytes` (by version and outcome, whatever the
+  sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}` (`queue_full`, `write_failed`, `closed`, `unattributed`,
+  `log_full`), `fv_usage_queue_size`. No metric is labelled by
+  key or organisation.
+
+### Changed
+
+- A malformed bearer value gets 401 without a key lookup.
+- The `last_used_at` throttle map is bounded (10 000 keys).
+
 ## [4.0.0] - 2026-11-09
 
 Terminology servers per included IG (spec 007), and validation served only by included IG contexts. **Breaking** for

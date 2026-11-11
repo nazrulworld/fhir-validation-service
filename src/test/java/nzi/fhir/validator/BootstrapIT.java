@@ -48,7 +48,7 @@ class BootstrapIT extends BaseTestContainer {
     @Timeout(value = 120, timeUnit = TimeUnit.SECONDS)
     void becomesReadyAndValidates(Vertx vertx, VertxTestContext ctx) {
         app.awaitReady(90_000)
-                .compose(v -> app.client().post(app.port(), "localhost", "/R4/validate")
+                .compose(v -> app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
                         .putHeader("Content-Type", "application/fhir+json")
                         .putHeader("Accept", "application/json")
                         .sendBuffer(Buffer.buffer(Fixtures.string(Fixtures.DK_PATIENT))))

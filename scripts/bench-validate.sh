@@ -8,6 +8,7 @@
 #   IG           default hl7.fhir.dk.core#3.4.0 (store and include it first)
 #   REQUESTS     default 2000
 #   CONCURRENCY  default 8
+#   FV_KEY       (env, required since 4.1.0) a VALIDATE or ADMIN key; validation is key-only
 # Needs one of: hey (preferred) or ab (ApacheBench). Run it against the previous release and this branch on the same
 # machine and attach both outputs to the PR.
 set -eu
@@ -16,6 +17,7 @@ BASE=${1:-http://127.0.0.1:8880}
 IG=${2:-hl7.fhir.dk.core#3.4.0}
 N=${3:-2000}
 C=${4:-8}
+KEY=${FV_KEY:?set FV_KEY to a VALIDATE or ADMIN key (validation needs a key since 4.1.0)}
 IG_QUERY=$(printf '%s' "$IG" | sed 's/#/%23/')
 BODY=$(mktemp)
 trap 'rm -f "$BODY"' EXIT
@@ -25,7 +27,7 @@ JSON
 
 warm() {
   for _ in 1 2 3 4 5; do
-    curl -fs -o /dev/null -H 'Content-Type: application/fhir+json' --data-binary @"$BODY" "$1" || {
+    curl -fs -o /dev/null -H 'Content-Type: application/fhir+json' -H "Authorization: Bearer $KEY" --data-binary @"$BODY" "$1" || {
       echo "warm-up request to $1 failed; is the service up and (for the ig scenario) the IG stored?" >&2
       exit 1
     }
@@ -38,10 +40,10 @@ run() {
   warm "$url"
   echo "== $label ($N requests, concurrency $C)"
   if command -v hey > /dev/null 2>&1; then
-    hey -n "$N" -c "$C" -m POST -T 'application/fhir+json' -D "$BODY" "$url" \
+    hey -n "$N" -c "$C" -m POST -T 'application/fhir+json' -H "Authorization: Bearer $KEY" -D "$BODY" "$url" \
       | awk '/Latency distribution/{p=1} p && /(50|95|99)% in/{print "   p" $1 " " $3 " s"} /Status code distribution/{s=1} s && /\[/{print "   status " $0}'
   elif command -v ab > /dev/null 2>&1; then
-    ab -q -n "$N" -c "$C" -p "$BODY" -T 'application/fhir+json' "$url" \
+    ab -q -n "$N" -c "$C" -p "$BODY" -T 'application/fhir+json' -H "Authorization: Bearer $KEY" "$url" \
       | awk '/Non-2xx responses/{print "   " $0} /Failed requests/{print "   " $0} / +50% /{print "   p50 " $2 " ms"} / +95% /{print "   p95 " $2 " ms"} / +99% /{print "   p99 " $2 " ms"}'
   else
     echo "needs hey or ab" >&2

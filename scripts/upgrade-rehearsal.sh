@@ -44,10 +44,12 @@ errors() {
 
 # Validates the dk Patient and a variant without identifier on $1 ("old" or "new"), declaring the dk profile in
 # meta.profile (0.1.2 has no profile parameter); saves the error-level issues to $WORK/<name>.<variant>.errors.
+# $4 (optional) is a key; since 4.1.0 validation needs one, older releases ignore the header.
 validate_dk() {
-  base=$1; name=$2; query=${3:-}
+  base=$1; name=$2; query=${3:-}; key=${4:-}
   for variant in complete no-identifier; do
-    curl -fs -H 'Content-Type: application/fhir+json' -H 'Accept: application/json' --data-binary @"$WORK/patient-$variant.json" \
+    curl -fs -H 'Content-Type: application/fhir+json' -H 'Accept: application/json' \
+      ${key:+-H "Authorization: Bearer $key"} --data-binary @"$WORK/patient-$variant.json" \
       "$base/R4/validate$query" > "$WORK/$name.$variant.json" || fail "validation of the $variant dk Patient on $name"
     errors "$WORK/$name.$variant.json" > "$WORK/$name.$variant.errors"
   done
@@ -109,7 +111,8 @@ cat "$WORK/before.txt"
 
 echo "==> restore into $NEW_TAG (guide steps 3-4)"
 cp .env.example "$WORK/.env"
-sed -i.bak "s/^PG_PASSWORD=.*/PG_PASSWORD=rehearsal$(openssl rand -hex 8)/; s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=rehearsal$(openssl rand -hex 20)/; s/^FV_HTTP_PORT=.*/FV_HTTP_PORT=18991/" "$WORK/.env"
+NEW_ADMIN_KEY="rehearsal$(openssl rand -hex 20)"
+sed -i.bak "s/^PG_PASSWORD=.*/PG_PASSWORD=rehearsal$(openssl rand -hex 8)/; s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=$NEW_ADMIN_KEY/; s/^FV_HTTP_PORT=.*/FV_HTTP_PORT=18991/" "$WORK/.env"
 $DC up -d --wait postgres > /dev/null
 $DC exec -T postgres pg_restore -U postgres -d fhir_validator --no-owner --clean --if-exists < "$WORK/fhir_validator.dump" || true
 $DC exec -T postgres psql -U postgres -At -d fhir_validator -c "$COUNT_SQL" > "$WORK/after.txt"
@@ -121,7 +124,7 @@ $DC up -d --no-build --wait --wait-timeout 300 > /dev/null || fail "$NEW_TAG did
 packages=$(curl -fs "http://127.0.0.1:18991/health/readiness" | jq -r '.versions.R4.packages | join(",")')
 echo "    R4 packages after upgrade: $packages"
 echo "$packages" | grep -q "example.rehearsal#1.0.0" || fail "included IG not active after upgrade"
-validate_dk "http://127.0.0.1:18991" new "?profile=$DK_PROFILE"
+validate_dk "http://127.0.0.1:18991" new "?profile=$DK_PROFILE" "$NEW_ADMIN_KEY"
 jq -e --arg p "$DK_PROFILE" '.appliedProfiles | index($p)' "$WORK/new.complete.json" > /dev/null \
   || fail "appliedProfiles lacks $DK_PROFILE after upgrade"
 for variant in complete no-identifier; do

@@ -66,7 +66,7 @@ class ObservabilityIT extends BaseTestContainer {
     }
 
     private Future<?> validate() {
-        return app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Content-Type", "application/json")
+        return app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
     }
 
@@ -87,10 +87,15 @@ class ObservabilityIT extends BaseTestContainer {
                             "fv_snapshot_packages\\{version=\"R4\",?\\} 0\\.0", "fv_snapshot_package_size_bytes\\{version=\"R4\",?\\} 0\\.0",
                             // SC-011: request rate (Vert.x HTTP server metrics) and cache effectiveness.
                             "vertx_http_server_requests_total\\{[^}]*\\} [1-9]", "fv_package_cache_hits_total \\d",
-                            "fv_package_cache_misses_total \\d")) {
+                            "fv_package_cache_misses_total \\d",
+                            // Spec 008 FR-020: work resources by version and outcome, measured whatever the usage sink.
+                            "fv_validation_cpu_seconds_count\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0",
+                            "fv_validation_allocated_bytes_count\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
                     assertFalse(body.contains("loinc") || body.contains("snomed"), "no client codes or systems in labels");
+                    assertFalse(java.util.regex.Pattern.compile("(?m)^fv_[^ ]*\\{[^}]*(key|org|client_ip)=").matcher(body).find(),
+                            "spec 008: no metric is labelled by key, organisation or client address");
                     // Custom profile registration is gone in 2.0.0 (spec 003, SC-008).
                     assertFalse(body.contains("fv_profile_count"), "fv_profile_count must no longer be exposed");
                     ctx.completeNow();
@@ -100,7 +105,7 @@ class ObservabilityIT extends BaseTestContainer {
     @Test
     void unresolvedRequestedProfileIsCountedAsUnknownProfile(VertxTestContext ctx) {
         // Spec 003 (T026, Principle VII): a 400 unknown-profile is recorded with its own outcome label, end to end.
-        app.client().post(app.port(), "localhost", "/R4/validate")
+        app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
                 .addQueryParam("profile", "http://example.org/StructureDefinition/typo")
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"))
@@ -173,7 +178,7 @@ class ObservabilityIT extends BaseTestContainer {
     }
 
     private Future<io.vertx.ext.web.client.HttpResponse<Buffer>> validateIg(String ig) {
-        return app.client().post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", ig)
+        return app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).addQueryParam("ig", ig)
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\",\"active\":true}"));
     }

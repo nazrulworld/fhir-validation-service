@@ -41,10 +41,90 @@ import java.util.List;
 public class ValidationApi {
     private static final Logger logger = LogManager.getLogger(ValidationApi.class);
     private final FhirValidationService validationService;
+    private volatile nzi.fhir.validator.core.usage.UsageWriter usage = nzi.fhir.validator.core.usage.NoopUsageWriter.INSTANCE;
 
     public ValidationApi(FhirValidationService validationService) {
         this.validationService = validationService;
     }
+
+    /** Where usage records go (spec 008 FR-014); the default keeps nothing but metrics are still measured. */
+    public void setUsageWriter(nzi.fhir.validator.core.usage.UsageWriter usage) {
+        this.usage = usage;
+    }
+
+    /**
+     * Spec 008 (research R10): a meter for this request, finished when the response ends. Full mode (a record) only when
+     * a sink is enabled and the caller has a key; metrics-only otherwise.
+     */
+    private nzi.fhir.validator.core.usage.UsageMeter newMeter(RoutingContext ctx, String version) {
+        nzi.fhir.validator.core.security.Caller caller = ApiKeyAuthHandler.caller(ctx);
+        nzi.fhir.validator.core.usage.UsageWriter writer = usage;
+        java.util.function.Consumer<nzi.fhir.validator.core.usage.UsageRecord> sink =
+                writer.enabled() && !caller.anonymous() && caller.orgId() != null ? writer::write : null;
+        String clientIp = null;
+        if (sink != null) {
+            // Only needed for the record (code review: skip the formatting on the default sink "none").
+            java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
+            clientIp = client == null ? null : client.getHostAddress();
+        }
+        return nzi.fhir.validator.core.usage.UsageMeter.start(nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller,
+                clientIp, version, ctx.body() == null ? 0 : Math.max(0, ctx.body().length()), sink);
+    }
+
+    private static final java.util.regex.Pattern VALIDATE_PATH = java.util.regex.Pattern.compile("^/([^/]+)/validate/?$");
+
+    /**
+     * Spec 008 (FR-011, code review): a root handler, mounted right after authorisation, that starts the request's one
+     * usage meter for every authorised {@code POST /{version}/validate}. Starting it here gives the record the real start
+     * time, and covers requests the router refuses before any operation handler runs (406, 415).
+     */
+    public io.vertx.core.Handler<RoutingContext> usageFallbackHandler() {
+        return ctx -> {
+            java.util.regex.Matcher m = VALIDATE_PATH.matcher(ctx.normalizedPath());
+            if (ctx.request().method() == io.vertx.core.http.HttpMethod.POST && m.matches()) {
+                meterFor(ctx, m.group(1));
+            }
+            ctx.next();
+        };
+    }
+
+    /**
+     * The request's usage meter, created on first use and stored in the context (one per request). When the response
+     * ends, the meter records it, and also closes the work side unless the validation service was started (whose future
+     * signals it): so a request answered without validating (a router refusal, a timeout, an early 4xx) is recorded
+     * exactly once, whoever answered it.
+     */
+    private nzi.fhir.validator.core.usage.UsageMeter meterFor(RoutingContext ctx, String version) {
+        nzi.fhir.validator.core.usage.UsageMeter existing = ctx.get(METER_KEY);
+        if (existing != null) {
+            return existing;
+        }
+        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, version);
+        ctx.put(METER_KEY, meter);
+        if (ctx.response().ended()) {
+            // End handlers have already run (e.g. the request timeout answered during the key lookup): record it now.
+            endMeter(ctx, meter, false);
+        } else {
+            ctx.addEndHandler(ar -> endMeter(ctx, meter, ar.failed()));
+        }
+        return meter;
+    }
+
+    private static void endMeter(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter, boolean reset) {
+        meter.responseEnded(ctx.response().getStatusCode(), reset, nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
+        if (!Boolean.TRUE.equals(ctx.get(WORK_STARTED_KEY))) {
+            meter.workNeverStarted();
+        }
+    }
+
+    /** Set just before the validation service is called: its future then signals the meter's work side. */
+    private static final String WORK_STARTED_KEY = "usageWorkStarted";
+
+    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
+        return meterFor(ctx, ctx.pathParam("version"));
+    }
+
+    private static final String METER_KEY = "usageMeter";
 
     /**
      * Configures the routes for validation API endpoints.
@@ -55,7 +135,7 @@ public class ValidationApi {
         // Method: POST, Path: "/:version/validate"
         routerBuilder.operation("validationApiValidate")
                 .handler(this::handleDoValidation)
-                .failureHandler(ValidationApi::handleValidateFailure);
+                .failureHandler(this::handleValidateFailure);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -64,45 +144,70 @@ public class ValidationApi {
     }
 
     private void handleDoValidation(RoutingContext ctx) {
+        nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
+        if (ctx.response().ended()) {
+            // Code review: the request timeout already answered (a slow upload or key lookup). Don't spend a worker on
+            // a validation nobody will receive; the meter has already recorded the end (outcome timeout).
+            meter.workNeverStarted();
+            return;
+        }
+        boolean started = false;
+        try {
+            started = doValidation(ctx, meter);
+        } finally {
+            // Every path that didn't call the service (early 4xx answers, or an unexpected exception) closes the meter
+            // here, once; the service's future signals it otherwise (code review).
+            if (!started) {
+                meter.workNeverStarted();
+            }
+        }
+    }
+
+    /** @return whether the validation service was called (its future then signals the meter) */
+    private boolean doValidation(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter) {
         SupportedFhirVersion version;
         try {
             version = version(ctx);
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
         RequestFormat requestFormat = MediaTypes.requestFormat(ctx.request().getHeader("Content-Type"));
         if (requestFormat == RequestFormat.UNSUPPORTED) {
             ErrorResponder.problem(ctx, 415, "unsupported-media-type", "Send FHIR resources as JSON or XML");
-            return;
+            return false;
         }
+        meter.contentType(requestFormat == RequestFormat.XML ? "XML" : "JSON");
         ResponseFormat responseFormat = MediaTypes.responseFormat(ctx.request().getHeader("Accept"));
         if (responseFormat == ResponseFormat.NONE) {
             ErrorResponder.problem(ctx, 406, "not-acceptable",
                     "Acceptable response types: application/json, application/fhir+json, application/fhir+xml, application/xml");
-            return;
+            return false;
         }
         List<String> profiles;
         try {
             profiles = ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate();
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
+        meter.profiles(profiles == null ? 0 : profiles.size());
         IgReference ig;
         try {
             ig = igParameter(ctx);
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
+        meter.ig(ctx.queryParams().get("ig"));
         if (ctx.body() == null || ctx.body().isEmpty()) {
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
-            return;
+            return false;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
+        ctx.put(WORK_STARTED_KEY, true);
         Future<Rendered> rendered = validationService
-                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles,
+                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles, meter,
                         outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel(),
                                 outcome.contextAccess()))
                 .recover(err -> {
@@ -128,6 +233,7 @@ public class ValidationApi {
             }
             rc.response().end(result.body());
         });
+        return true;
     }
 
     /** The short name of the organisation owning the validator context of a 200 result (spec 005 FR-020). */
@@ -168,7 +274,15 @@ public class ValidationApi {
      * Contract-level failures of the validate operation: malformed JSON is an invalid resource, an undeclared
      * content type is 415; everything else follows the common mapping.
      */
-    private static void handleValidateFailure(RoutingContext ctx) {
+    private void handleValidateFailure(RoutingContext ctx) {
+        if (!Boolean.TRUE.equals(ctx.get(WORK_STARTED_KEY))) {
+            // Spec 008 FR-011: refused before validating (e.g. by the contract layer); the response end records it.
+            nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
+            if (ctx.failure() instanceof BodyProcessorException e
+                    && e.getErrorType() == BodyProcessorException.BodyProcessorErrorType.PARSING_ERROR) {
+                meter.outcome(nzi.fhir.validator.core.metrics.ServiceMetrics.OUTCOME_UNPARSEABLE);
+            }
+        }
         // FR-009: the ig parameter's shape is checked before the body, also when the contract layer has already
         // refused the body (e.g. an empty or malformed JSON body).
         try {

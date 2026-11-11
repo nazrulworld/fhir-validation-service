@@ -99,13 +99,27 @@ public class FhirValidationService {
     public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
                                   SupportedContentType contentType, List<String> profiles,
                                   Function<ValidatorSnapshot.Outcome, T> finisher) {
+        return validate(who, version, ig, body, contentType, profiles, nzi.fhir.validator.core.usage.UsageMeter.NONE, finisher);
+    }
+
+    /**
+     * Like {@link #validate(Caller, SupportedFhirVersion, IgReference, String, SupportedContentType, List, Function)},
+     * marking each phase on {@code meter} (spec 008 research R10): admission, context ready, and the CPU time, allocated
+     * bytes and issue counts of the work on the validation worker.
+     */
+    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
+                                  SupportedContentType contentType, List<String> profiles,
+                                  nzi.fhir.validator.core.usage.UsageMeter meter,
+                                  Function<ValidatorSnapshot.Outcome, T> finisher) {
         java.util.Objects.requireNonNull(who, "caller");
         long started = System.nanoTime();
         // Steps may complete on another context (a joined catalog refresh, a joined build): return to the caller's
         // context after each, so its request id stays on every log line (Principle VII).
         io.vertx.core.Context caller = io.vertx.core.Vertx.currentContext();
         java.util.concurrent.atomic.AtomicReference<Access> contextAccess = new java.util.concurrent.atomic.AtomicReference<>();
-        return admission.admit(() -> onCaller(caller, resolve(who, version, ig))
+        return admission.admit(() -> {
+                    meter.markAdmitted();
+                    return onCaller(caller, resolve(who, version, ig))
                         .compose(key -> {
                             // Before any build is admitted, and from memory only (FR-013).
                             try {
@@ -115,19 +129,35 @@ public class FhirValidationService {
                             }
                             return onCaller(caller, registry.snapshot(key));
                         })
-                        .compose(snapshot -> executors.validation().executeBlocking(() -> {
-                            ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries)
-                                    .withContextAccess(contextAccess.get());
-                            return new Done<>(outcome.result().isSuccessful(), finisher.apply(outcome));
-                        }, false)))
+                        .compose(snapshot -> {
+                            meter.markContextReady();
+                            return executors.validation().executeBlocking(() -> {
+                                meter.workerStart();
+                                int[] issues = {0, 0, 0, 0};
+                                try {
+                                    ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles, maxBundleEntries)
+                                            .withContextAccess(contextAccess.get());
+                                    meter.ig(outcome.contextLabel());
+                                    countIssues(outcome, issues);
+                                    return new Done<>(outcome.result().isSuccessful(), finisher.apply(outcome));
+                                } finally {
+                                    meter.workerEnd(issues[0], issues[1], issues[2], issues[3]);
+                                }
+                            }, false);
+                        });
+                })
                 .onComplete(ar -> {
+                    String outcome = ar.succeeded()
+                            ? (ar.result().valid() ? ServiceMetrics.OUTCOME_VALID : ServiceMetrics.OUTCOME_INVALID)
+                            : failureOutcome(ar.cause());
                     ServiceMetrics m = metrics;
                     if (m != null) {
-                        String outcome = ar.succeeded()
-                                ? (ar.result().valid() ? ServiceMetrics.OUTCOME_VALID : ServiceMetrics.OUTCOME_INVALID)
-                                : failureOutcome(ar.cause());
                         m.recordValidation(version, outcome, System.nanoTime() - started);
+                        // Spec 008 FR-020: measured whatever the usage sink (an admission refusal stays "error").
+                        m.recordValidationResources(version, outcome, meter.cpuNanos(), meter.allocatedBytes());
                     }
+                    meter.outcome(outcome);
+                    meter.workDone();
                 })
                 .map(Done::value);
     }
@@ -188,6 +218,23 @@ public class FhirValidationService {
             default -> {
                 Access a = pinned.get(key.igPackage());
                 return a != null ? a : view.access(key.igPackage());
+            }
+        }
+    }
+
+    /** Issue counts by severity: fatal, error, warning, information (on the worker, never the event loop). */
+    private static void countIssues(ValidatorSnapshot.Outcome outcome, int[] counts) {
+        for (ca.uhn.fhir.validation.SingleValidationMessage m : outcome.result().getMessages()) {
+            if (m.getSeverity() == null) {
+                continue;
+            }
+            switch (m.getSeverity()) {
+                case FATAL -> counts[0]++;
+                case ERROR -> counts[1]++;
+                case WARNING -> counts[2]++;
+                case INFORMATION -> counts[3]++;
+                default -> {
+                }
             }
         }
     }

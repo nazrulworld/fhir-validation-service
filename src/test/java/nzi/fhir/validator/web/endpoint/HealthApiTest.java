@@ -48,6 +48,8 @@ class HealthApiTest extends BaseTestContainer {
 
         RouterBuilder.create(vertx, "openapi.yaml")
                 .onSuccess(routerBuilder -> {
+                    // Like HttpVerticle: keys are enforced at router level, not by OpenAPI security handlers (spec 008).
+                    routerBuilder.setOptions(new io.vertx.ext.web.openapi.RouterBuilderOptions().setRequireSecurityHandlers(false));
                     healthService = new HealthService(vertx, pgPool);
                     new HealthApi(routerBuilder, vertx, healthService);
                     // Create the router from the builder
@@ -170,6 +172,7 @@ class HealthApiTest extends BaseTestContainer {
         HealthService healthService = new HealthService(vertx, unreachable, 1_000).start();
         vertx.setTimer(1_500, id -> RouterBuilder.create(vertx, "openapi.yaml")
                 .compose(routerBuilder -> {
+                    routerBuilder.setOptions(new io.vertx.ext.web.openapi.RouterBuilderOptions().setRequireSecurityHandlers(false));
                     new HealthApi(routerBuilder, vertx, healthService);
                     return vertx.createHttpServer().requestHandler(routerBuilder.createRouter()).listen(0);
                 })

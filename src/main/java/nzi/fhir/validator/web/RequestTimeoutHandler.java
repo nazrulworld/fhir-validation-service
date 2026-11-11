@@ -8,7 +8,15 @@ import io.vertx.ext.web.handler.PlatformHandler;
  * discarded: {@link ErrorResponder} never writes a response twice.
  */
 public class RequestTimeoutHandler implements PlatformHandler {
+    /** Routing-context flag set when the timeout answered the request (spec 008: usage outcome {@code timeout}). */
+    public static final String TIMED_OUT = "requestTimedOut";
+
     private final long timeoutMs;
+
+    /** Whether the request timeout answered this request. */
+    public static boolean timedOut(io.vertx.ext.web.RoutingContext ctx) {
+        return Boolean.TRUE.equals(ctx.get(TIMED_OUT));
+    }
 
     public RequestTimeoutHandler(long timeoutMs) {
         this.timeoutMs = timeoutMs;
@@ -18,6 +26,7 @@ public class RequestTimeoutHandler implements PlatformHandler {
     public void handle(RoutingContext ctx) {
         long timer = ctx.vertx().setTimer(timeoutMs, id -> {
             if (!ctx.response().ended() && !ctx.response().closed()) {
+                ctx.put(TIMED_OUT, true);
                 ErrorResponder.fail(ctx, new ProblemException(503, "not-ready",
                         "The request did not complete within " + timeoutMs + " ms; retry later").withHeader("Retry-After", "5"));
             }

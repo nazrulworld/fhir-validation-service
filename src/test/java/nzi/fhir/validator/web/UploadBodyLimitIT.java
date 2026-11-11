@@ -65,7 +65,7 @@ class UploadBodyLimitIT extends BaseTestContainer {
                         assertNotEquals(413, upload.statusCode(), "a 2 MB upload is within the 5 MB package limit: " + upload.bodyAsString());
                         assertTrue(upload.statusCode() >= 400 && upload.statusCode() < 500, upload.bodyAsString());
                     });
-                    return app.client().post(app.port(), "localhost", "/R4/validate").timeout(10_000)
+                    return app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(10_000)
                             .putHeader("Content-Type", "application/json")
                             .sendBuffer(Buffer.buffer(new byte[2 * 1024 * 1024]));
                 })

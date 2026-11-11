@@ -16,6 +16,13 @@ fail() {
 
 [ -f .env ] || fail ".env missing (cp .env.example .env and set PG_PASSWORD)"
 
+# Since 4.1.0 every validation needs a VALIDATE or ADMIN key: FV_KEY, else the trial validator key from .env, else the
+# admin key.
+env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
+KEY="${FV_KEY:-$(env_value FV_VALIDATOR_API_KEY)}"
+[ -n "$KEY" ] || KEY=$(env_value FV_ADMIN_API_KEY)
+[ -n "$KEY" ] || fail "no key to validate with: set FV_VALIDATOR_API_KEY (or FV_ADMIN_API_KEY) in .env, or FV_KEY"
+
 echo "==> starting stack"
 docker compose up -d --build --wait --wait-timeout "$READY_TIMEOUT" || fail "stack did not become healthy"
 
@@ -27,10 +34,15 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health/readiness")" = "
   sleep 2
 done
 
+echo "==> validation without a key is refused (4.1.0: key-only)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/fhir+json' \
+  --data-binary "@$FIXTURE" "$BASE/R4/validate")
+[ "$code" = "401" ] || fail "validate without a key returned HTTP $code, expected 401"
+
 echo "==> validating fixture"
 body=$(mktemp)
 code=$(curl -s -o "$body" -w '%{http_code}' -H 'Content-Type: application/fhir+json' \
-  --data-binary "@$FIXTURE" "$BASE/R4/validate")
+  -H "Authorization: Bearer $KEY" --data-binary "@$FIXTURE" "$BASE/R4/validate")
 [ "$code" = "200" ] || fail "validate returned HTTP $code: $(cat "$body")"
 jq -e '.valid | type == "boolean"' "$body" > /dev/null || fail "response has no boolean 'valid': $(cat "$body")"
 rm -f "$body"

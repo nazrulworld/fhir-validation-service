@@ -51,13 +51,14 @@ final class KeyCommands {
         } catch (IllegalArgumentException e) {
             throw CliException.usage("--role must be ADMIN or VALIDATE");
         }
-        if (ApiKeyRepository.BOOTSTRAP_NAME.equalsIgnoreCase(name)) {
+        if (ApiKeyRepository.isReserved(name)) {
             throw new CliException(CliException.CONFLICT, "conflict",
-                    "The key name 'bootstrap' is reserved for FV_ADMIN_API_KEY");
+                    "The key name '" + name + "' is reserved for a well-known key");
         }
         if (name.length() > 64) {
             throw CliException.usage("--name must be at most 64 characters");
         }
+        java.time.Instant expiresAt = cmd.value("expires").map(KeyCommands::futureInstant).orElse(null);
         boolean fromStdin = cmd.has("key-stdin");
         String key = fromStdin ? readKey(ctx) : generateKey();
         if (!ApiKeyRepository.isWellFormed(key)) {
@@ -66,15 +67,31 @@ final class KeyCommands {
         return ctx.organisations().findByShortName(orgName)
                 .compose(org -> org.isPresent() ? Future.succeededFuture(org.get())
                         : Future.failedFuture(OrganisationRepository.notFound()))
-                .compose(org -> ctx.keys().create(name, key, role, org.id()).map(v -> {
-                    logger.info("cli: key create name={} org={} role={}", name, org.nameShort(), role);
-                    JsonObject result = new JsonObject().put("name", name).put("role", role.name()).put("org", org.nameShort());
+                .compose(org -> ctx.keys().create(name, key, role, org.id(), expiresAt).map(v -> {
+                    logger.info("cli: key create name={} org={} role={} expires={}", name, org.nameShort(), role,
+                            expiresAt == null ? "never" : expiresAt);
+                    JsonObject result = new JsonObject().put("name", name).put("role", role.name()).put("org", org.nameShort())
+                            .put("expiresAt", expiresAt == null ? null : expiresAt.toString());
                     if (!fromStdin) {
                         // Printed here, once; never stored or logged.
                         result.put("key", key);
                     }
                     return result;
                 }));
+    }
+
+    /** Spec 008 FR-006: {@code --expires} is an ISO-8601 instant in the future. */
+    private static java.time.Instant futureInstant(String value) {
+        java.time.Instant at;
+        try {
+            at = java.time.Instant.parse(value.strip());
+        } catch (java.time.format.DateTimeParseException e) {
+            at = null;
+        }
+        if (at == null || !at.isAfter(java.time.Instant.now())) {
+            throw CliException.usage("--expires must be a future ISO-8601 instant, e.g. 2027-01-01T00:00:00Z");
+        }
+        return at;
     }
 
     private static String readKey(CliContext ctx) {
@@ -89,6 +106,11 @@ final class KeyCommands {
 
     private static Future<Object> revoke(CliArgs.Command cmd, CliContext ctx) {
         String name = cmd.required("name");
+        if (ApiKeyRepository.isReserved(name)) {
+            // Spec 008: allowed. The revoked value is remembered (V13) and never installed again.
+            logger.warn("cli: '{}' is installed from configuration; its revoked value is never installed again, so set "
+                    + "its variable to a new value on every instance", name);
+        }
         return ctx.keys().revokeNamed(name).map(org -> {
             logger.info("cli: key revoke name={} org={}", name, org);
             return new JsonObject().put("name", name).put("revoked", true);

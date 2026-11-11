@@ -81,7 +81,7 @@ class IgScopedValidationIT extends BaseTestContainer {
     }
 
     private HttpRequest<Buffer> validate(String version, String... igs) {
-        HttpRequest<Buffer> req = app.client().post(app.port(), "localhost", "/" + version + "/validate").timeout(30_000)
+        HttpRequest<Buffer> req = app.client().post(app.port(), "localhost", "/" + version + "/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(30_000)
                 .putHeader("Content-Type", "application/fhir+json");
         for (String ig : igs) {
             req.addQueryParam("ig", ig);
