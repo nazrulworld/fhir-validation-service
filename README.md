@@ -234,7 +234,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=3.0.0
+VERSION=4.1.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -251,10 +251,11 @@ export FV_PG_DATABASE=fhir_validator
 export FV_PG_USER=fhir_validator
 export FV_PG_PASSWORD='choose-a-strong-password'
 export FV_ADMIN_API_KEY='<output of openssl rand -hex 32>'
+export FV_VALIDATOR_API_KEY='<another output of openssl rand -hex 32>'   # optional shared trial key (4.1.0)
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-3.0.0.jar
+  -jar fhir-validation-service-4.1.0.jar
 ```
 
 ```bash
@@ -274,6 +275,7 @@ FV_PG_DATABASE=fhir_validator
 FV_PG_USER=fhir_validator
 FV_PG_PASSWORD=choose-a-strong-password
 FV_ADMIN_API_KEY=replace-with-the-generated-key
+FV_VALIDATOR_API_KEY=replace-with-another-generated-key
 FV_LOG_FORMAT=json
 ```
 
@@ -301,13 +303,55 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-3.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-4.1.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
 
 To run more instances, start more processes (any host) against the same database; put a load balancer in front that
 health-checks `/health/readiness`. To upgrade, replace the jar and restart; migrations run on start.
+
+**6. Set up the `fv-admin` command line**
+
+Organisations and API keys are managed with the administrative command line
+([Organisations and API keys](#organisations-and-api-keys)). It is the same jar: when the first argument is a command
+group (`org`, `key`, `package`, `snapshot`, `usage`), the jar runs that one command and exits instead of starting the
+server. It connects straight to the database with the same `FV_PG_*` settings (no HTTP call, no API key, and the service
+does not need to be running) and applies pending migrations first.
+
+In the shell from step 4, with the variables still exported:
+
+```bash
+java -jar fhir-validation-service-4.1.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
+```
+
+For a systemd installation, a small wrapper gives the same `fv-admin` command the container image has, reading the
+service's own environment file so the database settings live in one place. `/usr/local/bin/fv-admin`:
+
+```sh
+#!/bin/sh
+# fv-admin: the administrative command line, with the service's database settings.
+set -a                        # export every variable the file defines
+. /etc/fhir-validator/env
+set +a
+exec /usr/bin/java -Xmx512m -jar /opt/fhir-validator/fhir-validation-service.jar "$@"
+```
+
+```bash
+sudo install -m 0750 -o root -g root fv-admin /usr/local/bin/fv-admin
+sudo fv-admin org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL --country DK
+sudo fv-admin key create --org acme --name acme-ci --role VALIDATE     # prints the key once
+sudo fv-admin key list --org acme
+```
+
+- The environment file is `0600 root`, so run `fv-admin` with `sudo`. If your `sudo` `secure_path` does not include
+  `/usr/local/bin` (RHEL and derivatives), call it as `sudo /usr/local/bin/fv-admin`.
+- The file is read both by systemd and by the shell here: keep each line `NAME=value` with no spaces, quotes or `$` in
+  the value (values from `openssl rand -hex` are safe).
+- The command line needs only a small heap; `-Xmx512m` keeps it from competing with a running service on the same host.
+- It can run on any host that reaches the database (with the same `FV_PG_SSL_MODE`), not only where the service runs.
+- stdout is a single JSON document, so results can be piped to `jq`; logs and errors go to stderr. Exit codes are
+  listed under [Organisations and API keys](#organisations-and-api-keys).
 
 ## Using the API
 
@@ -441,7 +485,7 @@ and the key from `FV_ADMIN_API_KEY` (`system administrator`) belongs to it. A bu
 shareable content only. Organisations and keys are managed with the command line in the service jar and image (no SQL needed):
 
 ```bash
-APP="docker compose run --rm validator fv-admin"     # or: java -jar target/fhir-validation-service-*.jar
+APP="docker compose run --rm validator fv-admin"     # jar install (option C): APP="sudo fv-admin"
 $APP org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL --country DK
 $APP org create --file beta.json --email ops@beta.example      # a JSON file, with flags overriding its fields
 $APP org update --name-short acme --phone "+45 12 34 56 78"   # only the given fields change
