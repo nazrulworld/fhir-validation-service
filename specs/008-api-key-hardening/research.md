@@ -99,11 +99,15 @@ the current code.
 
 - **Decision**:
   - `api_keys.last_used_ip INET NULL`.
-  - `touch(id, ip)` now writes when the 60 s interval has passed **or** the address differs from the last one this
-    instance wrote for the key, so a move to a new place shows up at once.
-  - The write is `UPDATE … SET last_used_at = now(), last_used_ip = $2::inet`. As before, it is fire-and-forget.
-  - The in-memory map is bounded like the auth cache (LRU, 10 000 entries) to satisfy Principle VI. The current
-    unbounded `ConcurrentHashMap` is a latent deviation and is fixed here.
+  - `touch(id, ip)` writes when the 60 s interval has passed, **or** when the address differs from the last one this
+    instance recorded for the key, but then at most once per second per key (`ADDRESS_CHANGE_INTERVAL_MS`), so a key
+    shared by many clients (the trial key, a NAT pool) doesn't write its row on every request (code review). A move
+    to a new place shows up within a second.
+  - An unknown address (`null`, research R3) is never a move and never replaces the stored one: the write is
+    `UPDATE … SET last_used_at = now(), last_used_ip = coalesce($2::text::inet, last_used_ip)`. It is fire-and-forget.
+  - The throttle is a lock-free `ConcurrentHashMap` (atomic `compute` per key), bounded to 10 000 keys by dropping an
+    arbitrary other entry when it grows past that (Principle VI). It is only a throttle: an evicted key costs at most
+    one extra write. (Code review: an access-ordered `LinkedHashMap` would put one global lock on the auth path.)
 - **Rationale**: an attacker using a stolen key from a new place should be visible immediately, not up to a minute
   later.
 - **Alternatives considered**: writing on every request. Rejected because it adds one database write per

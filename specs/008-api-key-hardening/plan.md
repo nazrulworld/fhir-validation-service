@@ -76,7 +76,8 @@ proxy
 
 **Constraints**:
 - The request path never waits on a usage sink (one `offer`, or one log call).
-- No unbounded queue or map: usage queue ≤ 1 000 000, touch map ≤ 10 000 (LRU), auth cache unchanged.
+- No unbounded queue or map: usage queue ≤ 1 000 000, log-sink queue 8 192, touch map ≤ 10 000 (bounded
+  `ConcurrentHashMap`), auth cache unchanged.
 - No resource content in usage records or logs.
 - The V11 upgrade needs every 4.0 instance stopped.
 
@@ -139,7 +140,7 @@ src/main/java/nzi/fhir/validator/
 │   ├── ApiKeyAuthHandler.java                # CHANGE: well-formed check, admin CIDRs, key-only validation,
 │   │                                         #   cache capped by expiry, touch(id, ip)
 │   ├── ApiKeyRepository.java                 # CHANGE: expires_at filter, KeyInfo/KeySummary fields, touch(id, ip)
-│   │                                         #   with bounded LRU, upsertWellKnown, create(..., expiresAt)
+│   │                                         #   with a bounded lock-free throttle, upsertWellKnown, create(..., expiresAt)
 │   ├── Caller.java                           # CHANGE: apiKeyId, apiKeyName
 │   ├── Cidr.java, CidrList.java              # NEW: IPv4/IPv6 CIDR parse + match
 │   └── ClientAddress.java                    # NEW: trusted-proxy resolution + root handler

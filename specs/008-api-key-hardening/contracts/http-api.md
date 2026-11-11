@@ -39,6 +39,10 @@ in `ApiKeyAuthHandler.rootHandler()`, which runs before contract validation (res
 The body is the same in every case: `"A valid API key is required (Authorization: Bearer <key>)"`. The response
 never says which case applied, so it can't be used as a key oracle.
 
+**503 `not-ready`** (problem+json, `Retry-After: 5`) is returned by a key lookup that runs before the warm-up has
+applied migrations V10–V12 (a missing column or table). It never reveals the database error. Every keyed operation
+declares `503` in `openapi.yaml`.
+
 **403 `forbidden`** is returned for:
 - *(new)* an administrative operation from a client address outside `FV_AUTH_ADMIN_CIDRS`:
   `"Administrative operations are not allowed from this network"`. This is decided before the key is read, so it
@@ -55,14 +59,16 @@ Changes to the response tables:
 
 ## 4. Order of checks (root handler)
 
-1. Resolve the client address (trusted-proxy rule, research R3).
-2. Administrative path with an allowlist set and the client outside it → **403**.
+1. Resolve the client address (trusted-proxy rule, research R3). It may be **unknown**: no untrusted hop in the
+   configured forwarding header, or a peer address that can't be parsed.
+2. Administrative path with an allowlist set and the client outside it, or unknown → **403** (fail-closed).
 3. Administrative or validate/read path:
    - no bearer, or a malformed one → **401**;
    - lookup (cache, then database) finds nothing, or the key is revoked or expired → **401**;
+   - the lookup fails because the schema isn't migrated yet → **503** `not-ready`;
    - the owner is deactivated → **403**;
    - the role isn't allowed → **403**;
-   - otherwise `touch(id, clientIp)` and continue.
+   - otherwise `touch(id, clientIp)` (an unknown address keeps the recorded one) and continue.
 4. Every other path is open.
 
 ## 5. Unchanged

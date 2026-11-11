@@ -519,9 +519,10 @@ allocated by the request's work: the heap is shared, so resident memory can't be
 `FV_USAGE_SINK` chooses where records go:
 
 - `none` (default): nothing is kept (the CPU and allocation metrics are still measured);
-- `log`: one JSON line per request on the logger `nzi.fhir.validator.usage`, which `log4j2.xml` sends through a
-  non-blocking async appender (`UsageAsync`, 8192 lines; dropped when full) to its own appender (`UsageConsole`, just
-  the JSON), so it can be routed to a file without touching the application log;
+- `log`: one JSON line per request on the logger `nzi.fhir.validator.usage`, which `log4j2.xml` sends to its own
+  appender (`UsageConsole`, just the JSON), so it can be routed to a file without touching the application log. Lines
+  are written from their own thread through a bounded queue (8 192 lines); when it is full they are dropped and
+  counted (`fv_usage_dropped_total{reason="log_full"}`), and a validation never waits;
 - `db`: rows in `fhir_validator_schema.validation_usage`, written in batches from a bounded queue
   (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`). A full queue or a failed write drops records and
   counts them (`fv_usage_dropped_total`); a validation never waits for usage. A graceful stop writes what is

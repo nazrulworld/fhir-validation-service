@@ -257,8 +257,10 @@ totals with the records.
   the bad entry.
 - IPv6 peers and IPv4-mapped IPv6 peers are matched correctly against IPv4 and IPv6 networks, including whole-range
   (`/0`) and single-host (`/32`, `/128`) entries.
-- Both standard forwarded headers are present: one documented header takes precedence, consistently.
-- Every hop in the forwarded chain is a trusted proxy: the left-most address is used.
+- Both standard forwarded headers are present: only the configured one is read. A proxy that appends to one passes a
+  client's copy of the other through unchanged, so reading it would let any client choose its address.
+- Every hop in the forwarded chain is a trusted proxy, or the header is missing: the client is unknown, never a
+  proxy's own (often internal) address, so administrative calls are refused.
 - The usage store is down: records are dropped and counted, a warning is logged, and nothing retries forever.
 - The usage buffer still holds records at shutdown: they are written after the request drain.
 - The runtime cannot measure per-thread CPU time or allocation: those values are recorded as -1 (unknown), and the
@@ -284,9 +286,13 @@ totals with the records.
 - **FR-002**: The service MUST support an optional allowlist of networks for administrative operations. When it is
   set, administrative requests from outside it MUST be refused (403) for every key, including the bootstrap key,
   before any key lookup. When it is not set, the network MUST NOT be restricted.
-- **FR-003**: The service MUST support an optional list of trusted proxy networks. It MUST use forwarded client
-  addresses only when the immediate peer is a trusted proxy, taking the right-most forwarded address that is not a
-  trusted proxy (or the left-most when every hop is trusted). Otherwise it MUST use the immediate peer's address.
+- **FR-003**: The service MUST support an optional list of trusted proxy networks and a setting naming the one
+  forwarding header those proxies write (`X-Forwarded-For` by default, or `Forwarded`); the other header MUST never be
+  read. It MUST use forwarded client addresses only when the immediate peer is a trusted proxy, taking the right-most
+  forwarded address that is not a trusted proxy. When there is no such address (no header, every hop trusted, an
+  entry that can't be parsed) or the peer's own address can't be parsed, the client is unknown: administrative calls
+  MUST be refused, and an unknown address MUST never replace a recorded one. Otherwise it MUST use the immediate peer's
+  address.
 - **FR-004**: The same resolved client address MUST be used by the admin allowlist, the last-used audit and usage
   accounting.
 - **FR-005**: Invalid entries in the allowlist or trusted proxy list MUST make startup fail with a message naming

@@ -35,7 +35,7 @@ The full table, with bounds, is in [data-model.md](../data-model.md) §6. Behavi
 | `fv_validation_cpu_seconds` | distribution summary | `version`, `outcome` | new |
 | `fv_validation_allocated_bytes` | distribution summary | `version`, `outcome` | new |
 | `fv_usage_written_total` | counter | – | new |
-| `fv_usage_dropped_total` | counter | `reason` = `queue_full` \| `write_failed` | new |
+| `fv_usage_dropped_total` | counter | `reason` = `queue_full` \| `write_failed` \| `closed` \| `unattributed` \| `log_full` | new |
 | `fv_usage_queue_size` | gauge | – | new (only with `db`) |
 
 There are never `key`, `org` or `client_ip` tags.
@@ -54,7 +54,9 @@ Logger `nzi.fhir.validator.usage`, level INFO, one JSON object per line as the m
 
 The field names match `UsageRecord` and the columns in [data-model.md](../data-model.md) §3. The line never
 contains resource content. `log4j2.xml` routes the logger with `additivity="false"` to a dedicated `UsageConsole`
-appender (`%msg%n`), so each line is exactly one JSON object whatever `FV_LOG_FORMAT` is. Operators may replace that
+appender (`%msg%n`), so each line is exactly one JSON object whatever `FV_LOG_FORMAT` is. Lines are written from the
+writer's own thread through a bounded queue (8 192 lines); when it is full, lines are dropped and counted as
+`fv_usage_dropped_total{reason="log_full"}`. Operators may replace that
 appender with a file or another appender.
 
 ## 5. Upgrade from 4.0 (documented in `docs/upgrade-4.1.md` and `CHANGELOG.md`)

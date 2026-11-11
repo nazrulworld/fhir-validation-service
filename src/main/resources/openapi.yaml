@@ -632,6 +632,8 @@ paths:
           $ref: '#/components/responses/PackageNotFound'
         '500':
           $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
 
   /igs/{name}/{version}/conformance:
     get:
@@ -674,6 +676,8 @@ paths:
         '404':
           $ref: '#/components/responses/PackageNotFound'
         '500':
+          $ref: '#/components/responses/Problem'
+        '503':
           $ref: '#/components/responses/Problem'
 
 components:

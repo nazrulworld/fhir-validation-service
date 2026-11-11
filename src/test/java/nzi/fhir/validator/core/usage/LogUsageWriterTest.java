@@ -26,7 +26,9 @@ class LogUsageWriterTest {
     @Test
     void oneJsonLineWithTheDocumentedKeys() {
         try (LogCapture logs = LogCapture.start()) {
-            new LogUsageWriter().write(sample());
+            LogUsageWriter w = new LogUsageWriter(null);
+            w.write(sample());
+            w.close().toCompletionStage().toCompletableFuture().join();
             List<LogCapture.Captured> lines = logs.from(LogUsageWriter.LOGGER).stream().map(e -> e).distinct().toList();
             List<String> messages = lines.stream().map(LogCapture.Captured::message).distinct().toList();
             assertEquals(1, messages.size(), messages.toString());
@@ -48,12 +50,7 @@ class LogUsageWriterTest {
         LoggerConfig config = ctx.getConfiguration().getLoggerConfig(LogUsageWriter.LOGGER);
         assertEquals(LogUsageWriter.LOGGER, config.getName(), "declared in log4j2.xml");
         assertFalse(config.isAdditive(), "never duplicated into the application log");
-        // Code review: the logger is called on the event loop, so its appender is asynchronous and never blocks.
-        assertTrue(config.getAppenders().containsKey("UsageAsync"), config.getAppenders().toString());
-        org.apache.logging.log4j.core.appender.AsyncAppender async =
-                (org.apache.logging.log4j.core.appender.AsyncAppender) ctx.getConfiguration().getAppender("UsageAsync");
-        assertFalse(async.isBlocking(), "drops lines when full instead of blocking");
-        assertArrayEquals(new String[]{"UsageConsole"}, async.getAppenderRefStrings());
+        assertTrue(config.getAppenders().containsKey("UsageConsole"), config.getAppenders().toString());
         org.apache.logging.log4j.core.Layout<?> layout = ctx.getConfiguration().getAppender("UsageConsole").getLayout();
         String rendered = new String(layout.toByteArray(org.apache.logging.log4j.core.impl.Log4jLogEvent.newBuilder()
                 .setLoggerName(LogUsageWriter.LOGGER).setLevel(Level.INFO)
@@ -62,5 +59,37 @@ class LogUsageWriterTest {
         assertTrue(rendered.endsWith("\n"));
         assertEquals(sample().toJson().getString("ig"), new JsonObject(rendered.strip()).getString("ig"),
                 "the rendered line is exactly the JSON object");
+    }
+
+    /**
+     * Convergence T075 (FR-017): {@code write} never blocks; when the writer can't keep up, lines are dropped and
+     * counted as {@code fv.usage.dropped{reason="log_full"}}.
+     */
+    @Test
+    void aFullQueueDropsAndCountsWithoutBlocking() throws Exception {
+        nzi.fhir.validator.core.metrics.ServiceMetrics metrics =
+                new nzi.fhir.validator.core.metrics.ServiceMetrics(nzi.fhir.validator.core.metrics.ServiceMetrics.newRegistry());
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.List<String> written = new java.util.concurrent.CopyOnWriteArrayList<>();
+        LogUsageWriter w = new LogUsageWriter(metrics, 10, line -> {
+            try {
+                release.await(); // a stuck stdout
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            written.add(line);
+        });
+        long start = System.nanoTime();
+        for (int i = 0; i < 30; i++) {
+            w.write(sample());
+        }
+        long ms = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        assertTrue(ms < 100, "30 writes took " + ms + " ms");
+        // One line is held by the stuck writer thread, 10 wait in the queue, the rest are dropped.
+        double dropped = metrics.registry().find("fv.usage.dropped").tags("reason", "log_full").counter().count();
+        assertTrue(dropped >= 19 && dropped <= 20, "dropped " + dropped);
+        release.countDown();
+        w.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(30 - (int) dropped, written.size(), "everything not dropped is written by close()");
     }
 }

@@ -56,15 +56,45 @@ public class ValidationApi {
      * Spec 008 (research R10): a meter for this request, finished when the response ends. Full mode (a record) only when
      * a sink is enabled and the caller has a key; metrics-only otherwise.
      */
-    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
+    private nzi.fhir.validator.core.usage.UsageMeter newMeter(RoutingContext ctx, String version) {
         nzi.fhir.validator.core.security.Caller caller = ApiKeyAuthHandler.caller(ctx);
         nzi.fhir.validator.core.usage.UsageWriter writer = usage;
         java.util.function.Consumer<nzi.fhir.validator.core.usage.UsageRecord> sink =
                 writer.enabled() && !caller.anonymous() && caller.orgId() != null ? writer::write : null;
         java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
-        nzi.fhir.validator.core.usage.UsageMeter meter = nzi.fhir.validator.core.usage.UsageMeter.start(
-                nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller, client == null ? null : client.getHostAddress(),
-                ctx.pathParam("version"), Math.max(0, ctx.body().length()), sink);
+        return nzi.fhir.validator.core.usage.UsageMeter.start(nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller,
+                client == null ? null : client.getHostAddress(), version,
+                ctx.body() == null ? 0 : Math.max(0, ctx.body().length()), sink);
+    }
+
+    private static final java.util.regex.Pattern VALIDATE_PATH = java.util.regex.Pattern.compile("^/([^/]+)/validate/?$");
+
+    /**
+     * Convergence T076 (FR-011): a root handler, mounted after authorisation, that records an authorised
+     * {@code POST /{version}/validate} the router refuses before any operation handler runs (e.g. 406 on
+     * {@code Accept}, 415 on {@code Content-Type}). Requests the endpoint handles are metered there; this only fills the
+     * gap, when the response ends without a meter.
+     */
+    public io.vertx.core.Handler<RoutingContext> usageFallbackHandler() {
+        return ctx -> {
+            java.util.regex.Matcher m = VALIDATE_PATH.matcher(ctx.normalizedPath());
+            if (ctx.request().method() == io.vertx.core.http.HttpMethod.POST && m.matches()) {
+                String version = m.group(1);
+                ctx.addEndHandler(ar -> {
+                    if (ctx.get(METER_KEY) == null) {
+                        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, version);
+                        meter.workNeverStarted();
+                        meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
+                                nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
+                    }
+                });
+            }
+            ctx.next();
+        };
+    }
+
+    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
+        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, ctx.pathParam("version"));
         if (ctx.response().ended()) {
             // End handlers have already run (e.g. the request timeout answered before this handler): record it now.
             meter.responseEnded(ctx.response().getStatusCode(), false, nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));

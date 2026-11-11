@@ -20,11 +20,6 @@
         <Console name="UsageConsole" target="SYSTEM_OUT">
             <PatternLayout pattern="%msg%n"/>
         </Console>
-        <!-- The usage logger is called on the event loop: never block it on a slow stdout. When the buffer is full, lines
-             are dropped (blocking="false") rather than slowing validations down. -->
-        <Async name="UsageAsync" blocking="false" bufferSize="8192">
-            <AppenderRef ref="UsageConsole"/>
-        </Async>
     </Appenders>
     <Loggers>
         <Root level="info">
@@ -33,8 +28,9 @@
         <!-- Resource bodies may contain PHI: never log them above DEBUG. -->
         <Logger name="nzi.fhir.validator" level="info"/>
         <Logger name="org.flywaydb.core" level="info" />
+        <!-- Written from LogUsageWriter's own thread (bounded queue; drops are counted), never from the event loop. -->
         <Logger name="nzi.fhir.validator.usage" level="info" additivity="false">
-            <AppenderRef ref="UsageAsync"/>
+            <AppenderRef ref="UsageConsole"/>
         </Logger>
     </Loggers>
 </Configuration>

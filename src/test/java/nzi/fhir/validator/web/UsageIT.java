@@ -172,6 +172,34 @@ class UsageIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Convergence T076 (FR-011): an authorised validate request the router refuses before the endpoint runs (406 on
+     * Accept) is recorded once as rejected; one refused for its key (401) is not.
+     */
+    @Test
+    void aRouterLevelRefusalIsRecorded(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, "db", null)
+                .compose(a -> Future.all(
+                        validateRequest(AppHarness.VALIDATOR_AUTH).putHeader("Accept", "text/plain").sendBuffer(Buffer.buffer(PATIENT)),
+                        validateRequest(null).putHeader("Accept", "text/plain").sendBuffer(Buffer.buffer(PATIENT))))
+                .compose(responses -> {
+                    ctx.verify(() -> {
+                        assertEquals(406, ((HttpResponse<?>) responses.resultAt(0)).statusCode());
+                        assertEquals(401, ((HttpResponse<?>) responses.resultAt(1)).statusCode());
+                    });
+                    return awaitRows(vertx, 1);
+                })
+                .compose(rows -> vertx.timer(500).compose(t -> usageRows()))
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(1, rows.size(), "only the authorised request");
+                    assertEquals("rejected", rows.get(0).getString(3));
+                    assertEquals(406, rows.get(0).getInteger(4));
+                    assertEquals("R4", rows.get(0).getString(11));
+                    assertEquals(Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID, rows.get(0).getString(0));
+                    ctx.completeNow();
+                })));
+    }
+
     /** Code review regression: a request without a body records 0 bytes, never -1. */
     @Test
     void aRequestWithoutABodyRecordsZeroBytes(Vertx vertx, VertxTestContext ctx) {

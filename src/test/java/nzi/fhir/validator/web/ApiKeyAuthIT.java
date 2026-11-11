@@ -419,6 +419,9 @@ class ApiKeyAuthIT extends BaseTestContainer {
                     assertNotNull(security, id + " declares security");
                     assertTrue(String.valueOf(security).contains("apiKey"), id + ": " + security);
                     assertTrue(((java.util.Map<Object, Object>) m.get("responses")).containsKey("401"), id + " lists 401");
+                    // Convergence T073: a key lookup before the migrations ran answers 503 not-ready (and so does the
+                    // request timeout), so every keyed operation declares it (Constitution IV).
+                    assertTrue(((java.util.Map<Object, Object>) m.get("responses")).containsKey("503"), id + " lists 503");
                 } else {
                     assertNull(security, id + " is open");
                 }

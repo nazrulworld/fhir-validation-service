@@ -46,7 +46,8 @@ stop every 4.0 instance first.
   queue (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`) and never blocks a request. Retention is
   the operator's job. `fv-admin usage summary --org|--key [--since]` aggregates the table by request start time.
 - **Metrics**: `fv_validation_cpu_seconds` and `fv_validation_allocated_bytes` (by version and outcome, whatever the
-  sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}` (`queue_full`, `write_failed`, `closed`, `unattributed`), `fv_usage_queue_size`. No metric is labelled by
+  sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}` (`queue_full`, `write_failed`, `closed`, `unattributed`,
+  `log_full`), `fv_usage_queue_size`. No metric is labelled by
   key or organisation.
 
 ### Changed
