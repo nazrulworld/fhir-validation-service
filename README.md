@@ -74,16 +74,17 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `4.0.0`        | an exact release (recommended for production: pin it)      |
-| `4.0`          | the newest patch release of 4.0                            |
+| `4.1.0`        | an exact release (recommended for production: pin it)      |
+| `4.1`          | the newest patch release of 4.1                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
-`latest` is now 4.0.0, a breaking release. A 3.x deployment that tracks `latest` (the default `FV_TAG` in
-`compose.yaml`) would upgrade on its next pull: `?ig=` naming an IG that isn't included would answer 400, and
-`/{version}/include-ig` would answer 404. Pin `FV_TAG` to your current release and follow
-[docs/upgrade-4.0.md](docs/upgrade-4.0.md) before moving to 4.0.0 (from 2.x, follow
-[docs/upgrade-3.0.md](docs/upgrade-3.0.md) first; from 1.x, [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before that).
+`latest` is now 4.1.0, a minor release with breaking changes. A 4.0 deployment that tracks `latest` (the default
+`FV_TAG` in `compose.yaml`) would upgrade on its next pull: every validation without an API key would answer 401, and
+the database upgrade needs every 4.0 instance stopped first. Pin `FV_TAG` to your current release and follow
+[docs/upgrade-4.1.md](docs/upgrade-4.1.md) before moving to 4.1.0 (from 3.x, follow
+[docs/upgrade-4.0.md](docs/upgrade-4.0.md) first; from 2.x, [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before that;
+from 1.x, [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before that).
 
 **1. Create a directory and an `.env` file**
 
@@ -91,9 +92,11 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=4.0.0
+FV_TAG=4.1.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
+# Every validation needs a key (4.1.0): this shared trial key, or keys created per client with 'fv-admin key create'.
+FV_VALIDATOR_API_KEY=$(openssl rand -hex 32)
 EOF
 chmod 600 .env
 ```

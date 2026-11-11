@@ -6,7 +6,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [4.1.0] - unreleased
+## [4.1.0] - 2026-11-11
 
 API key hardening, key-only validation, usage accounting and well-known organisations (spec 008). A **minor release
 with breaking changes**, documented as constitution 1.3.0 (Principle IV) requires; see
