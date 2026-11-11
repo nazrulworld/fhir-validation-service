@@ -221,8 +221,10 @@ public final class Bootstrap {
                                                     String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,
                                                     java.util.UUID owner) {
         if (key == null || key.isBlank()) {
-            logger().warn("{} is not set: this instance installs no '{}' key (one stored earlier stays valid until revoked)",
-                    variable, name);
+            // Spec 008 US2/AC4: without the trial key, validation still needs a key created with 'key create'.
+            logger().warn("{} is not set: {}this instance installs no '{}' key (one stored earlier stays valid until revoked)",
+                    variable, role == nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE
+                            ? "validation is key-only and " : "", name);
             return Future.succeededFuture();
         }
         return services.apiKeys().upsertWellKnown(id, name, key, role, owner, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)

@@ -7,12 +7,17 @@
 The full table, with bounds, is in [data-model.md](../data-model.md) §6. Behaviour:
 - Invalid CIDRs in `FV_AUTH_ADMIN_CIDRS` or `FV_AUTH_TRUSTED_PROXIES`: startup fails with
   `invalid FV_AUTH_ADMIN_CIDRS entry '<entry>'`.
+- `FV_AUTH_FORWARDED_HEADER` names the one forwarding header the trusted proxies write: `x-forwarded-for` (default)
+  or `forwarded` (RFC 7239), ignoring case. The other header is never read. Any other value fails startup with
+  `Invalid FV_AUTH_FORWARDED_HEADER: '<value>' (allowed: x-forwarded-for, forwarded)`. It has no effect without
+  `FV_AUTH_TRUSTED_PROXIES`.
 - `FV_USAGE_SINK` must be `none`, `log`, `db`, `log,db` or `db,log`. Any other value fails startup.
 - `FV_USAGE_BATCH_SIZE` greater than `FV_USAGE_QUEUE_SIZE` fails startup with
   `FV_USAGE_BATCH_SIZE (<b>) must not exceed FV_USAGE_QUEUE_SIZE (<q>)`.
 - `FV_VALIDATOR_API_KEY`:
   - malformed → fatal startup error, exit 1;
-  - unset → WARN `FV_VALIDATOR_API_KEY is not set: validation requires keys created with 'keys create'`;
+  - unset → WARN `FV_VALIDATOR_API_KEY is not set: validation is key-only and this instance installs no 'trial
+    validator' key (one stored earlier stays valid until revoked)`;
   - its value never appears in the safe config dump or in logs.
 - `FV_AUTH_ANONYMOUS_VALIDATE`: if present → WARN `FV_AUTH_ANONYMOUS_VALIDATE is deprecated and ignored: removed in
   4.1.0, validation always requires a VALIDATE or ADMIN key`.
@@ -65,7 +70,7 @@ appender with a file or another appender.
 2. Create VALIDATE keys for every client that used anonymous validation, or set `FV_VALIDATOR_API_KEY` for a shared
    trial key.
 3. Remove `FV_AUTH_ANONYMOUS_VALIDATE`.
-4. Optionally set `FV_AUTH_ADMIN_CIDRS`, `FV_AUTH_TRUSTED_PROXIES` and `FV_USAGE_SINK`.
+4. Optionally set `FV_AUTH_ADMIN_CIDRS`, `FV_AUTH_TRUSTED_PROXIES`, `FV_AUTH_FORWARDED_HEADER` and `FV_USAGE_SINK`.
 5. Start 4.1.0. Migrations V10 to V13 run, and the well-known orgs and seeded keys are ensured.
 6. If you enable `db` usage, plan a retention job for `validation_usage`.
 

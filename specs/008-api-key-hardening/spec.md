@@ -260,7 +260,7 @@ totals with the records.
 - Both standard forwarded headers are present: only the configured one is read. A proxy that appends to one passes a
   client's copy of the other through unchanged, so reading it would let any client choose its address.
 - Every hop in the forwarded chain is a trusted proxy, or the header is missing: the client is unknown, never a
-  proxy's own (often internal) address, so administrative calls are refused.
+  proxy's own (often internal) address, so administrative calls are refused when an admin allowlist is set.
 - The usage store is down: records are dropped and counted, a warning is logged, and nothing retries forever.
 - The usage buffer still holds records at shutdown: they are written after the request drain.
 - The runtime cannot measure per-thread CPU time or allocation: those values are recorded as -1 (unknown), and the
@@ -291,9 +291,10 @@ totals with the records.
   forwarding header those proxies write (`X-Forwarded-For` by default, or `Forwarded`); the other header MUST never be
   read. It MUST use forwarded client addresses only when the immediate peer is a trusted proxy, taking the right-most
   forwarded address that is not a trusted proxy. When there is no such address (no header, every hop trusted, an
-  entry that can't be parsed) or the peer's own address can't be parsed, the client is unknown: administrative calls
-  MUST be refused, and an unknown address MUST never replace a recorded one. Otherwise it MUST use the immediate peer's
-  address.
+  entry that can't be parsed) or the peer's own address can't be parsed, the client is unknown: when an admin
+  allowlist is set, administrative calls from an unknown client MUST be refused (fail-closed; without an allowlist
+  the network is not restricted, FR-002), and an unknown address MUST never replace a recorded one. Otherwise it MUST
+  use the immediate peer's address.
 - **FR-004**: The same resolved client address MUST be used by the admin allowlist, the last-used audit and usage
   accounting.
 - **FR-005**: Invalid entries in the allowlist or trusted proxy list MUST make startup fail with a message naming

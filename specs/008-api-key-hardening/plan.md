@@ -11,8 +11,10 @@ Four related changes ship together as **4.1.0**. The release contains breaking c
 
 **1. Key hardening.**
 - A malformed bearer value gets 401 before any hashing, cache access or lookup.
-- One `ClientAddress` resolver applies the trusted-proxy rule (right-most untrusted hop from `Forwarded`, else
-  `X-Forwarded-For`, believed only from `FV_AUTH_TRUSTED_PROXIES`). It uses a small hand-written IPv4/IPv6 `Cidr`
+- One `ClientAddress` resolver applies the trusted-proxy rule: the right-most untrusted hop of the one header named
+  by `FV_AUTH_FORWARDED_HEADER` (`x-forwarded-for` by default, or `forwarded`; the other is never read), believed
+  only from `FV_AUTH_TRUSTED_PROXIES`. When no untrusted hop is found, the client is unknown, never a proxy's own
+  address. It uses a small hand-written IPv4/IPv6 `Cidr`
   matcher. The admin allowlist, the audit and usage accounting all read the address it stores.
 - `FV_AUTH_ADMIN_CIDRS` refuses administrative paths with 403 before the key lookup, for every key.
 - Keys gain `expires_at`. The database filters on it, and a cached entry never outlives it.
@@ -155,7 +157,8 @@ src/main/java/nzi/fhir/validator/
 ├── core/service/FhirValidationService.java   # CHANGE: validate(..., UsageMeter, finisher) overload; marks;
 │                                             #   issue counts captured on the worker
 ├── core/metrics/ServiceMetrics.java          # CHANGE: cpu/allocated summaries, usage counters, queue gauge
-├── core/config/ConfigLoader.java             # CHANGE: new FV_AUTH_* / FV_VALIDATOR_API_KEY / FV_USAGE_* entries;
+├── core/config/ConfigLoader.java             # CHANGE: new FV_AUTH_* (incl. FV_AUTH_FORWARDED_HEADER) /
+│                                             #   FV_VALIDATOR_API_KEY / FV_USAGE_* entries;
 │                                             #   DEPRECATED becomes name → reason, adds FV_AUTH_ANONYMOUS_VALIDATE
 ├── core/config/ApplicationConfig.java        # CHANGE: getters; remove anonymousValidate(); redact validatorKey
 ├── web/endpoint/ValidationApi.java           # CHANGE: start meter, end handler, pass meter to the service

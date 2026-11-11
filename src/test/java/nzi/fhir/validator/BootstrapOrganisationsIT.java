@@ -284,7 +284,10 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
         config.getJsonObject("auth").remove("validatorKey");
         try (LogCapture logs = LogCapture.start()) {
             join(startReady(config).stop());
-            assertTrue(logs.events().stream().anyMatch(e -> e.message().contains("FV_VALIDATOR_API_KEY is not set")));
+            // Spec 008 US2/AC4: the warning says validation is key-only and no trial key is installed.
+            assertTrue(logs.events().stream().anyMatch(e -> e.message().contains("FV_VALIDATOR_API_KEY is not set")
+                    && e.message().contains("validation is key-only")
+                    && e.message().contains("installs no 'trial validator' key")), "key-only warning");
         }
         assertEquals(List.of("0"), column(db, "SELECT count(*)::text FROM " + S + ".api_keys WHERE id = '"
                 + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'"));
