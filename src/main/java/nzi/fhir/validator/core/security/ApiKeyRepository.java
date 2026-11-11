@@ -148,7 +148,8 @@ public class ApiKeyRepository {
                 .recover(err -> isUniqueViolation(err) ? pool.preparedQuery(sql).execute(params) : Future.failedFuture(err))
                 .<Void>mapEmpty()
                 .recover(err -> {
-                    if (err instanceof io.vertx.pgclient.PgException pg && "23505".equals(pg.getSqlState())) {
+                    if (isUniqueViolation(err)) {
+                        io.vertx.pgclient.PgException pg = (io.vertx.pgclient.PgException) err;
                         boolean value = "api_keys_key_hash_key".equals(pg.getConstraint());
                         return Future.failedFuture(new nzi.fhir.validator.core.StartupException("Cannot install the '" + name
                                 + "' key: another key (revoked keys count too) already uses its " + (value ? "value" : "name")
@@ -161,7 +162,8 @@ public class ApiKeyRepository {
                 });
     }
 
-    private static boolean isUniqueViolation(Throwable err) {
+    /** SQLState 23505: a unique constraint was violated. */
+    public static boolean isUniqueViolation(Throwable err) {
         return err instanceof io.vertx.pgclient.PgException pg && "23505".equals(pg.getSqlState());
     }
 
@@ -256,7 +258,9 @@ public class ApiKeyRepository {
     public void touch(UUID id, java.net.InetAddress client) {
         if (shouldTouch(id, client == null ? null : client.getHostAddress(), System.currentTimeMillis())) {
             String ip = client == null ? null : client.getHostAddress();
-            pool.preparedQuery("UPDATE " + TABLE + " SET last_used_at = now(), last_used_ip = $2::text::inet WHERE id = $1")
+            // An unknown address keeps the last known one (COALESCE), so the audit trail is never erased.
+            pool.preparedQuery("UPDATE " + TABLE + " SET last_used_at = now(), "
+                            + "last_used_ip = coalesce($2::text::inet, last_used_ip) WHERE id = $1")
                     .execute(Tuple.of(id, ip));
         }
     }
@@ -266,10 +270,11 @@ public class ApiKeyRepository {
         boolean[] write = {false};
         lastTouched.compute(id, (k, previous) -> {
             long since = previous == null ? Long.MAX_VALUE : now - previous.at();
-            boolean moved = previous != null && !java.util.Objects.equals(previous.ip(), ip);
+            // An unknown address (null) is never a move: it must not erase the audit address (code review).
+            boolean moved = previous != null && ip != null && !ip.equals(previous.ip());
             if (previous == null || since >= TOUCH_INTERVAL_MS || (moved && since >= ADDRESS_CHANGE_INTERVAL_MS)) {
                 write[0] = true;
-                return new Touched(now, ip);
+                return new Touched(now, ip != null ? ip : previous == null ? null : previous.ip());
             }
             return previous;
         });

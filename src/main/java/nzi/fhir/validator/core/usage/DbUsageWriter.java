@@ -31,7 +31,10 @@ public final class DbUsageWriter implements UsageWriter {
     static final String INSERT = "INSERT INTO " + DB_POSTGRES_SCHEMA_NAME + ".validation_usage (started_at, request_id, "
             + "api_key_id, api_key_name, org_id, fhir_version, ig, profile_count, content_type, request_bytes, outcome, "
             + "http_status, issues_fatal, issues_error, issues_warning, issues_information, client_ip, total_ms, queue_ms, "
-            + "context_ms, validate_ms, cpu_time_ns, allocated_bytes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, "
+            + "context_ms, validate_ms, cpu_time_ns, allocated_bytes) VALUES ($1, $2, "
+            // A key deleted while its records waited is stored as NULL (like ON DELETE SET NULL) instead of failing the
+            // whole batch on the foreign key (code review).
+            + "(SELECT k.id FROM " + DB_POSTGRES_SCHEMA_NAME + ".api_keys k WHERE k.id = $3::uuid), $4, $5, $6, $7, $8, $9, $10, $11, "
             + "$12, $13, $14, $15, $16, $17::text::inet, $18, $19, $20, $21, $22, $23)";
 
     private final Vertx vertx;

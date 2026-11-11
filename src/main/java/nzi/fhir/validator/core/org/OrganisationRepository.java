@@ -78,8 +78,8 @@ public class OrganisationRepository {
                 .execute(Tuple.of(id, nameShort, nameLong, type))
                 .<Void>mapEmpty()
                 .recover(err -> {
-                    if (err instanceof PgException pg && "23505".equals(pg.getSqlState())
-                            && NAME_SHORT_UNIQUE.equals(pg.getConstraint())) {
+                    if (nzi.fhir.validator.core.security.ApiKeyRepository.isUniqueViolation(err)
+                            && NAME_SHORT_UNIQUE.equals(((PgException) err).getConstraint())) {
                         return Future.failedFuture(new nzi.fhir.validator.core.StartupException("An organisation named '"
                                 + nameShort + "' already exists with another id; rename it before starting 4.1.0 "
                                 + "(the well-known '" + nameShort + "' organisation has id " + id + ")"));

@@ -38,9 +38,17 @@ class ClientAddressTest {
         assertEquals("203.0.113.7", xff("127.0.0.1", List.of("203.0.113.7, 10.0.0.5"), LOCAL_AND_TEN));
     }
 
+    /**
+     * Code review regression: when no untrusted hop is found the client is unknown, never a (trusted, often internal)
+     * proxy address, which would let any client pass an admin allowlist containing the proxy.
+     */
     @Test
-    void whenEveryHopIsTrustedTheLeftMostIsUsed() {
-        assertEquals("10.0.0.9", xff("127.0.0.1", List.of("10.0.0.9, 10.0.0.5"), LOCAL_AND_TEN));
+    void withoutAnUntrustedHopTheClientIsUnknown() {
+        assertNull(ClientAddress.resolve("127.0.0.1", List.of("10.0.0.9, 10.0.0.5"), Header.X_FORWARDED_FOR, LOCAL_AND_TEN),
+                "every hop trusted");
+        assertNull(ClientAddress.resolve("127.0.0.1", List.of(), Header.X_FORWARDED_FOR, LOCAL), "header missing");
+        assertNull(ClientAddress.resolve("10.0.0.5", List.of(), Header.FORWARDED, LOCAL_AND_TEN),
+                "the proxy wrote the other header");
     }
 
     @Test
@@ -63,10 +71,11 @@ class ClientAddressTest {
     }
 
     @Test
-    void anUnparseableEntryStopsTheWalk() {
-        assertEquals("10.0.0.5", xff("127.0.0.1", List.of("203.0.113.7, unknown, 10.0.0.5"), LOCAL_AND_TEN));
-        assertEquals("127.0.0.1", ClientAddress.resolve("127.0.0.1", List.of("for=unknown"), Header.FORWARDED, LOCAL).getHostAddress());
-        assertEquals("127.0.0.1", ClientAddress.resolve("127.0.0.1", List.of("for=_hidden"), Header.FORWARDED, LOCAL).getHostAddress());
+    void anUnparseableEntryMakesTheClientUnknown() {
+        assertNull(ClientAddress.resolve("127.0.0.1", List.of("203.0.113.7, unknown, 10.0.0.5"), Header.X_FORWARDED_FOR,
+                LOCAL_AND_TEN), "a forged entry beyond it is never chosen, and neither is the proxy");
+        assertNull(ClientAddress.resolve("127.0.0.1", List.of("for=unknown"), Header.FORWARDED, LOCAL));
+        assertNull(ClientAddress.resolve("127.0.0.1", List.of("for=_hidden"), Header.FORWARDED, LOCAL));
     }
 
     @Test

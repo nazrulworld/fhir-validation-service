@@ -17,9 +17,9 @@ import java.util.Locale;
  * and only the one header the proxies write is read ({@code FV_AUTH_FORWARDED_HEADER}: {@code X-Forwarded-For} by
  * default, or RFC 7239 {@code Forwarded}). The other header is never read: a proxy that appends to one passes a
  * client-supplied copy of the other through unchanged, so reading it would let any client choose its address. Walking
- * the chain from the right, trusted proxies are skipped and the first other address is the client. An entry that can't
- * be parsed ({@code unknown}, an obfuscated identifier) stops the walk, and the last trusted hop is used, so a forged
- * entry is never chosen. When every hop is trusted, the left-most one is the client.
+ * the chain from the right, trusted proxies are skipped and the first other address is the client. When the walk finds
+ * no such address (the header is missing, every hop is trusted, or an entry can't be parsed: {@code unknown}, an
+ * obfuscated identifier) the client is unknown ({@code null}), never a proxy's own address.
  * <p>
  * A peer whose address can't be parsed has no client address ({@code null}): the admin allowlist then refuses it, and
  * the audit and usage record no address. It is never taken for loopback.
@@ -104,18 +104,18 @@ public final class ClientAddress {
             return peerAddress;
         }
         List<String> chain = header == Header.FORWARDED ? forwardedFor(values) : split(values);
-        InetAddress lastTrusted = peerAddress;
         for (int i = chain.size() - 1; i >= 0; i--) {
             InetAddress hop = Cidr.parseAddress(stripPortAndBrackets(chain.get(i)));
             if (hop == null) {
-                return lastTrusted;
+                return null;
             }
             if (!trusted.contains(hop)) {
                 return hop;
             }
-            lastTrusted = hop;
         }
-        return lastTrusted;
+        // No untrusted hop: the header is missing, or every hop is a trusted proxy. The client is unknown; falling back
+        // to a proxy's own (often internal) address would let any client pass the admin allowlist (code review).
+        return null;
     }
 
     private static List<String> split(List<String> lines) {

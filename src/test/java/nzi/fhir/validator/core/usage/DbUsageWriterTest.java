@@ -201,6 +201,24 @@ class DbUsageWriterTest extends BaseTestContainer {
                 })));
     }
 
+    /** Code review regression: a record whose key was deleted meanwhile is stored with no key and never fails the batch. */
+    @Test
+    void aKeyDeletedWhileQueuedNeverFailsTheBatch(Vertx vertx, VertxTestContext ctx) {
+        writer = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        writer.write(record(null, 1));
+        writer.write(record(UUID.randomUUID(), 2)); // no such key any more
+        writer.write(record(null, 3));
+        writer.flush()
+                .compose(v -> pool.query("SELECT count(*), count(api_key_id) FROM " + TABLE).execute())
+                .onComplete(ctx.succeeding(rs -> ctx.verify(() -> {
+                    io.vertx.sqlclient.Row r = rs.iterator().next();
+                    assertEquals(3, r.getInteger(0), "the whole batch was written");
+                    assertEquals(0, r.getInteger(1), "the deleted key is stored as NULL");
+                    assertEquals(0, counter("fv.usage.dropped", "reason", "write_failed"));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void deletingTheKeyKeepsItsRows(Vertx vertx, VertxTestContext ctx) {
         UUID keyId = UUID.randomUUID();

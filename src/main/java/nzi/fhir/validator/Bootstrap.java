@@ -215,7 +215,7 @@ public final class Bootstrap {
      * Installs (or rotates) a key from configuration under its fixed id. An unset variable changes nothing in the
      * database: instances may be configured differently (e.g. only admin-facing ones get {@code FV_ADMIN_API_KEY}), so
      * one instance's missing variable must not revoke a key the others rely on. Seeded keys are revoked with
-     * {@code fv-admin key revoke}; an instance that still has the variable installs it again at its next start.
+     * {@code fv-admin key revoke} and stay revoked until the variable is set to a new value.
      */
     private static Future<Void> installWellKnownKey(ServiceRegistry services, String variable, String key, java.util.UUID id,
                                                     String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,

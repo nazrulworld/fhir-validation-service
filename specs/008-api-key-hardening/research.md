@@ -41,11 +41,13 @@ the current code.
      `X-Forwarded-For` (default) or `Forwarded` (RFC 7239, the `for=` parameters in order). The other header is never
      read (code review): a proxy that appends to one passes a client-supplied copy of the other through unchanged, so
      choosing by presence would let any client pick its address. Multiple header lines are joined in order.
-  3. Append the peer and walk the chain from right to left. Skip addresses inside a trusted proxy network. The
-     first address that is not trusted is the client.
-  4. An entry that can't be parsed (such as `unknown`, an obfuscated `_id`, or garbage) stops the walk. The client
-     is then the last trusted hop seen, so a forged entry can never be chosen.
-  5. If every hop is trusted, the left-most address is the client.
+  3. Walk the chain from right to left. Skip addresses inside a trusted proxy network. The first address that is
+     not trusted is the client.
+  4. If no such address is found (the header is missing, every hop is trusted, or an entry can't be parsed such as
+     `unknown`, an obfuscated `_id`, or garbage), the client is **unknown**. It is never a proxy's own address: a
+     trusted proxy inside the admin networks would otherwise let every client pass the allowlist (code review).
+     Administrative calls from an unknown client are refused; the audit keeps the last known address.
+  5. (Removed: "if every hop is trusted, the left-most address is the client" — that case is now unknown too.)
   6. Ports, IPv6 brackets and IPv6 zones (`%eth0`) are stripped. IPv4-mapped IPv6 addresses are treated as IPv4.
   7. A peer whose address still can't be parsed has no address (never loopback): the admin allowlist refuses it.
 - **Rationale**: Vert.x `Router.allowForward(...)` trusts the headers from any peer, so a client could spoof them.

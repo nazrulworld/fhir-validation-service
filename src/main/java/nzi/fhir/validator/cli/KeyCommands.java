@@ -107,9 +107,10 @@ final class KeyCommands {
     private static Future<Object> revoke(CliArgs.Command cmd, CliContext ctx) {
         String name = cmd.required("name");
         if (ApiKeyRepository.isReserved(name)) {
-            // Spec 008: allowed; an instance that still has the variable set installs the key again at its next start.
-            logger.warn("cli: '{}' is installed from configuration; an instance that still sets its variable re-installs it "
-                    + "at its next start", name);
+            // Spec 008: allowed. The key stays revoked until its variable is set to a new value (upsertWellKnown keeps
+            // the revocation while the value is unchanged).
+            logger.warn("cli: '{}' is installed from configuration; it stays revoked until its variable is set to a new "
+                    + "value", name);
         }
         return ctx.keys().revokeNamed(name).map(org -> {
             logger.info("cli: key revoke name={} org={}", name, org);

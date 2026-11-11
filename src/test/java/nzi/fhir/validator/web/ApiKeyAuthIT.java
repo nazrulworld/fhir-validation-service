@@ -300,6 +300,22 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Code review regression: a trusted proxy inside the admin networks that sends no forwarding header doesn't make
+     * every client "internal"; the client is unknown and admin calls are refused.
+     */
+    @Test
+    void aTrustedProxyWithoutAHeaderFailsClosed(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, new JsonObject().put("adminCidrs", "127.0.0.0/8, ::1").put("trustedProxies", "127.0.0.1/32, ::1"))
+                .compose(a -> Future.all(adminFromLoopback(AppHarness.ADMIN_KEY, null),
+                        adminFromLoopback(AppHarness.ADMIN_KEY, "unknown")))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    assertNetworkRefusal(cf.resultAt(0));
+                    assertNetworkRefusal(cf.resultAt(1));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void forwardedAddressesCountOnlyThroughTrustedProxies(Vertx vertx, VertxTestContext ctx) {
         start(vertx, new JsonObject().put("adminCidrs", "10.0.0.0/8").put("trustedProxies", "127.0.0.1/32, ::1"))
@@ -355,9 +371,19 @@ class ApiKeyAuthIT extends BaseTestContainer {
                 + nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'";
         start(vertx, new JsonObject().put("trustedProxies", "127.0.0.1/32, ::1"))
                 .compose(a -> app.client().post(app.port(), "127.0.0.1", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
+                        .putHeader("X-Forwarded-For", "198.51.100.1")
                         .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT)))
-                .compose(r -> Await.until(vertx, 5_000, "last_used_ip = 127.0.0.1",
-                        () -> keyColumn(sql).map(v -> v.equals(List.of("127.0.0.1")))))
+                .compose(r -> Await.until(vertx, 5_000, "last_used_ip = 198.51.100.1",
+                        () -> keyColumn(sql).map(v -> v.equals(List.of("198.51.100.1")))))
+                // Code review: a request whose address is unknown (trusted proxy, no header) keeps the last known one.
+                .compose(v -> app.client().post(app.port(), "127.0.0.1", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH)
+                        .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT)))
+                .compose(r -> vertx.timer(1_200))
+                .compose(v -> keyColumn(sql))
+                .compose(v -> {
+                    ctx.verify(() -> assertEquals(List.of("198.51.100.1"), v, "never erased by an unknown address"));
+                    return Future.succeededFuture();
+                })
                 // Same key, a new client behind the trusted proxy: written within about a second, without waiting for
                 // the 60 s throttle (address changes are written at most once a second per key).
                 .compose(v -> Await.until(vertx, 5_000, "last_used_ip = 203.0.113.9",

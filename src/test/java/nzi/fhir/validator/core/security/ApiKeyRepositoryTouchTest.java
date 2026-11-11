@@ -42,4 +42,14 @@ class ApiKeyRepositoryTouchTest {
         }
         assertTrue(repo.touchedKeys() <= ApiKeyRepository.MAX_TOUCHED_KEYS, "holds " + repo.touchedKeys());
     }
+
+    /** Code review regression: an unknown address is never a move and never replaces the known one. */
+    @Test
+    void anUnknownAddressIsNotAMove() {
+        UUID k = UUID.randomUUID();
+        assertTrue(repo.shouldTouch(k, "10.0.0.1", 0));
+        assertFalse(repo.shouldTouch(k, null, 1_500), "no immediate write for an unknown address");
+        assertTrue(repo.shouldTouch(k, null, 60_000), "the minute throttle still records the use");
+        assertFalse(repo.shouldTouch(k, "10.0.0.1", 61_500), "the known address was kept, so this isn't a move");
+    }
 }

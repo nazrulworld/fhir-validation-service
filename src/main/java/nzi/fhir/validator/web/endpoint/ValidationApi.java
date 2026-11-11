@@ -65,8 +65,13 @@ public class ValidationApi {
         nzi.fhir.validator.core.usage.UsageMeter meter = nzi.fhir.validator.core.usage.UsageMeter.start(
                 nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller, client == null ? null : client.getHostAddress(),
                 ctx.pathParam("version"), Math.max(0, ctx.body().length()), sink);
-        ctx.addEndHandler(ar -> meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
-                nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx)));
+        if (ctx.response().ended()) {
+            // End handlers have already run (e.g. the request timeout answered before this handler): record it now.
+            meter.responseEnded(ctx.response().getStatusCode(), false, nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
+        } else {
+            ctx.addEndHandler(ar -> meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
+                    nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx)));
+        }
         ctx.put(METER_KEY, meter);
         return meter;
     }
@@ -92,62 +97,64 @@ public class ValidationApi {
 
     private void handleDoValidation(RoutingContext ctx) {
         nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
-        try {
-            doValidation(ctx, meter);
-        } catch (RuntimeException e) {
-            // Code review: an unexpected exception must not leave the meter open (the failure handler skips metering
-            // because the meter exists). The record is still written when the error response ends; the work-done
-            // signal is idempotent, so a later one changes nothing.
+        if (ctx.response().ended()) {
+            // Code review: the request timeout already answered (a slow upload or key lookup). Don't spend a worker on
+            // a validation nobody will receive; the meter has already recorded the end (outcome timeout).
             meter.workNeverStarted();
-            throw e;
+            return;
+        }
+        boolean started = false;
+        try {
+            started = doValidation(ctx, meter);
+        } finally {
+            // Every path that didn't call the service (early 4xx answers, or an unexpected exception) closes the meter
+            // here, once; the service's future signals it otherwise (code review).
+            if (!started) {
+                meter.workNeverStarted();
+            }
         }
     }
 
-    private void doValidation(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter) {
+    /** @return whether the validation service was called (its future then signals the meter) */
+    private boolean doValidation(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter) {
         SupportedFhirVersion version;
         try {
             version = version(ctx);
         } catch (ProblemException e) {
-            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
         RequestFormat requestFormat = MediaTypes.requestFormat(ctx.request().getHeader("Content-Type"));
         if (requestFormat == RequestFormat.UNSUPPORTED) {
-            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 415, "unsupported-media-type", "Send FHIR resources as JSON or XML");
-            return;
+            return false;
         }
         meter.contentType(requestFormat == RequestFormat.XML ? "XML" : "JSON");
         ResponseFormat responseFormat = MediaTypes.responseFormat(ctx.request().getHeader("Accept"));
         if (responseFormat == ResponseFormat.NONE) {
-            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 406, "not-acceptable",
                     "Acceptable response types: application/json, application/fhir+json, application/fhir+xml, application/xml");
-            return;
+            return false;
         }
         List<String> profiles;
         try {
             profiles = ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate();
         } catch (ProblemException e) {
-            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
         meter.profiles(profiles == null ? 0 : profiles.size());
         IgReference ig;
         try {
             ig = igParameter(ctx);
         } catch (ProblemException e) {
-            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
-            return;
+            return false;
         }
         meter.ig(ctx.queryParams().get("ig"));
         if (ctx.body() == null || ctx.body().isEmpty()) {
-            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
-            return;
+            return false;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         Future<Rendered> rendered = validationService
@@ -177,6 +184,7 @@ public class ValidationApi {
             }
             rc.response().end(result.body());
         });
+        return true;
     }
 
     /** The short name of the organisation owning the validator context of a 200 result (spec 005 FR-020). */

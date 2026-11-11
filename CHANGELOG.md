@@ -36,7 +36,8 @@ stop every 4.0 instance first.
   key, before any key lookup.
 - **Trusted proxies** `FV_AUTH_TRUSTED_PROXIES`: the forwarding header is believed only from these peers (right-most
   untrusted address); `FV_AUTH_FORWARDED_HEADER` names the one header they write (`x-forwarded-for` by default, or
-  `forwarded`), and the other is never read. A peer address that can't be parsed is refused on administrative paths.
+  `forwarded`), and the other is never read. When the client can't be determined (no header, every hop trusted, an
+  unparseable entry or peer), administrative calls are refused.
 - **Key expiry**: `fv-admin key create --expires <ISO-8601 instant>`; an expired key gets 401, also while cached.
   `key list` shows `expiresAt` and `lastUsedIp` (written within a second when a key is used from a new address).
 - **Usage accounting** `FV_USAGE_SINK` (`none` by default, `log`, `db`, `log,db`): one record per authorised validation

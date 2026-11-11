@@ -48,7 +48,12 @@ class LogUsageWriterTest {
         LoggerConfig config = ctx.getConfiguration().getLoggerConfig(LogUsageWriter.LOGGER);
         assertEquals(LogUsageWriter.LOGGER, config.getName(), "declared in log4j2.xml");
         assertFalse(config.isAdditive(), "never duplicated into the application log");
-        assertTrue(config.getAppenders().containsKey("UsageConsole"), config.getAppenders().toString());
+        // Code review: the logger is called on the event loop, so its appender is asynchronous and never blocks.
+        assertTrue(config.getAppenders().containsKey("UsageAsync"), config.getAppenders().toString());
+        org.apache.logging.log4j.core.appender.AsyncAppender async =
+                (org.apache.logging.log4j.core.appender.AsyncAppender) ctx.getConfiguration().getAppender("UsageAsync");
+        assertFalse(async.isBlocking(), "drops lines when full instead of blocking");
+        assertArrayEquals(new String[]{"UsageConsole"}, async.getAppenderRefStrings());
         org.apache.logging.log4j.core.Layout<?> layout = ctx.getConfiguration().getAppender("UsageConsole").getLayout();
         String rendered = new String(layout.toByteArray(org.apache.logging.log4j.core.impl.Log4jLogEvent.newBuilder()
                 .setLoggerName(LogUsageWriter.LOGGER).setLevel(Level.INFO)

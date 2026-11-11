@@ -476,7 +476,8 @@ the old value writes the old key back. An instance started without the variable 
   `FV_AUTH_FORWARDED_HEADER` says which one they write: `x-forwarded-for` (default) or `forwarded`. Only that header is
   read: a proxy that appends to one passes a client's copy of the other through unchanged. The client is the
   right-most address that isn't a trusted proxy. From any other peer the header is ignored, so a client can't fake its
-  address; a peer whose address can't be parsed is refused on administrative paths. The same address is used for the
+  address. When no such address is found (no header, every hop trusted, an unparseable entry), or the peer's own address
+  can't be parsed, the client is unknown: administrative calls are refused and nothing is recorded as its address. The same address is used for the
   allowlist, `lastUsedIp` and usage records.
 
 #### Who may use what
@@ -518,8 +519,9 @@ allocated by the request's work: the heap is shared, so resident memory can't be
 `FV_USAGE_SINK` chooses where records go:
 
 - `none` (default): nothing is kept (the CPU and allocation metrics are still measured);
-- `log`: one JSON line per request on the logger `nzi.fhir.validator.usage`, which `log4j2.xml` sends to its own
-  appender (`UsageConsole`, just the JSON), so it can be routed to a file without touching the application log;
+- `log`: one JSON line per request on the logger `nzi.fhir.validator.usage`, which `log4j2.xml` sends through a
+  non-blocking async appender (`UsageAsync`, 8192 lines; dropped when full) to its own appender (`UsageConsole`, just
+  the JSON), so it can be routed to a file without touching the application log;
 - `db`: rows in `fhir_validator_schema.validation_usage`, written in batches from a bounded queue
   (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`). A full queue or a failed write drops records and
   counts them (`fv_usage_dropped_total`); a validation never waits for usage. A graceful stop writes what is
