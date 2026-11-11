@@ -71,7 +71,7 @@ class AdminAdmissionIT extends BaseTestContainer {
     }
 
     private Future<HttpResponse<Buffer>> validate() {
-        return app.client().post(app.port(), "localhost", "/R4/validate").timeout(10_000)
+        return app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(10_000)
                 .putHeader("Content-Type", "application/json").sendBuffer(Buffer.buffer(PATIENT));
     }
 

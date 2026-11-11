@@ -45,7 +45,7 @@ class GracefulShutdownIT extends BaseTestContainer {
     @Test
     void inFlightRequestCompletesWhileReadinessReportsDraining(Vertx vertx, VertxTestContext ctx) {
         AtomicBoolean sawDraining = new AtomicBoolean();
-        Future<HttpResponse<Buffer>> slow = app.client().post(app.port(), "localhost", "/R4/validate").timeout(120_000)
+        Future<HttpResponse<Buffer>> slow = app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(120_000)
                 .putHeader("Content-Type", "application/json")
                 .sendBuffer(Buffer.buffer(TestPackages.patientBundle(8000)));
         int port = app.port();

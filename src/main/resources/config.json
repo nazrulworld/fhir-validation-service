@@ -38,8 +38,13 @@
     "pollIntervalMs": 5000
   },
   "auth": {
-    "anonymousValidate": true,
     "cacheTtlMs": 30000
+  },
+  "usage": {
+    "sink": "none",
+    "queueSize": 10000,
+    "batchSize": 500,
+    "flushMs": 1000
   },
   "health": {
     "dbStalenessMs": 10000

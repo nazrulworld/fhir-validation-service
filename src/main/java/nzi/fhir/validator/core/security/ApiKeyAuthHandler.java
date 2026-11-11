@@ -13,8 +13,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Bearer API-key authorisation (FR-012): administrative operations always need an ADMIN key; validation and read
- * operations are anonymous unless {@code FV_AUTH_ANONYMOUS_VALIDATE=false}, then they need a VALIDATE or ADMIN key.
+ * Bearer API-key authorisation (FR-012): administrative operations always need an ADMIN key; validation and the package
+ * read operations need a VALIDATE or ADMIN key (spec 008: anonymous validation was removed in 4.1.0).
  * Key lookups are cached for {@code FV_AUTH_CACHE_TTL_MS}, so revocations take effect within that time. The cache
  * holds at most {@value #DEFAULT_MAX_CACHED_KEYS} entries (least recently used evicted first), so callers sending many
  * distinct tokens cannot grow it without bound (constitution Principle VI).
@@ -39,18 +39,29 @@ public class ApiKeyAuthHandler {
 
     private final ApiKeyRepository repository;
     private final long cacheTtlMs;
-    private final boolean anonymousValidate;
+    private final CidrList adminCidrs;
     private final int maxCachedKeys;
     private final LinkedHashMap<String, Cached> cache;
 
-    public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, boolean anonymousValidate) {
-        this(repository, cacheTtlMs, anonymousValidate, DEFAULT_MAX_CACHED_KEYS);
+    public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs) {
+        this(repository, cacheTtlMs, CidrList.EMPTY);
     }
 
-    ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, boolean anonymousValidate, int maxCachedKeys) {
+    /**
+     * @param adminCidrs networks administrative operations may come from ({@code FV_AUTH_ADMIN_CIDRS}); empty = any
+     */
+    public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, CidrList adminCidrs) {
+        this(repository, cacheTtlMs, adminCidrs, DEFAULT_MAX_CACHED_KEYS);
+    }
+
+    ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, int maxCachedKeys) {
+        this(repository, cacheTtlMs, CidrList.EMPTY, maxCachedKeys);
+    }
+
+    ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs, CidrList adminCidrs, int maxCachedKeys) {
         this.repository = repository;
         this.cacheTtlMs = cacheTtlMs;
-        this.anonymousValidate = anonymousValidate;
+        this.adminCidrs = adminCidrs;
         this.maxCachedKeys = maxCachedKeys;
         this.cache = new LinkedHashMap<>(16, 0.75f, true) {
             @Override
@@ -85,30 +96,32 @@ public class ApiKeyAuthHandler {
 
     /**
      * Router-level authorisation, mounted before contract validation so unauthenticated calls are refused before
-     * their input is examined: administrative operations need ADMIN, validation and read operations follow
-     * {@code FV_AUTH_ANONYMOUS_VALIDATE}, everything else (health, readiness, metrics) is open.
+     * their input is examined: administrative operations need ADMIN, validation and read operations need VALIDATE or
+     * ADMIN, everything else (health, readiness, metrics) is open.
      */
     public Handler<RoutingContext> rootHandler() {
         return ctx -> {
             if (isAdministrative(ctx)) {
-                authorise(ctx, false, Role.ADMIN);
+                // Spec 008 FR-002: decided before the key is read, so it holds for every key and costs no lookup.
+                if (!adminCidrs.isEmpty() && !adminCidrs.contains(ClientAddress.of(ctx))) {
+                    ErrorResponder.fail(ctx, new ProblemException(403, "forbidden",
+                            "Administrative operations are not allowed from this network"));
+                    return;
+                }
+                authorise(ctx, Role.ADMIN);
             } else if (VALIDATE_PATHS.matcher(ctx.normalizedPath()).matches()) {
-                authorise(ctx, anonymousValidate, Role.VALIDATE, Role.ADMIN);
+                authorise(ctx, Role.VALIDATE, Role.ADMIN);
             } else {
                 ctx.next();
             }
         };
     }
 
-    private void authorise(RoutingContext ctx, boolean anonymousAllowed, Role... allowed) {
+    private void authorise(RoutingContext ctx, Role... allowed) {
         String key = bearer(ctx.request().getHeader("Authorization"));
-        if (key == null) {
-            if (anonymousAllowed) {
-                ctx.put(CALLER_KEY, Caller.ANONYMOUS);
-                ctx.next();
-            } else {
-                unauthorized(ctx);
-            }
+        // Spec 008 FR-001: a value that can't be a key costs no hashing, cache slot or database query.
+        if (key == null || !ApiKeyRepository.isWellFormed(key)) {
+            unauthorized(ctx);
             return;
         }
         lookup(key).onComplete(ar -> {
@@ -130,7 +143,7 @@ public class ApiKeyAuthHandler {
                 if (info.get().role() == role) {
                     ctx.put(CONTEXT_KEY, role.name());
                     ctx.put(CALLER_KEY, info.get().caller());
-                    repository.touch(info.get().id());
+                    repository.touch(info.get().id(), ClientAddress.of(ctx));
                     ctx.next();
                     return;
                 }
@@ -153,8 +166,13 @@ public class ApiKeyAuthHandler {
         }
         return repository.findActive(key).onSuccess(info -> {
             if (cacheTtlMs > 0) {
+                // Spec 008 FR-006: a cached key never outlives its expiry.
+                long until = now + cacheTtlMs;
+                if (info.isPresent() && info.get().expiresAt() != null) {
+                    until = Math.min(until, info.get().expiresAt().toEpochMilli());
+                }
                 synchronized (cache) {
-                    cache.put(cacheKey, new Cached(info, now + cacheTtlMs));
+                    cache.put(cacheKey, new Cached(info, until));
                 }
             }
         });

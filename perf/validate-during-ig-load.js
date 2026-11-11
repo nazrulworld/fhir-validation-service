@@ -8,6 +8,8 @@ import { check } from 'k6';
 
 const BASE = __ENV.BASE || 'http://127.0.0.1:8880';
 const AUTH = __ENV.ADMIN_KEY ? { Authorization: `Bearer ${__ENV.ADMIN_KEY}` } : {};
+// Spec 008 (4.1.0): validation always needs a VALIDATE or ADMIN key.
+const KEY_HEADER = __ENV.FV_KEY ? { Authorization: `Bearer ${__ENV.FV_KEY}` } : {};
 const patient = open('../src/test/resources/fhir/resources/dk/Patient.json');
 const PACKAGE = __ENV.PACKAGE || '../src/test/resources/ig/packages/hl7/fhir/us/core/hl7.fhir.us.core-7.0.0.tgz';
 const PACKAGE_NAME = __ENV.PACKAGE_NAME || 'hl7.fhir.us.core';
@@ -31,7 +33,7 @@ export const options = {
 
 export function validate() {
   const r = http.post(`${BASE}/R4/validate`, patient, {
-    headers: { 'Content-Type': 'application/fhir+json', Accept: 'application/json' },
+    headers: Object.assign({ 'Content-Type': 'application/fhir+json', Accept: 'application/json' }, KEY_HEADER),
     tags: { name: 'validate' },
   });
   check(r, { 'validate 200': (res) => res.status === 200 });

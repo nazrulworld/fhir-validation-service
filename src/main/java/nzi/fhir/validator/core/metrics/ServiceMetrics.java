@@ -184,4 +184,46 @@ public class ServiceMetrics {
         Counter.builder("fv.snapshot.build.failures").tag("version", version.name())
                 .description("Failed validator builds").register(registry).increment();
     }
+
+    // --- Spec 008 (FR-020, research R11): resources per validation and usage-sink health. No key or org tags. -------
+
+    private final java.util.Map<String, io.micrometer.core.instrument.DistributionSummary> resourceSummaries =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * CPU time and bytes allocated by one validation's work, by version and outcome; a value below 0 (unknown or not
+     * reached) is skipped.
+     */
+    public void recordValidationResources(SupportedFhirVersion version, String outcome, long cpuNanos, long allocatedBytes) {
+        if (cpuNanos >= 0) {
+            summary("fv.validation.cpu", "seconds", "CPU time of the validation work", version, outcome).record(cpuNanos / 1e9);
+        }
+        if (allocatedBytes >= 0) {
+            summary("fv.validation.allocated", "bytes", "Bytes allocated by the validation work (shared heap, not resident)",
+                    version, outcome).record(allocatedBytes);
+        }
+    }
+
+    private io.micrometer.core.instrument.DistributionSummary summary(String name, String unit, String description,
+                                                                       SupportedFhirVersion version, String outcome) {
+        return resourceSummaries.computeIfAbsent(name + '|' + version.name() + '|' + outcome,
+                k -> io.micrometer.core.instrument.DistributionSummary.builder(name).baseUnit(unit).description(description)
+                        .tag("version", version.name()).tag("outcome", outcome).register(registry));
+    }
+
+    /** Usage records written by the db sink. */
+    public void usageWritten(long n) {
+        counter("fv.usage.written", "Usage records written").increment(n);
+    }
+
+    /** Usage records dropped: {@code queue_full} or {@code write_failed}. */
+    public void usageDropped(String reason, long n) {
+        counter("fv.usage.dropped", "Usage records dropped", "reason", reason).increment(n);
+    }
+
+    /** Records waiting in the db sink's queue. */
+    public void bindUsageQueue(java.util.Collection<?> queue) {
+        Gauge.builder("fv.usage.queue.size", queue, java.util.Collection::size).description("Usage records waiting to be written")
+                .register(registry);
+    }
 }

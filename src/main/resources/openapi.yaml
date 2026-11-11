@@ -85,6 +85,8 @@ paths:
   /{version}/validate:
     post:
       operationId: validationApiValidate
+      security:
+        - apiKey: []
       summary: Validate a FHIR resource
       description: >-
         Content negotiation: Accept absent, */* or application/json returns the ValidationResponse JSON shape;
@@ -195,12 +197,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          description: >-
-            unauthorized: FV_AUTH_ANONYMOUS_VALIDATE=false and no valid API key was sent (WWW-Authenticate: Bearer)
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -227,6 +224,8 @@ paths:
   /{version}/validator:
     post:
       operationId: validatorApiIncludeIg
+      security:
+        - apiKey: []
       summary: Pre-build and keep a validator context for a stored Implementation Guide version
       description: >-
         (4.0.0: this path replaces /{version}/include-ig, which no longer exists.)
@@ -293,7 +292,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -314,6 +313,8 @@ paths:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: validatorApiExcludeIg
+      security:
+        - apiKey: []
       summary: Stop pre-building an included Implementation Guide version for a FHIR version
       description: >-
         Removes one name#version from the included set and propagates to every instance. The package stays stored.
@@ -344,9 +345,9 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/Problem'
         '500':
@@ -355,6 +356,8 @@ paths:
           $ref: '#/components/responses/Problem'
     patch:
       operationId: validatorApiChangeIncludedIg
+      security:
+        - apiKey: []
       summary: Change sharing, ownership or terminology of an included validator context
       description: >-
         Administrative (3.1.0). The context's owner or the system organisation may change `shareable`; only the
@@ -395,7 +398,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -408,6 +411,8 @@ paths:
   /igs/upload:
     post:
       operationId: igPackageApiUploadIg
+      security:
+        - apiKey: []
       summary: Upload and store an Implementation Guide package
       description: >-
         The stored package is owned by the caller's organisation (3.1.0). Uploading a name#version another
@@ -446,7 +451,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -463,6 +468,8 @@ paths:
   /igs/register:
     post:
       operationId: igPackageApiRegisterIg
+      security:
+        - apiKey: []
       summary: Fetch and store an Implementation Guide package (from a registry or an approved URL)
       description: >-
         With `name` and no version (or `latest`), the configured package registries are asked for the highest
@@ -519,7 +526,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -538,6 +545,8 @@ paths:
   /igs/{name}/{version}:
     patch:
       operationId: igPackageApiChangeAccess
+      security:
+        - apiKey: []
       summary: Change sharing or transfer ownership of a stored IG package
       description: >-
         Administrative (3.1.0). The package's owner or the system organisation may change `shareable`; only the
@@ -572,7 +581,7 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -585,6 +594,8 @@ paths:
   /igs/{name}/{version}/dependencies:
     get:
       operationId: igPackageApiGetDependenciesGraph
+      security:
+        - apiKey: []
       summary: Declared dependencies of a stored IG package
       parameters:
         - name: name
@@ -614,7 +625,7 @@ paths:
                     items:
                       type: string
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -625,6 +636,8 @@ paths:
   /igs/{name}/{version}/conformance:
     get:
       operationId: igPackageApiGenerateConformanceReport
+      security:
+        - apiKey: []
       deprecated: true
       summary: Files of a stored IG package (deprecated; not a conformance report)
       parameters:
@@ -655,7 +668,7 @@ paths:
                     items:
                       type: string
         '401':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -669,12 +682,28 @@ components:
       type: http
       scheme: bearer
       description: >-
-        API key as `Authorization: Bearer <key>`. Administrative operations (upload/register IG, POST/PATCH/DELETE /{version}/validator,
-        and the PATCH operations that change sharing or ownership) always require an ADMIN key. Every key belongs to
-        an organisation (3.1.0); a key of a deactivated organisation gets 403. Validation and read operations require a VALIDATE or ADMIN key
-        only when FV_AUTH_ANONYMOUS_VALIDATE=false. Enforced by the service (see contracts/http-api.md).
+        API key as `Authorization: Bearer <key>`. Validation and the package read operations require a VALIDATE or
+        ADMIN key (4.1.0; anonymous validation was removed). Administrative operations (upload/register IG,
+        POST/PATCH/DELETE /{version}/validator, and the PATCH operations that change sharing or ownership) require an
+        ADMIN key and, when the operator configures an admin network allowlist (FV_AUTH_ADMIN_CIDRS), must come from an
+        allowed network. Every key belongs to an organisation; a key of a deactivated organisation gets 403. Keys may
+        expire; an expired key gets 401. Enforced by the service before contract validation (see
+        specs/008-api-key-hardening/contracts/http-api.md).
 
   responses:
+    Unauthorized:
+      description: >-
+        unauthorized: no valid API key was sent (missing, malformed, unknown, revoked or expired). The response doesn't
+        say which (WWW-Authenticate: Bearer).
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     Problem:
       description: Error (RFC 9457 problem details)
       content:
@@ -691,8 +720,9 @@ components:
             $ref: '#/components/schemas/Problem'
     Forbidden:
       description: >-
-        forbidden: the API key's role doesn't allow this operation, the key's organisation is deactivated, or
-        (transfers) the caller isn't a system organisation administrator.
+        forbidden: the API key's role doesn't allow this operation, the key's organisation is deactivated,
+        (transfers) the caller isn't a system organisation administrator, or (administrative operations) the client
+        address is outside the configured admin networks (FV_AUTH_ADMIN_CIDRS).
       content:
         application/problem+json:
           schema:

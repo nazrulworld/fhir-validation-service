@@ -65,6 +65,7 @@ public final class ServiceRegistry {
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicBoolean refusingNewRequests = new AtomicBoolean();
     private ServiceMetrics metrics;
+    private nzi.fhir.validator.core.usage.UsageWriter usage = nzi.fhir.validator.core.usage.NoopUsageWriter.INSTANCE;
 
     private ServiceRegistry(ApplicationConfig config, Pool pool, Executors executors, HealthService healthService,
                             IgPackageService igPackageService, ValidatorRegistry validatorRegistry, ConfigSync configSync,
@@ -82,7 +83,7 @@ public final class ServiceRegistry {
         this.adminAdmission = adminAdmission;
         this.apiKeys = new ApiKeyRepository(pool);
         this.organisations = new OrganisationRepository(pool);
-        this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.anonymousValidate());
+        this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.adminCidrs());
         this.validationApi = new ValidationApi(validationService);
         this.validatorApi = new ValidatorApi(igPackageService);
     }
@@ -151,6 +152,9 @@ public final class ServiceRegistry {
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
+        // Spec 008: usage accounting (FV_USAGE_SINK); closed by Bootstrap.stop() after the drain.
+        services.usage = nzi.fhir.validator.core.usage.UsageWriter.create(vertx, pool, config, metrics);
+        services.validationApi.setUsageWriter(services.usage);
         services.snapshotBuilder = builder;
         services.heapBudget = heap;
         services.txRegistry = txRegistry;
@@ -252,6 +256,11 @@ public final class ServiceRegistry {
     /** Admission limit for administrative operations ({@code FV_ADMIN_MAX_PENDING}), separate from validation. */
     public AdmissionController adminAdmission() {
         return adminAdmission;
+    }
+
+    /** Where usage records go (spec 008). */
+    public nzi.fhir.validator.core.usage.UsageWriter usage() {
+        return usage;
     }
 
     public ServiceMetrics metrics() {

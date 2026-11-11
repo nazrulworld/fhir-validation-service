@@ -75,7 +75,7 @@ class EventLoopResponsivenessIT extends BaseTestContainer {
     @Test
     void renderingALargeOperationOutcomeDoesNotBlockTheEventLoop(VertxTestContext ctx) {
         logs = LogCapture.start();
-        app.client().post(app.port(), "localhost", "/R4/validate").timeout(120_000)
+        app.client().post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(120_000)
                 .putHeader("Content-Type", "application/json")
                 .putHeader("Accept", "application/fhir+xml")
                 .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.patientBundle(1500)))

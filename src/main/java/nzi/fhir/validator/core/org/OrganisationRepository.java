@@ -57,6 +57,38 @@ public class OrganisationRepository {
     }
 
     /**
+     * Makes sure the system and trial organisations exist with their well-known ids (spec 008 FR-025): each is inserted
+     * when missing, and an existing row is never changed ({@code FV_SYSTEM_ORG_*} is applied afterwards). Safe when
+     * several instances start at once.
+     *
+     * @return fails with {@link nzi.fhir.validator.core.StartupException} when another organisation already uses a
+     * well-known short name
+     */
+    public Future<Void> ensureWellKnown() {
+        return ensure(nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID, nzi.fhir.validator.core.Constant.SYSTEM_ORG_SHORT_NAME,
+                nzi.fhir.validator.core.Constant.SYSTEM_ORG_LONG_NAME, nzi.fhir.validator.core.Constant.SYSTEM_ORG_TYPE)
+                .compose(v -> ensure(nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_SHORT_NAME, nzi.fhir.validator.core.Constant.TRIAL_ORG_LONG_NAME,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_TYPE));
+    }
+
+    private Future<Void> ensure(UUID id, String nameShort, String nameLong, String type) {
+        return pool.preparedQuery("INSERT INTO " + TABLE + " (id, name_short, name_long, type, is_active) "
+                        + "VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO NOTHING")
+                .execute(Tuple.of(id, nameShort, nameLong, type))
+                .<Void>mapEmpty()
+                .recover(err -> {
+                    if (err instanceof PgException pg && "23505".equals(pg.getSqlState())
+                            && NAME_SHORT_UNIQUE.equals(pg.getConstraint())) {
+                        return Future.failedFuture(new nzi.fhir.validator.core.StartupException("An organisation named '"
+                                + nameShort + "' already exists with another id; rename it before starting 4.1.0 "
+                                + "(the well-known '" + nameShort + "' organisation has id " + id + ")"));
+                    }
+                    return Future.failedFuture(err);
+                });
+    }
+
+    /**
      * Creates an organisation (always active).
      *
      * @return fails with 400 for an invalid field, 409 for type {@code SYSTEM} or a short name already used in any case

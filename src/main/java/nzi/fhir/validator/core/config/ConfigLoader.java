@@ -67,9 +67,18 @@ public final class ConfigLoader {
             new Entry("FV_TX_CACHE_TTL_MS", "tx.cacheTtlMs", Kind.LONG, 10_000, 86_400_000),
             new Entry("FV_TX_MAX_CONNECTIONS_PER_SERVER", "tx.maxConnectionsPerServer", Kind.INT, 1, 200),
             new Entry("FV_CONFIG_POLL_INTERVAL_MS", "sync.pollIntervalMs", Kind.LONG, 1_000, 60_000),
-            new Entry("FV_AUTH_ANONYMOUS_VALIDATE", "auth.anonymousValidate", Kind.BOOL, NO_MIN, NO_MAX),
             new Entry("FV_ADMIN_API_KEY", "auth.bootstrapAdminKey", Kind.STRING, NO_MIN, NO_MAX),
+            // Spec 008 (FR-026): the trial organisation's shared VALIDATE key, installed at every start.
+            new Entry("FV_VALIDATOR_API_KEY", "auth.validatorKey", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_AUTH_CACHE_TTL_MS", "auth.cacheTtlMs", Kind.LONG, 0, 3_600_000),
+            // Spec 008 (FR-002, FR-003): comma-separated IPv4/IPv6 CIDRs; unset = no restriction / headers ignored.
+            new Entry("FV_AUTH_ADMIN_CIDRS", "auth.adminCidrs", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_AUTH_TRUSTED_PROXIES", "auth.trustedProxies", Kind.STRING, NO_MIN, NO_MAX),
+            // Spec 008 (FR-014, FR-016): usage accounting.
+            new Entry("FV_USAGE_SINK", "usage.sink", Kind.STRING, NO_MIN, NO_MAX),
+            new Entry("FV_USAGE_QUEUE_SIZE", "usage.queueSize", Kind.INT, 100, 1_000_000),
+            new Entry("FV_USAGE_BATCH_SIZE", "usage.batchSize", Kind.INT, 10, 5_000),
+            new Entry("FV_USAGE_FLUSH_MS", "usage.flushMs", Kind.LONG, 100, 60_000),
             new Entry("FV_READINESS_DB_STALENESS_MS", "health.dbStalenessMs", Kind.LONG, 1_000, 600_000),
             new Entry("FV_SHUTDOWN_PRE_DRAIN_MS", "shutdown.preDrainMs", Kind.LONG, 0, 120_000),
             new Entry("FV_SHUTDOWN_GRACE_MS", "shutdown.graceMs", Kind.LONG, 0, 600_000),
@@ -94,11 +103,24 @@ public final class ConfigLoader {
             new Entry("FV_SYSTEM_ORG_CONTACT_PERSON_EMAIL", "systemOrg.contactPersonEmail", Kind.STRING, NO_MIN, NO_MAX)
     );
 
+    /** Why the on-demand variables are ignored (spec 007 FR-025: on-demand contexts were removed). */
+    private static final String ON_DEMAND_REMOVED = "validation contexts are no longer built on demand (4.0.0); "
+            + "include IGs with POST /{version}/validator";
+
     /**
-     * Variables of earlier releases that no longer have any effect (spec 007 FR-025: on-demand contexts were removed).
-     * A deployment that still sets one starts with a warning instead of failing.
+     * Variables of earlier releases that no longer have any effect, with the reason logged for each. A deployment that
+     * still sets one starts with a warning ({@code <NAME> is deprecated and ignored: <reason>}) instead of failing.
      */
-    private static final List<String> DEPRECATED = List.of("FV_IG_MAX_ON_DEMAND", "FV_IG_BUILD_WAIT_MS");
+    static final Map<String, String> DEPRECATED = deprecated();
+
+    private static Map<String, String> deprecated() {
+        Map<String, String> m = new java.util.LinkedHashMap<>();
+        m.put("FV_IG_MAX_ON_DEMAND", ON_DEMAND_REMOVED);
+        m.put("FV_IG_BUILD_WAIT_MS", ON_DEMAND_REMOVED);
+        // Spec 008 FR-009.
+        m.put("FV_AUTH_ANONYMOUS_VALIDATE", "removed in 4.1.0, validation always requires a VALIDATE or ADMIN key");
+        return java.util.Collections.unmodifiableMap(m);
+    }
 
     /** Prefix of the system-organisation entries (their path is {@code systemOrg.<organisation field>}). */
     static final String SYSTEM_ORG = "systemOrg";
@@ -129,7 +151,7 @@ public final class ConfigLoader {
             }
         }
         putIfPresent(env, "FV_CONFIG_FILE");
-        DEPRECATED.forEach(name -> putIfPresent(env, name));
+        DEPRECATED.keySet().forEach(name -> putIfPresent(env, name));
         return env;
     }
 
@@ -163,12 +185,11 @@ public final class ConfigLoader {
                 set(merged, e.path(), parse(name, raw, e.kind()));
             }
         }
-        for (String name : DEPRECATED) {
+        DEPRECATED.forEach((name, reason) -> {
             if (blankToNull(env.get(name)) != null) {
-                logger.warn("{} is deprecated and ignored: validation contexts are no longer built on demand (4.0.0); "
-                        + "include IGs with POST /{version}/validator", name);
+                logger.warn("{} is deprecated and ignored: {}", name, reason);
             }
-        }
+        });
         return finish(merged);
     }
 
@@ -283,6 +304,31 @@ public final class ConfigLoader {
         String key = section(c, "auth").getString("bootstrapAdminKey");
         if (key != null && !key.isEmpty() && !key.matches("[A-Za-z0-9_-]{32,128}")) {
             throw new IllegalStateException("Invalid FV_ADMIN_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
+        }
+        for (String[] cidrs : new String[][]{{"FV_AUTH_ADMIN_CIDRS", "adminCidrs"}, {"FV_AUTH_TRUSTED_PROXIES", "trustedProxies"}}) {
+            String value = section(c, "auth").getString(cidrs[1]);
+            try {
+                nzi.fhir.validator.core.security.CidrList.parse(value);
+            } catch (IllegalArgumentException e) {
+                // "invalid network '<entry>'" → "Invalid FV_AUTH_ADMIN_CIDRS: invalid FV_AUTH_ADMIN_CIDRS entry '<entry>'"
+                throw new IllegalStateException("Invalid " + cidrs[0] + ": " + e.getMessage().replace("invalid network",
+                        "invalid " + cidrs[0] + " entry"));
+            }
+        }
+        JsonObject usage = section(c, "usage");
+        ApplicationConfig.usageSinks(usage.getString("sink"));
+        if (usage.getInteger("batchSize", 500) > usage.getInteger("queueSize", 10_000)) {
+            throw new IllegalStateException("Invalid FV_USAGE_BATCH_SIZE: FV_USAGE_BATCH_SIZE (" + usage.getInteger("batchSize")
+                    + ") must not exceed FV_USAGE_QUEUE_SIZE (" + usage.getInteger("queueSize", 10_000) + ")");
+        }
+        String validatorKey = section(c, "auth").getString("validatorKey");
+        if (validatorKey != null && !validatorKey.isEmpty()) {
+            if (!validatorKey.matches("[A-Za-z0-9_-]{32,128}")) {
+                throw new IllegalStateException("Invalid FV_VALIDATOR_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
+            }
+            if (validatorKey.equals(key)) {
+                throw new IllegalStateException("Invalid FV_VALIDATOR_API_KEY: must differ from FV_ADMIN_API_KEY");
+            }
         }
         validateSystemOrganisation(section(c, SYSTEM_ORG));
     }

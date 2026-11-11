@@ -1,5 +1,14 @@
 <!--
-Sync Impact Report (1.1.1 → 1.2.0, MINOR: Security & Compliance expanded; feature 007-terminology-routing)
+Sync Impact Report (1.2.0 → 1.3.0, MINOR: Principle IV materially expanded; feature 008-api-key-hardening)
+- Changed principle: IV. Contract-First API — a breaking change may ship in a MINOR release when the feature's plan.md
+  records it under Complexity Tracking with the maintainer's approval, and the release carries a Breaking section and
+  an upgrade guide.
+- Dependent documents:
+  - specs/008-api-key-hardening/plan.md — Constitution Check row IV (updated).
+  - .specify/templates/plan-template.md — no change needed (its Constitution Check reads the gates from this file).
+  - CHANGELOG.md — 4.1.0 entry (to be written with the feature).
+
+Previous report (1.1.1 → 1.2.0, MINOR: Security & Compliance expanded; feature 007-terminology-routing)
 - Changed section: Security & Compliance — added the outbound terminology rule.
 - Principles: unchanged. Principle II's "profiles are never fetched from the network" still holds (terminology servers
   only check codes).
@@ -73,7 +82,9 @@ the reference implementation.
   MUST be mounted through `RouterBuilder` operations defined in that spec; spec changes MUST land
   before (or with) the code that implements them.
 - Breaking changes to paths, payloads or status codes MUST bump the service MAJOR version and
-  ship a migration note in the changelog.
+  ship a migration note in the changelog, unless the feature's `plan.md` records the break under
+  Complexity Tracking with the maintainer's approval. In that case a MINOR bump is permitted,
+  provided the release notes carry a **Breaking** section and a `docs/upgrade-<version>.md` guide.
 - Errors MUST use one consistent JSON error format with correct 4xx (client) / 5xx (server)
   status codes. Stack traces and internal exception messages MUST NOT be returned to clients.
 
@@ -188,4 +199,4 @@ None open. The seven deviations recorded at ratification (static `HashMap` regis
 upload limit, no changelog) were resolved by feature `001-service-hardening` (see `CHANGELOG.md`, 1.0.0). New code
 MUST NOT reintroduce them.
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-09
+**Version**: 1.3.0 | **Ratified**: 2026-10-25 | **Last Amended**: 2026-11-11

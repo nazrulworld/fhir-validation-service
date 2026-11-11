@@ -181,8 +181,8 @@ class OrganisationRepositoryIT extends BaseTestContainer {
                     List<Organisation> all = cf.resultAt(0);
                     List<Organisation> active = cf.resultAt(1);
                     List<Organisation> inactive = cf.resultAt(2);
-                    assertEquals(List.of("Beta", "system", "zeta"), all.stream().map(Organisation::nameShort).toList());
-                    assertEquals(List.of("system", "zeta"), active.stream().map(Organisation::nameShort).toList());
+                    assertEquals(List.of("Beta", "system", "trial", "zeta"), all.stream().map(Organisation::nameShort).toList());
+                    assertEquals(List.of("system", "trial", "zeta"), active.stream().map(Organisation::nameShort).toList());
                     assertEquals(List.of("Beta"), inactive.stream().map(Organisation::nameShort).toList());
                     ctx.completeNow();
                 })));

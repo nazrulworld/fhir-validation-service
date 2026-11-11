@@ -9,6 +9,10 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+> **Upgrading from 4.0?** 4.1.0 requires a key for every validation (`FV_AUTH_ANONYMOUS_VALIDATE` is gone), re-keys
+> the system organisation (stop every 4.0 instance first) and adds usage accounting. Read
+> [docs/upgrade-4.1.md](docs/upgrade-4.1.md) before upgrading.
+>
 > **Upgrading from 3.x?** 4.0.0 serves `?ig=` only from **included** IGs (a stored IG that isn't included answers
 > 400), renames `/{version}/include-ig` to `/{version}/validator`, and adds optional terminology servers per included
 > IG. Read [docs/upgrade-4.0.md](docs/upgrade-4.0.md) before upgrading.
@@ -306,8 +310,12 @@ health-checks `/health/readiness`. To upgrade, replace the jar and restart; migr
 
 ### Validate a resource
 
+Every validation needs a VALIDATE or ADMIN key (4.1.0): a key created with `fv-admin key create`, or the shared trial
+key set in `FV_VALIDATOR_API_KEY` (see [Organisations and API keys](#organisations-and-api-keys)).
+
 ```bash
 curl -X POST http://127.0.0.1:8880/R4/validate \
+  -H "Authorization: Bearer $FV_VALIDATOR_API_KEY" \
   -H 'Content-Type: application/fhir+json' \
   --data '{"resourceType":"Patient","active":true}'
 ```
@@ -424,8 +432,10 @@ curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminolo
 ### Organisations and API keys
 
 Since 3.1.0 every API key, IG package and included IG belongs to an **organisation**. A built-in **system
-organisation** owns everything that existed before the upgrade, and `FV_ADMIN_API_KEY` (the bootstrap administrator key)
-belongs to it. Organisations and keys are managed with the command line in the service jar and image (no SQL needed):
+organisation** (id `00000000-0000-0000-0000-100000000001` since 4.1.0) owns everything that existed before the upgrade,
+and the key from `FV_ADMIN_API_KEY` (`system administrator`) belongs to it. A built-in **trial organisation** (`trial`,
+4.1.0) owns the shared VALIDATE key from `FV_VALIDATOR_API_KEY` (`trial validator`): a free-trial key that may use
+shareable content only. Organisations and keys are managed with the command line in the service jar and image (no SQL needed):
 
 ```bash
 APP="docker compose run --rm validator fv-admin"     # or: java -jar target/fhir-validation-service-*.jar
@@ -433,7 +443,8 @@ $APP org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIA
 $APP org create --file beta.json --email ops@beta.example      # a JSON file, with flags overriding its fields
 $APP org update --name-short acme --phone "+45 12 34 56 78"   # only the given fields change
 $APP key create --org acme --name acme-ci --role VALIDATE      # prints the key once; only its hash is stored
-$APP key list --org acme                                        # never shows keys or hashes
+$APP key create --org acme --name acme-temp --role VALIDATE --expires 2027-01-01T00:00:00Z   # 4.1.0: refused after that
+$APP key list --org acme                                        # never shows keys or hashes; shows expiresAt, lastUsedIp
 $APP key revoke --name acme-ci
 $APP org deactivate --name-short acme                           # its keys get 403 within FV_AUTH_CACHE_TTL_MS
 $APP org activate --name-short acme
@@ -444,11 +455,24 @@ Commands print one JSON document on stdout, write errors to stderr as `error: <c
 settings as the service and apply migrations first. The full reference is
 [`specs/005-organisation-ownership/contracts/cli.md`](specs/005-organisation-ownership/contracts/cli.md).
 
-Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints, needed when
-`FV_AUTH_ANONYMOUS_VALIDATE=false`). To rotate a key without downtime, create the new one under a second name, switch
-the client over, then revoke the old one. Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so
-revocations and organisation deactivations take effect within that time. The name `bootstrap` is reserved for
-`FV_ADMIN_API_KEY`.
+Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints; since 4.1.0 these always need a key). To
+rotate a key without downtime, create the new one under a second name, switch the client over, then revoke the old one.
+Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so revocations and organisation deactivations
+take effect within that time; an expired key is refused at its expiry, cached or not. `key list` shows each key's
+`lastUsedIp`, written at once when a key is used from a new address, so a stolen key used elsewhere stands out.
+
+The names `system administrator` and `trial validator` are reserved for the keys installed from `FV_ADMIN_API_KEY` and
+`FV_VALIDATOR_API_KEY`. They are rotated by changing the variable and restarting, and revoked by unsetting it and
+restarting; `key revoke` refuses them.
+
+#### Network controls (4.1.0)
+
+- `FV_AUTH_ADMIN_CIDRS` (comma-separated IPv4/IPv6 networks) limits administrative operations to those networks: any
+  other client gets 403, whatever key it sends, before the key is even looked up. Unset, nothing is restricted.
+- `FV_AUTH_TRUSTED_PROXIES` names the reverse proxies whose `Forwarded` (preferred) or `X-Forwarded-For` headers are
+  believed. The client is the right-most address that isn't a trusted proxy. Without it, or from any other peer, the
+  headers are ignored, so a client can't fake its address. The same address is used for the allowlist, `lastUsedIp`
+  and usage records.
 
 #### Who may use what
 
@@ -458,7 +482,7 @@ revocations and organisation deactivations take effect within that time. The nam
 - **Included IGs** (validator contexts) belong to the organisation that included them, shareable by default
   (`"shareable": false` in the include body). Only the owner of the IG package can include it as private.
 - A caller may use content its organisation owns, content that is shareable, and (the system organisation) everything.
-  Anonymous callers may use shareable content only. A validation context is usable only when it and every package it
+  The trial organisation owns nothing, so the trial key may use shareable content only. A validation context is usable only when it and every package it
   is built from are usable.
 - Content you may not use is answered exactly like content that isn't stored: 404 `package-not-found`, or 424
   `dependency-not-found` without naming the dependency. Uploading a `name#version` another organisation stored answers
@@ -481,6 +505,25 @@ The owner (or the system organisation) may change `shareable`; another organisat
 isn't the system organisation gets 403 for a transfer. Changes reach every instance within seconds and never rebuild a
 validator.
 
+### Usage accounting (4.1.0)
+
+Every authorised validation can be recorded, attributed to its key and organisation, with its outcome, issue counts,
+phase timings (`totalMs`, `queueMs`, `contextMs`, `validateMs`), CPU time and allocated bytes. "Memory" means bytes
+allocated by the request's work: the heap is shared, so resident memory can't be attributed to a request.
+`FV_USAGE_SINK` chooses where records go:
+
+- `none` (default): nothing is kept (the CPU and allocation metrics are still measured);
+- `log`: one JSON line per request on the logger `nzi.fhir.validator.usage`, which `log4j2.xml` sends to its own
+  appender (`UsageConsole`, just the JSON), so it can be routed to a file without touching the application log;
+- `db`: rows in `fhir_validator_schema.validation_usage`, written in batches from a bounded queue
+  (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`). A full queue or a failed write drops records and
+  counts them (`fv_usage_dropped_total`); a validation never waits for usage;
+- `log,db`: both.
+
+Nothing deletes old rows: schedule `DELETE FROM fhir_validator_schema.validation_usage WHERE created_at < now() -
+interval '90 days'` (about 250 bytes a row). Summaries: `$APP usage summary --org acme --since 2026-11-01T00:00:00Z`
+(or `--key <name>`).
+
 ### Database connection security
 
 `FV_PG_SSL_MODE` defaults to `prefer`, which falls back to an unencrypted connection when the server offers no TLS. The
@@ -494,7 +537,7 @@ bundled compose database runs on a private compose network. When the database is
 | `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
 | `GET /health/readiness` | 200 when the database is reachable, every core and included-IG validator is usable, and the instance is not draining      |
 | `GET /health`           | detailed report                                                                                                          |
-| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, ...) |
+| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_cpu_seconds`, `fv_validation_allocated_bytes`, `fv_usage_*`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, ...) |
 
 On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
 `FV_SHUTDOWN_GRACE_MS`), then exits.
@@ -510,7 +553,10 @@ and [`.env.example`](.env.example). The most important ones:
 |------------------------------------------------------------------------------|-----------------------------------------------------------------|-------------------------------------------------------------------|
 | `FV_PG_HOST`, `FV_PG_PORT`, `FV_PG_DATABASE`, `FV_PG_USER`, `FV_PG_PASSWORD` | `localhost`, `5432`, `fhir_validator`, `postgres`, *(required)* | database                                                          |
 | `FV_ADMIN_API_KEY`                                                           | *(unset: admin operations refused)*                             | bootstrap administrator key                                       |
-| `FV_AUTH_ANONYMOUS_VALIDATE`                                                 | `true`                                                          | `false` requires a key for validation and reads too               |
+| `FV_VALIDATOR_API_KEY`                                                       | *(unset: warning)*                                              | the trial organisation's shared VALIDATE key (4.1.0)              |
+| `FV_AUTH_ADMIN_CIDRS` / `FV_AUTH_TRUSTED_PROXIES`                            | *(unset)*                                                       | admin network allowlist / proxies whose headers count (4.1.0)     |
+| `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db` (4.1.0)              |
+| `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching (4.1.0)                |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
 | `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |

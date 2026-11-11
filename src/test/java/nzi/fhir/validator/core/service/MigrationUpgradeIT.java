@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Flyway must apply cleanly to an empty database and on top of earlier releases' schemas: 0.1.x (V2) and 1.2.0 (V5).
- * V6 (2.0.0) drops the custom profile storage and nothing else (spec 003, FR-013, FR-015).
+ * V6 (2.0.0) drops the custom profile storage and nothing else (spec 003, FR-013, FR-015). V11 (4.1.0) re-keys the
+ * system organisation (spec 008).
  */
 class MigrationUpgradeIT extends BaseTestContainer {
 
@@ -85,6 +86,11 @@ class MigrationUpgradeIT extends BaseTestContainer {
             st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('k', '\\x01', 'ADMIN')");
             assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('k2', '\\x02', 'ROOT')"));
         }
+        // V10 (spec 008): optional expiry and the last-used client address.
+        assertEquals(List.of("expires_at|YES|timestamp with time zone", "last_used_ip|YES|inet"),
+                column(c, "SELECT column_name || '|' || is_nullable || '|' || data_type FROM information_schema.columns "
+                        + "WHERE table_schema='" + S + "' AND table_name='api_keys' AND column_name IN ('expires_at', 'last_used_ip') "
+                        + "ORDER BY column_name"));
     }
 
     @Test
@@ -204,11 +210,11 @@ class MigrationUpgradeIT extends BaseTestContainer {
 
     private static final String SYSTEM_ID = "00000000-0000-0000-0000-000000000001";
 
-    /** (a) V8 on an empty database: exactly one SYSTEM organisation, with the well-known id. */
+    /** (a) V8 on an empty database: exactly one SYSTEM organisation, with the (4.0) well-known id. */
     @Test
     void v8CreatesTheSystemOrganisation() throws SQLException {
         PgConnectOptions db = freshDatabase();
-        DatabaseService.flyway(db).migrate();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("8")).load().migrate();
         try (Connection c = jdbc(db)) {
             assertEquals(List.of(SYSTEM_ID + "|system|SYSTEM|true"), column(c, "SELECT id || '|' || name_short || '|' || type "
                     + "|| '|' || is_active FROM " + S + ".organisations"));
@@ -233,7 +239,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
                     + "WHERE fhir_version = 'R4'");
         }
 
-        DatabaseService.flyway(db).migrate();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("8")).load().migrate();
 
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("bootstrap|" + SYSTEM_ID, "ci|" + SYSTEM_ID),
@@ -253,7 +259,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
     @Test
     void v8ProtectsTheSystemOrganisation() throws SQLException {
         PgConnectOptions db = freshDatabase();
-        DatabaseService.flyway(db).migrate();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("8")).load().migrate();
         try (Connection c = jdbc(db); Statement st = c.createStatement()) {
             assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) "
                     + "VALUES ('other-system', 'Other', 'SYSTEM')"), "a second SYSTEM organisation");
@@ -304,7 +310,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
                 var services = app.bootstrap().services();
                 join(nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
                         nzi.fhir.validator.testsupport.TestPackages.profilePackage("upgrade.ig", "1.0.0")));
-                var base = join(client.post(app.port(), "localhost", "/R4/validate").putHeader("Content-Type", "application/fhir+json")
+                var base = join(client.post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", nzi.fhir.validator.testsupport.AppHarness.VALIDATOR_AUTH).putHeader("Content-Type", "application/fhir+json")
                         .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
                 assertEquals(200, base.statusCode(), base.bodyAsString());
                 for (String field : List.of("valid", "messages", "fhirVersion", "appliedProfiles", "igPackage")) {
@@ -317,7 +323,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
                 for (String field : List.of("status", "fhirVersion", "key", "revision", "included", "resolved", "warnings")) {
                     assertTrue(include.bodyAsJsonObject().containsKey(field), field);
                 }
-                var withIg = join(client.post(app.port(), "localhost", "/R4/validate").addQueryParam("ig", "upgrade.ig#1.0.0")
+                var withIg = join(client.post(app.port(), "localhost", "/R4/validate").putHeader("Authorization", nzi.fhir.validator.testsupport.AppHarness.VALIDATOR_AUTH).addQueryParam("ig", "upgrade.ig#1.0.0")
                         .putHeader("Content-Type", "application/fhir+json")
                         .sendBuffer(io.vertx.core.buffer.Buffer.buffer(nzi.fhir.validator.testsupport.TestPackages.minimalPatient())));
                 assertEquals(200, withIg.statusCode(), withIg.bodyAsString());
@@ -344,7 +350,10 @@ class MigrationUpgradeIT extends BaseTestContainer {
             try (Connection c = jdbc(db)) {
                 assertEquals(List.of("system|Acme Ops|ops@acme.example|null"), column(c, "SELECT name_short || '|' || name_long || '|' "
                         + "|| email || '|' || coalesce(phone, 'null') FROM " + S + ".organisations WHERE type = 'SYSTEM'"));
-                assertEquals(List.of(SYSTEM_ID), column(c, "SELECT owner::text FROM " + S + ".api_keys WHERE name = 'bootstrap'"));
+                // Spec 008: the bootstrap key is installed under its well-known id and name, owned by the system.
+                assertEquals(List.of(nzi.fhir.validator.core.Constant.SYSTEM_ORG_ID), column(c, "SELECT owner::text FROM " + S
+                        + ".api_keys WHERE id = '" + nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_ID + "' "
+                        + "AND name = 'system administrator'"));
             }
 
             // A second start with only the email changed updates only the email.
@@ -405,6 +414,149 @@ class MigrationUpgradeIT extends BaseTestContainer {
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("a.ig#1.0.0|false|NONE|null"), column(c, "SELECT ig_package || '|' || is_shareable || '|' "
                     + "|| tx_mode || '|' || coalesce(tx_server, 'null') FROM " + S + ".fhir_validator_snapshots"));
+        }
+    }
+
+
+    // --- V10–V11 (4.1.0, spec 008: key expiry and audit, well-known organisations) ---------------------------------
+
+    private static final String NEW_SYSTEM_ID = "00000000-0000-0000-0000-100000000001";
+    private static final String TRIAL_ID = "00000000-0000-0000-0000-100000000002";
+    private static final String ADMIN_KEY_ID = "00000000-0000-0000-0000-200000000001";
+
+    /** 4.0.0 (V9) to V10: both columns exist, are nullable, and are NULL on existing keys. */
+    @Test
+    void v10AddsExpiryAndLastUsedIp() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("9")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('ops', '\\x09', 'ADMIN')");
+        }
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("ops|t|t"), column(c, "SELECT name || '|' || (expires_at IS NULL) || '|' || (last_used_ip IS NULL) "
+                    + "FROM " + S + ".api_keys").stream().map(v -> v.replace("true", "t")).toList());
+            assertApiKeysTable(c);
+        }
+    }
+
+    /**
+     * Spec 008 US3 (FR-024, SC-008): a 4.0 database with system-owned keys, IG packages and contexts is re-keyed to the
+     * well-known system id; another organisation's rows are untouched; the trial organisation is seeded and the
+     * bootstrap key gets its well-known id and name.
+     */
+    @Test
+    void v11ReKeysTheSystemOrganisation() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        String other = UUID.randomUUID().toString();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".organisations (id, name_short, name_long, type) VALUES ('" + other
+                    + "', 'acme', 'Acme', 'COMMERCIAL')");
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('bootstrap', '\\x01', 'ADMIN'), "
+                    + "('ci', '\\x02', 'VALIDATE')");
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role, owner) VALUES ('acme-ci', '\\x03', 'VALIDATE', '" + other + "')");
+            st.execute("INSERT INTO " + S + ".fhir_implementation_guides (ig_package_id, ig_package_version, ig_package_meta, content_raw, owner) "
+                    + "VALUES ('a.ig', '1.0.0', '{}', '\\x01', '" + SYSTEM_ID + "'), ('b.ig', '1.0.0', '{}', '\\x02', '" + other + "')");
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'a.ig#1.0.0')");
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package, owner) VALUES ('R4', 'b.ig#1.0.0', '" + other + "')");
+        }
+
+        DatabaseService.flyway(db).migrate();
+
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertEquals(List.of("acme-ci|" + other, "ci|" + NEW_SYSTEM_ID, "system administrator|" + NEW_SYSTEM_ID),
+                    column(c, "SELECT name || '|' || owner FROM " + S + ".api_keys ORDER BY name"));
+            assertEquals(List.of("a.ig|" + NEW_SYSTEM_ID, "b.ig|" + other),
+                    column(c, "SELECT ig_package_id || '|' || owner FROM " + S + ".fhir_implementation_guides ORDER BY ig_package_id"));
+            assertEquals(List.of("a.ig#1.0.0|" + NEW_SYSTEM_ID, "b.ig#1.0.0|" + other),
+                    column(c, "SELECT ig_package || '|' || owner FROM " + S + ".fhir_validator_snapshots ORDER BY ig_package"));
+            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".organisations WHERE id = '" + SYSTEM_ID + "'"));
+            for (String table : List.of("api_keys", "fhir_implementation_guides", "fhir_validator_snapshots")) {
+                List<String> dflt = column(c, "SELECT column_default FROM information_schema.columns WHERE table_schema='" + S
+                        + "' AND table_name='" + table + "' AND column_name='owner'");
+                assertTrue(dflt.get(0).contains("100000000001"), table + " default: " + dflt);
+                assertEquals(List.of("r"), column(c, "SELECT confdeltype::text FROM pg_constraint WHERE conname = '" + table + "_owner_fkey'"),
+                        table + "_owner_fkey is ON DELETE RESTRICT");
+            }
+            assertEquals(List.of(ADMIN_KEY_ID + "|\\x01"), column(c, "SELECT id || '|' || key_hash FROM " + S
+                    + ".api_keys WHERE name = 'system administrator'"), "the bootstrap key keeps its hash");
+            assertEquals(List.of(NEW_SYSTEM_ID + "|system|SYSTEM|true", TRIAL_ID + "|trial|NON_COMMERCIAL|true"),
+                    column(c, "SELECT id || '|' || name_short || '|' || type || '|' || is_active FROM " + S
+                            + ".organisations WHERE id IN ('" + NEW_SYSTEM_ID + "', '" + TRIAL_ID + "') ORDER BY id"));
+            assertEquals(List.of("Free trial validation service"), column(c, "SELECT name_long FROM " + S
+                    + ".organisations WHERE id = '" + TRIAL_ID + "'"));
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".organisations (name_short, name_long, type) "
+                    + "VALUES ('other-system', 'Other', 'SYSTEM')"), "a second SYSTEM organisation");
+            assertThrows(SQLException.class, () -> st.execute("UPDATE " + S + ".organisations SET type = 'COMMERCIAL' "
+                    + "WHERE id = '" + NEW_SYSTEM_ID + "'"), "demoting the system organisation");
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('new', '\\x07', 'ADMIN')");
+            assertEquals(List.of(NEW_SYSTEM_ID), column(c, "SELECT owner::text FROM " + S + ".api_keys WHERE name = 'new'"),
+                    "new keys default to the new system id");
+            assertLatestSchema(c);
+        }
+    }
+
+    /** An existing organisation named 'trial' is left alone by V11; the startup check reports the clash (US2). */
+    @Test
+    void v11LeavesAnExistingTrialNameAlone() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        String other = UUID.randomUUID().toString();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".organisations (id, name_short, name_long, type) VALUES ('" + other
+                    + "', 'trial', 'Someone else', 'COMMERCIAL')");
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of(other + "|Someone else|COMMERCIAL"), column(c, "SELECT id || '|' || name_long || '|' || type FROM "
+                    + S + ".organisations WHERE name_short = 'trial'"));
+            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".organisations WHERE id = '" + TRIAL_ID + "'"));
+        }
+    }
+
+    /** V11 doesn't rename the bootstrap key when the well-known name is already taken. */
+    @Test
+    void v11SkipsTheBootstrapRenameWhenTheNameIsTaken() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('bootstrap', '\\x01', 'ADMIN'), "
+                    + "('system administrator', '\\x02', 'ADMIN')");
+        }
+        List<String> before;
+        try (Connection c = jdbc(db)) {
+            before = column(c, "SELECT id || '|' || name FROM " + S + ".api_keys WHERE name = 'bootstrap'");
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db)) {
+            assertEquals(before, column(c, "SELECT id || '|' || name FROM " + S + ".api_keys WHERE name = 'bootstrap'"));
+            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".api_keys WHERE id = '" + ADMIN_KEY_ID + "'"));
+        }
+    }
+
+    /** V12 (spec 008, data-model §3): the usage table, its indexes, and ON DELETE SET NULL for the key. */
+    @Test
+    void v12CreatesValidationUsage() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertEquals(List.of("validation_usage_key_created_idx", "validation_usage_org_created_idx"), column(c,
+                    "SELECT indexname FROM pg_indexes WHERE schemaname='" + S + "' AND tablename='validation_usage' "
+                            + "AND indexname <> 'validation_usage_pkey' ORDER BY indexname"));
+            st.execute("INSERT INTO " + S + ".api_keys (id, name, key_hash, role) VALUES ('" + ADMIN_KEY_ID + "', 'k', '\\x01', 'ADMIN')");
+            st.execute("INSERT INTO " + S + ".validation_usage (started_at, request_id, api_key_id, api_key_name, org_id, "
+                    + "profile_count, request_bytes, outcome, http_status, client_ip, total_ms, queue_ms, context_ms, validate_ms, "
+                    + "cpu_time_ns, allocated_bytes) VALUES (now(), 'r1', '" + ADMIN_KEY_ID + "', 'k', '" + NEW_SYSTEM_ID
+                    + "', 0, 10, 'valid', 200, '127.0.0.1', 5, 0, 0, 4, 1000, 2000)");
+            assertEquals(List.of("0|0|0|0"), column(c, "SELECT issues_fatal || '|' || issues_error || '|' || issues_warning || '|' "
+                    + "|| issues_information FROM " + S + ".validation_usage"), "issue counts default to 0");
+            st.execute("DELETE FROM " + S + ".api_keys WHERE id = '" + ADMIN_KEY_ID + "'");
+            assertEquals(List.of("null|k"), column(c, "SELECT coalesce(api_key_id::text, 'null') || '|' || api_key_name FROM "
+                    + S + ".validation_usage"));
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S + ".validation_usage (started_at, request_id, "
+                    + "profile_count, request_bytes, outcome, http_status, total_ms, queue_ms, context_ms, validate_ms, cpu_time_ns, "
+                    + "allocated_bytes) VALUES (now(), 'r2', 0, 0, 'valid', 200, 0, 0, 0, 0, 0, 0)"), "org_id is required");
         }
     }
 

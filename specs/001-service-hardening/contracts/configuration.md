@@ -32,7 +32,7 @@ be honoured, and no other documented key may exist (FR-028). `.env.example` list
 | `FV_PACKAGE_MAX_ENTRIES` | `packages.maxEntries` | `20000` | |
 | `FV_PACKAGE_MAX_RATIO` | `packages.maxRatio` | `100` | |
 | `FV_CONFIG_POLL_INTERVAL_MS` | `sync.pollIntervalMs` | `5000` | 1000–60000 (SC-002 needs ≤ 10000) |
-| `FV_AUTH_ANONYMOUS_VALIDATE` | `auth.anonymousValidate` | `true` | |
+| `FV_AUTH_ANONYMOUS_VALIDATE` | `auth.anonymousValidate` | `true` | **Removed in 4.1.0** (spec 008): ignored with a warning; validation always needs a key. New auth and usage settings: `specs/008-api-key-hardening/data-model.md` §6 |
 | `FV_ADMIN_API_KEY` | `auth.bootstrapAdminKey` | *(unset → admin operations refused)* | 32–128 chars. Secret: supply via env/secret store only |
 | `FV_AUTH_CACHE_TTL_MS` | `auth.cacheTtlMs` | `30000` | |
 | `FV_READINESS_DB_STALENESS_MS` | `health.dbStalenessMs` | `10000` | |

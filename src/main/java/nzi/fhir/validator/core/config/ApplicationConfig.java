@@ -107,9 +107,44 @@ public final class ApplicationConfig {
     /** Pooled connections per terminology server ({@code FV_TX_MAX_CONNECTIONS_PER_SERVER}). */
     public int txMaxConnectionsPerServer() { return section("tx").getInteger("maxConnectionsPerServer"); }
 
-    public boolean anonymousValidate() { return section("auth").getBoolean("anonymousValidate"); }
     public String bootstrapAdminKey() { return section("auth").getString("bootstrapAdminKey"); }
+    /** The trial organisation's shared VALIDATE key ({@code FV_VALIDATOR_API_KEY}, spec 008), or {@code null}. */
+    public String validatorKey() { return section("auth").getString("validatorKey"); }
     public long authCacheTtlMs() { return section("auth").getLong("cacheTtlMs"); }
+    /** Networks administrative operations may come from ({@code FV_AUTH_ADMIN_CIDRS}, spec 008); empty = any. */
+    public nzi.fhir.validator.core.security.CidrList adminCidrs() {
+        return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("adminCidrs"));
+    }
+    /** Proxies whose forwarded headers are believed ({@code FV_AUTH_TRUSTED_PROXIES}, spec 008); empty = none. */
+    public nzi.fhir.validator.core.security.CidrList trustedProxies() {
+        return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("trustedProxies"));
+    }
+
+    /** The usage sinks ({@code FV_USAGE_SINK}, spec 008): empty for {@code none}, else {@code log} and/or {@code db}. */
+    public java.util.Set<String> usageSinks() { return usageSinks(section("usage").getString("sink")); }
+    public int usageQueueSize() { return section("usage").getInteger("queueSize"); }
+    public int usageBatchSize() { return section("usage").getInteger("batchSize"); }
+    public long usageFlushMs() { return section("usage").getLong("flushMs"); }
+
+    /**
+     * Parses {@code FV_USAGE_SINK}: {@code none}, {@code log}, {@code db}, or {@code log,db} in either order.
+     *
+     * @throws IllegalStateException naming the variable for anything else
+     */
+    public static java.util.Set<String> usageSinks(String value) {
+        String v = value == null || value.isBlank() ? "none" : value.strip().toLowerCase(java.util.Locale.ROOT);
+        java.util.Set<String> sinks = new java.util.TreeSet<>();
+        for (String part : v.split(",", -1)) {
+            sinks.add(part.strip());
+        }
+        if (sinks.equals(java.util.Set.of("none"))) {
+            return java.util.Set.of();
+        }
+        if (sinks.isEmpty() || !java.util.Set.of("log", "db").containsAll(sinks)) {
+            throw new IllegalStateException("Invalid FV_USAGE_SINK: '" + value + "' (allowed: none, log, db, log,db)");
+        }
+        return java.util.Collections.unmodifiableSet(sinks);
+    }
 
     public long healthDbStalenessMs() { return section("health").getLong("dbStalenessMs"); }
 
@@ -150,6 +185,7 @@ public final class ApplicationConfig {
         JsonObject safe = json.copy();
         safe.getJsonObject("pg", new JsonObject()).remove("password");
         safe.getJsonObject("auth", new JsonObject()).remove("bootstrapAdminKey");
+        safe.getJsonObject("auth", new JsonObject()).remove("validatorKey");
         return "ApplicationConfig" + safe.encode();
     }
 }

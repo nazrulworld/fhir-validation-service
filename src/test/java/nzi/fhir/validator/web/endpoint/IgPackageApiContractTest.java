@@ -176,7 +176,7 @@ class IgPackageApiContractTest extends BaseTestContainer {
 
     @Test
     void dependenciesOfUnknownPackageIs404(VertxTestContext ctx) {
-        app.client().get(app.port(), "localhost", "/igs/unknown.pkg/1.0.0/dependencies").timeout(5_000).send()
+        app.client().get(app.port(), "localhost", "/igs/unknown.pkg/1.0.0/dependencies").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).timeout(5_000).send()
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertProblem(r, 404, "package-not-found");
                     ctx.completeNow();
@@ -186,13 +186,13 @@ class IgPackageApiContractTest extends BaseTestContainer {
     @Test
     void dependenciesAndFileListingOfStoredPackage(VertxTestContext ctx) {
         app.bootstrap().services().igPackageService().registerIg(Fixtures.bytes(Fixtures.DK_CORE_IG))
-                .compose(p -> app.client().get(app.port(), "localhost", "/igs/hl7.fhir.dk.core/3.4.0/dependencies").send())
+                .compose(p -> app.client().get(app.port(), "localhost", "/igs/hl7.fhir.dk.core/3.4.0/dependencies").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).send())
                 .compose(deps -> {
                     ctx.verify(() -> {
                         assertEquals(200, deps.statusCode(), deps.bodyAsString());
                         assertFalse(deps.bodyAsJsonObject().getJsonArray("dependencies").isEmpty());
                     });
-                    return app.client().get(app.port(), "localhost", "/igs/hl7.fhir.dk.core/3.4.0/conformance").send();
+                    return app.client().get(app.port(), "localhost", "/igs/hl7.fhir.dk.core/3.4.0/conformance").putHeader("Authorization", AppHarness.VALIDATOR_AUTH).send();
                 })
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());

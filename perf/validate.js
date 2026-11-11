@@ -5,6 +5,8 @@ import http from 'k6/http';
 import { check } from 'k6';
 
 const BASE = __ENV.BASE || 'http://127.0.0.1:8880';
+// Spec 008 (4.1.0): validation always needs a VALIDATE or ADMIN key.
+const KEY_HEADER = __ENV.FV_KEY ? { Authorization: `Bearer ${__ENV.FV_KEY}` } : {};
 const TARGET = __ENV.IG ? `${BASE}/R4/validate?ig=${encodeURIComponent(__ENV.IG)}` : `${BASE}/R4/validate`;
 const patient = open('../src/test/resources/fhir/resources/dk/Patient.json');
 
@@ -19,7 +21,7 @@ export const options = {
 
 export default function () {
   const r = http.post(TARGET, patient, {
-    headers: { 'Content-Type': 'application/fhir+json', Accept: 'application/json' },
+    headers: Object.assign({ 'Content-Type': 'application/fhir+json', Accept: 'application/json' }, KEY_HEADER),
     tags: { name: 'validate' },
   });
   check(r, { 'status 200': (res) => res.status === 200 });

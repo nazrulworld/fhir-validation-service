@@ -41,10 +41,37 @@ import java.util.List;
 public class ValidationApi {
     private static final Logger logger = LogManager.getLogger(ValidationApi.class);
     private final FhirValidationService validationService;
+    private volatile nzi.fhir.validator.core.usage.UsageWriter usage = nzi.fhir.validator.core.usage.NoopUsageWriter.INSTANCE;
 
     public ValidationApi(FhirValidationService validationService) {
         this.validationService = validationService;
     }
+
+    /** Where usage records go (spec 008 FR-014); the default keeps nothing but metrics are still measured. */
+    public void setUsageWriter(nzi.fhir.validator.core.usage.UsageWriter usage) {
+        this.usage = usage;
+    }
+
+    /**
+     * Spec 008 (research R10): a meter for this request, finished when the response ends. Full mode (a record) only when
+     * a sink is enabled and the caller has a key; metrics-only otherwise.
+     */
+    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
+        nzi.fhir.validator.core.security.Caller caller = ApiKeyAuthHandler.caller(ctx);
+        nzi.fhir.validator.core.usage.UsageWriter writer = usage;
+        java.util.function.Consumer<nzi.fhir.validator.core.usage.UsageRecord> sink =
+                writer.enabled() && !caller.anonymous() && caller.orgId() != null ? writer::write : null;
+        java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
+        nzi.fhir.validator.core.usage.UsageMeter meter = nzi.fhir.validator.core.usage.UsageMeter.start(
+                nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller, client == null ? null : client.getHostAddress(),
+                ctx.pathParam("version"), ctx.body() == null ? 0 : ctx.body().length(), sink);
+        ctx.addEndHandler(ar -> meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
+                nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx)));
+        ctx.put(METER_KEY, meter);
+        return meter;
+    }
+
+    private static final String METER_KEY = "usageMeter";
 
     /**
      * Configures the routes for validation API endpoints.
@@ -55,7 +82,7 @@ public class ValidationApi {
         // Method: POST, Path: "/:version/validate"
         routerBuilder.operation("validationApiValidate")
                 .handler(this::handleDoValidation)
-                .failureHandler(ValidationApi::handleValidateFailure);
+                .failureHandler(this::handleValidateFailure);
     }
 
     private static SupportedFhirVersion version(RoutingContext ctx) {
@@ -64,20 +91,25 @@ public class ValidationApi {
     }
 
     private void handleDoValidation(RoutingContext ctx) {
+        nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
         SupportedFhirVersion version;
         try {
             version = version(ctx);
         } catch (ProblemException e) {
+            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
             return;
         }
         RequestFormat requestFormat = MediaTypes.requestFormat(ctx.request().getHeader("Content-Type"));
         if (requestFormat == RequestFormat.UNSUPPORTED) {
+            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 415, "unsupported-media-type", "Send FHIR resources as JSON or XML");
             return;
         }
+        meter.contentType(requestFormat == RequestFormat.XML ? "XML" : "JSON");
         ResponseFormat responseFormat = MediaTypes.responseFormat(ctx.request().getHeader("Accept"));
         if (responseFormat == ResponseFormat.NONE) {
+            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 406, "not-acceptable",
                     "Acceptable response types: application/json, application/fhir+json, application/fhir+xml, application/xml");
             return;
@@ -86,23 +118,28 @@ public class ValidationApi {
         try {
             profiles = ValidationRequestOptions.fromRequest(ctx.request()).getProfilesToValidate();
         } catch (ProblemException e) {
+            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
             return;
         }
+        meter.profiles(profiles == null ? 0 : profiles.size());
         IgReference ig;
         try {
             ig = igParameter(ctx);
         } catch (ProblemException e) {
+            meter.workNeverStarted();
             ErrorResponder.fail(ctx, e);
             return;
         }
+        meter.ig(ctx.queryParams().get("ig"));
         if (ctx.body() == null || ctx.body().isEmpty()) {
+            meter.workNeverStarted();
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
             return;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         Future<Rendered> rendered = validationService
-                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles,
+                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles, meter,
                         outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel(),
                                 outcome.contextAccess()))
                 .recover(err -> {
@@ -168,7 +205,16 @@ public class ValidationApi {
      * Contract-level failures of the validate operation: malformed JSON is an invalid resource, an undeclared
      * content type is 415; everything else follows the common mapping.
      */
-    private static void handleValidateFailure(RoutingContext ctx) {
+    private void handleValidateFailure(RoutingContext ctx) {
+        if (ctx.get(METER_KEY) == null) {
+            // Spec 008 FR-011: the contract layer refused the request before the handler ran; it is recorded too.
+            nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
+            if (ctx.failure() instanceof BodyProcessorException e
+                    && e.getErrorType() == BodyProcessorException.BodyProcessorErrorType.PARSING_ERROR) {
+                meter.outcome(nzi.fhir.validator.core.metrics.ServiceMetrics.OUTCOME_UNPARSEABLE);
+            }
+            meter.workNeverStarted();
+        }
         // FR-009: the ig parameter's shape is checked before the body, also when the contract layer has already
         // refused the body (e.g. an empty or malformed JSON body).
         try {

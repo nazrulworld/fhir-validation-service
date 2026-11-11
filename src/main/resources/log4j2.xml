@@ -11,6 +11,15 @@
         <Console name="json" target="SYSTEM_OUT">
             <JsonLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true" includeTimeMillis="true"/>
         </Console>
+        <!-- Spec 008 usage records (FV_USAGE_SINK=log): the message is the whole line, one JSON object, whatever
+             FV_LOG_FORMAT is. To keep them in their own file instead, replace this appender, e.g.
+             <RollingFile name="UsageConsole" fileName="/var/log/fv/usage.jsonl" filePattern="/var/log/fv/usage-%d{yyyy-MM-dd}.jsonl.gz">
+                 <PatternLayout pattern="%msg%n"/>
+                 <TimeBasedTriggeringPolicy/>
+             </RollingFile> -->
+        <Console name="UsageConsole" target="SYSTEM_OUT">
+            <PatternLayout pattern="%msg%n"/>
+        </Console>
     </Appenders>
     <Loggers>
         <Root level="info">
@@ -19,5 +28,8 @@
         <!-- Resource bodies may contain PHI: never log them above DEBUG. -->
         <Logger name="nzi.fhir.validator" level="info"/>
         <Logger name="org.flywaydb.core" level="info" />
+        <Logger name="nzi.fhir.validator.usage" level="info" additivity="false">
+            <AppenderRef ref="UsageConsole"/>
+        </Logger>
     </Loggers>
 </Configuration>

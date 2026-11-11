@@ -51,6 +51,9 @@ public class HttpVerticle extends AbstractVerticle {
                     routerBuilder.rootHandler(new RequestTimeoutHandler(services.config().httpRequestTimeoutMs()));
                     CorsConfig.create(services.config()).ifPresent(routerBuilder::rootHandler);
                     routerBuilder.rootHandler(bodyHandler());
+                    // Spec 008: the client address, resolved once, before anything that needs it (auth, audit, usage).
+                    // A user handler, so it follows the platform handlers above.
+                    routerBuilder.rootHandler(nzi.fhir.validator.core.security.ClientAddress.handler(services.config().trustedProxies()));
                     routerBuilder.rootHandler(services.auth().rootHandler());
                     routerBuilder.rootHandler(new AdminAdmissionHandler(services.adminAdmission()));
 

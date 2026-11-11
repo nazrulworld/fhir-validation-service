@@ -87,6 +87,13 @@ public final class Bootstrap {
                 .onSuccess(b -> {
                     running = b;
                     logger().info("FHIR validation service started ({} HTTP instance(s))", config.httpInstances());
+                    // Spec 008 (research R14): a fatal warm-up error stops the process; others leave it unready.
+                    b.warmUp().onFailure(err -> {
+                        if (err instanceof nzi.fhir.validator.core.StartupException) {
+                            logger().error("Startup failed: {}", err.getMessage(), err);
+                            vertx.close().onComplete(v -> System.exit(1));
+                        }
+                    });
                 })
                 .onFailure(err -> {
                     logger().error("Failed to start FHIR validation service", err);
@@ -136,8 +143,10 @@ public final class Bootstrap {
         return vertx.deployVerticle(() -> new HttpVerticle(services), new DeploymentOptions().setInstances(config.httpInstances()))
                 .map(id -> {
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
+                            .compose(v -> services.organisations().ensureWellKnown())
                             .compose(v -> installSystemOrganisation(services))
                             .compose(v -> installBootstrapKey(services))
+                            .compose(v -> installTrialValidatorKey(services))
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
@@ -164,9 +173,38 @@ public final class Bootstrap {
         String key = services.config().bootstrapAdminKey();
         if (key == null || key.isBlank()) {
             logger().warn("FV_ADMIN_API_KEY is not set: administrative operations are refused");
-            return Future.succeededFuture();
+            // Spec 008: unsetting the variable revokes the key it installed earlier.
+            return services.apiKeys().revokeWellKnown(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID)
+                    .onSuccess(revoked -> {
+                        if (revoked) {
+                            logger().warn("The system administrator API key was revoked (FV_ADMIN_API_KEY is not set)");
+                        }
+                    })
+                    .mapEmpty();
         }
-        return services.apiKeys().upsertBootstrap(key).onSuccess(v -> logger().info("Bootstrap admin API key installed"));
+        return services.apiKeys().upsertBootstrap(key)
+                .onSuccess(v -> logger().info("System administrator API key installed (FV_ADMIN_API_KEY)"));
+    }
+
+    /** Spec 008 FR-026: the trial organisation's shared VALIDATE key, from {@code FV_VALIDATOR_API_KEY}. */
+    private static Future<Void> installTrialValidatorKey(ServiceRegistry services) {
+        String key = services.config().validatorKey();
+        if (key == null || key.isBlank()) {
+            logger().warn("FV_VALIDATOR_API_KEY is not set: validation requires keys created with 'keys create'");
+            // Spec 008: unsetting the variable revokes the trial key it installed earlier.
+            return services.apiKeys().revokeWellKnown(nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID)
+                    .onSuccess(revoked -> {
+                        if (revoked) {
+                            logger().warn("The trial validator API key was revoked (FV_VALIDATOR_API_KEY is not set)");
+                        }
+                    })
+                    .mapEmpty();
+        }
+        return services.apiKeys().upsertWellKnown(nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, key,
+                        nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE,
+                        nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
+                .onSuccess(v -> logger().info("Trial validator API key installed (FV_VALIDATOR_API_KEY)"));
     }
 
     private Future<Void> awaitIdle(long deadline) {
@@ -202,6 +240,8 @@ public final class Bootstrap {
                     return awaitIdle(System.currentTimeMillis() + config.shutdownGraceMs());
                 })
                 .onComplete(ar -> logger().info("drain complete ({} request(s) still in flight)", services.inFlight().get()))
+                // Spec 008 FR-018: buffered usage records are written before the pool closes.
+                .eventually(() -> services.usage().close())
                 .eventually(() -> services.stop())
                 .eventually(() -> vertx.undeploy(deploymentId))
                 .eventually(() -> services.pool().close())

@@ -20,6 +20,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -33,7 +36,7 @@ class ApiKeyAuthHandlerTest {
     void manyDistinctInvalidKeysDoNotGrowTheCacheBeyondItsBound(Vertx vertx, VertxTestContext ctx) {
         ApiKeyRepository repository = mock(ApiKeyRepository.class);
         when(repository.findActive(anyString())).thenReturn(Future.succeededFuture(Optional.empty()));
-        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, true, MAX_CACHED);
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
 
         Router router = Router.router(vertx);
         router.route().handler(new RequestIdHandler());
@@ -58,7 +61,10 @@ class ApiKeyAuthHandlerTest {
         })));
     }
 
-    /** Spec 005 research R3: every authorised request carries its {@link Caller}; anonymous requests the anonymous one. */
+    /**
+     * Spec 005 research R3: every authorised request carries its {@link Caller}; open paths the anonymous one. Spec 008:
+     * validation without a key is refused.
+     */
     @Test
     void callerIsPutIntoTheContext(Vertx vertx, VertxTestContext ctx) {
         java.util.UUID org = java.util.UUID.randomUUID();
@@ -66,28 +72,33 @@ class ApiKeyAuthHandlerTest {
         ApiKeyRepository repository = mock(ApiKeyRepository.class);
         when(repository.findActive(anyString())).thenReturn(Future.succeededFuture(Optional.empty()));
         when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.of(
-                new ApiKeyRepository.KeyInfo(java.util.UUID.randomUUID(), ApiKeyRepository.Role.VALIDATE, org, "acme", true))));
-        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, true, MAX_CACHED);
+                new ApiKeyRepository.KeyInfo(java.util.UUID.randomUUID(), "acme-key", ApiKeyRepository.Role.VALIDATE, org, "acme", true, null))));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
 
         Router router = Router.router(vertx);
         router.route().handler(new RequestIdHandler());
         router.route().handler(auth.rootHandler());
-        router.post("/R4/validate").handler(rc -> {
+        io.vertx.core.Handler<io.vertx.ext.web.RoutingContext> echo = rc -> {
             Caller c = ApiKeyAuthHandler.caller(rc);
             rc.response().end(c.anonymous() ? "anonymous" : c.orgId() + "|" + c.orgShortName() + "|" + c.role() + "|" + c.system());
-        });
+        };
+        router.post("/R4/validate").handler(echo);
+        router.get("/health").handler(echo);
         ErrorResponder.install(router);
 
         vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
             WebClient client = WebClient.create(vertx);
             return Future.all(
                     client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + key).send(),
-                    client.post(server.actualPort(), "localhost", "/R4/validate").send());
+                    client.post(server.actualPort(), "localhost", "/R4/validate").send(),
+                    client.get(server.actualPort(), "localhost", "/health").send());
         }).onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
             HttpResponse<Buffer> keyed = cf.resultAt(0);
-            HttpResponse<Buffer> anonymous = cf.resultAt(1);
+            HttpResponse<Buffer> noKey = cf.resultAt(1);
+            HttpResponse<Buffer> open = cf.resultAt(2);
             assertEquals(org + "|acme|VALIDATE|false", keyed.bodyAsString());
-            assertEquals("anonymous", anonymous.bodyAsString());
+            assertEquals(401, noKey.statusCode(), noKey.bodyAsString());
+            assertEquals("anonymous", open.bodyAsString());
             ctx.completeNow();
         })));
     }
@@ -98,8 +109,8 @@ class ApiKeyAuthHandlerTest {
         String key = "acme-key-0123456789abcdefghijklmnopqrstu";
         ApiKeyRepository repository = mock(ApiKeyRepository.class);
         when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.of(new ApiKeyRepository.KeyInfo(
-                java.util.UUID.randomUUID(), ApiKeyRepository.Role.ADMIN, java.util.UUID.randomUUID(), "acme", false))));
-        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, true, MAX_CACHED);
+                java.util.UUID.randomUUID(), "acme-admin", ApiKeyRepository.Role.ADMIN, java.util.UUID.randomUUID(), "acme", false, null))));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
 
         Router router = Router.router(vertx);
         router.route().handler(new RequestIdHandler());
@@ -119,6 +130,88 @@ class ApiKeyAuthHandlerTest {
                 assertEquals(403, r.statusCode(), r.bodyAsString());
                 assertTrue(r.bodyAsString().contains("deactivated"));
             }
+            ctx.completeNow();
+        })));
+    }
+
+    /** Spec 008 FR-001, SC-002: a bearer value that can't be a key is refused without hashing, caching or a lookup. */
+    @Test
+    void malformedTokenIsRefusedWithoutLookup(Vertx vertx, VertxTestContext ctx) {
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.route().handler(rc -> rc.response().end("ok"));
+        ErrorResponder.install(router);
+        List<String> malformed = List.of("x", "a b", "a".repeat(31), "a".repeat(129), "\u00fc".repeat(40), "abc.def-0123456789abcdefghijklmnopqrstu");
+
+        vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
+            WebClient client = WebClient.create(vertx);
+            List<Future<HttpResponse<Buffer>>> calls = new ArrayList<>();
+            for (String token : malformed) {
+                calls.add(client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + token).send());
+            }
+            return Future.all(calls).map(cf -> cf.<HttpResponse<Buffer>>list());
+        }).onComplete(ctx.succeeding(responses -> ctx.verify(() -> {
+            responses.forEach(r -> {
+                assertEquals(401, r.statusCode(), r.bodyAsString());
+                assertEquals("Bearer", r.getHeader("WWW-Authenticate"));
+            });
+            verifyNoInteractions(repository);
+            assertEquals(0, auth.cachedKeys());
+            ctx.completeNow();
+        })));
+    }
+
+    /** A well-formed but unknown key is still looked up (once, then cached). */
+    @Test
+    void wellFormedUnknownKeyIsLookedUp(Vertx vertx, VertxTestContext ctx) {
+        String key = "unknown-key-0123456789abcdefghijklmnopqr";
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.empty()));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.route().handler(rc -> rc.response().end("ok"));
+        ErrorResponder.install(router);
+
+        vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
+            WebClient client = WebClient.create(vertx);
+            return client.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", "Bearer " + key).send()
+                    .compose(first -> client.post(server.actualPort(), "localhost", "/R4/validate")
+                            .putHeader("Authorization", "Bearer " + key).send().map(second -> List.of(first, second)));
+        }).onComplete(ctx.succeeding(responses -> ctx.verify(() -> {
+            responses.forEach(r -> assertEquals(401, r.statusCode()));
+            verify(repository, times(1)).findActive(key);
+            ctx.completeNow();
+        })));
+    }
+
+    /** Spec 008 FR-006, SC-005: a cached key is looked up again once it expires, whatever the cache TTL. */
+    @Test
+    void cacheEntryNeverOutlivesKeyExpiry(Vertx vertx, VertxTestContext ctx) {
+        String key = "expiring-key-0123456789abcdefghijklmnopq";
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        when(repository.findActive(key)).thenReturn(Future.succeededFuture(Optional.of(new ApiKeyRepository.KeyInfo(
+                java.util.UUID.randomUUID(), "expiring", ApiKeyRepository.Role.VALIDATE, java.util.UUID.randomUUID(), "acme",
+                true, java.time.Instant.now().plusMillis(150)))));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.route().handler(rc -> rc.response().end("ok"));
+        ErrorResponder.install(router);
+
+        vertx.createHttpServer().requestHandler(router).listen(0).compose(server -> {
+            WebClient client = WebClient.create(vertx);
+            java.util.function.Supplier<Future<HttpResponse<Buffer>>> call = () -> client.post(server.actualPort(), "localhost",
+                    "/R4/validate").putHeader("Authorization", "Bearer " + key).send();
+            return call.get().compose(first -> call.get())
+                    .compose(cached -> vertx.timer(250).compose(t -> call.get()));
+        }).onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+            verify(repository, times(2)).findActive(key);
             ctx.completeNow();
         })));
     }
