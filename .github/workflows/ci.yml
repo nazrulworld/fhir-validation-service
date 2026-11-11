@@ -39,9 +39,10 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
-      # Build through a buildx (docker-container) builder, like arm64-build: since 2026-11-11 the runner's default
-      # builder can't resolve archive.ubuntu.com during `apt-get update`, while buildx builds can.
-      - uses: docker/setup-buildx-action@v3
+      # Since 2026-11-11 build containers on the runner can't resolve archive.ubuntu.com (the host can). Pre-build on
+      # the host network with the default builder; the smoke test's `compose up --build` then reuses these layers.
+      - name: Pre-build the image on the host network
+        run: docker build --network host -t ghcr.io/nazrulworld/fhir-validation-service:latest .
       - name: Prepare .env for CI
         run: |
           cp .env.example .env
