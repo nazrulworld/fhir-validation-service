@@ -504,7 +504,7 @@ without blocking. Plus aggregate metrics.
   - a new "Usage accounting" section: sinks, the log line, the table, retention, metrics, and that "memory" means allocated bytes;
   - every `curl` example that validates without a key now sends one.
 - [X] T071 Performance (Principle VI, SC-007): run `perf/validate.js` three times against a warm R4 validator: (a) 4.0.0 without a key, (b) 4.1.0 with `FV_USAGE_SINK=none`, (c) 4.1.0 with `FV_USAGE_SINK=db`. Record p50/p95/p99 and throughput in `perf/results-4.1.0.md`. **SC-007 passes when** p95(c) − p95(b) < 1 ms and p95(c) < 200 ms. Report (b) − (a), the cost of auth and the client-address handler, separately for information. If it fails, profile `UsageMeter`/`DbUsageWriter` before merging.
-- [ ] T072 Run the quickstart.md scenarios §1–§6 manually against a local build, then run `./mvnw verify`, which must be green with no new `BlockedThreadChecker` warnings. Check that `git diff --stat src/main/resources/db/migration` shows only new files (V10–V12), with V1–V9 untouched.
+- [X] T072 Run the quickstart.md scenarios §1–§6 manually against a local build, then run `./mvnw verify`, which must be green with no new `BlockedThreadChecker` warnings. Check that `git diff --stat src/main/resources/db/migration` shows only new files (V10–V12), with V1–V9 untouched.
 
 ---
 
