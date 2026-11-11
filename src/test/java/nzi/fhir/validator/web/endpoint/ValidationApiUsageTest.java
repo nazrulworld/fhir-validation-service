@@ -135,4 +135,93 @@ class ValidationApiUsageTest {
                     ctx.completeNow();
                 })));
     }
+
+    private static UsageWriter collecting(List<UsageRecord> records) {
+        return new UsageWriter() {
+            @Override
+            public void write(UsageRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public Future<Void> close() {
+                return Future.succeededFuture();
+            }
+        };
+    }
+
+    /** A router like production's: the meter is started by the root handler right after authorisation. */
+    private static Future<Integer> serve(Vertx vertx, ValidationApi api, Caller caller,
+                                         io.vertx.core.Handler<io.vertx.ext.web.RoutingContext> beforeMeter,
+                                         io.vertx.core.Handler<io.vertx.ext.web.RoutingContext> afterMeter) {
+        return RouterBuilder.create(vertx, "openapi.yaml").compose(builder -> {
+            builder.setOptions(new RouterBuilderOptions().setRequireSecurityHandlers(false).setMountResponseContentTypeHandler(true));
+            builder.rootHandler(new RequestIdHandler());
+            builder.rootHandler(BodyHandler.create());
+            builder.rootHandler(rc -> {
+                rc.put(ApiKeyAuthHandler.CALLER_KEY, caller);
+                beforeMeter.handle(rc);
+            });
+            builder.rootHandler(api.usageFallbackHandler());
+            builder.rootHandler(afterMeter);
+            api.includeRoutes(builder);
+            return vertx.createHttpServer().requestHandler(builder.createRouter()).listen(0).map(s -> s.actualPort());
+        });
+    }
+
+    /**
+     * Code review regression: a request the router refuses (406) is timed from when it entered the service, not from
+     * when its response ended.
+     */
+    @Test
+    void aRouterRefusalIsTimedFromEntry(Vertx vertx, VertxTestContext ctx) {
+        FhirValidationService service = mock(FhirValidationService.class);
+        List<UsageRecord> records = new CopyOnWriteArrayList<>();
+        ValidationApi api = new ValidationApi(service);
+        api.setUsageWriter(collecting(records));
+        Caller caller = Caller.of(UUID.randomUUID(), "acme", ApiKeyRepository.Role.VALIDATE, UUID.randomUUID(), "acme-ci");
+        serve(vertx, api, caller, io.vertx.ext.web.RoutingContext::next,
+                rc -> vertx.setTimer(300, id -> rc.next())) // 300 ms spent after the meter started
+                .compose(port -> WebClient.create(vertx).post(port, "localhost", "/R4/validate")
+                        .putHeader("Content-Type", "application/fhir+json").putHeader("Accept", "text/plain")
+                        .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\"}")))
+                .compose(r -> vertx.timer(300).map(r))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(406, r.statusCode());
+                    assertEquals(1, records.size(), "exactly one record: " + records);
+                    assertEquals("rejected", records.get(0).outcome());
+                    assertTrue(records.get(0).totalMs() >= 290, "timed from entry: " + records.get(0).totalMs() + " ms");
+                    org.mockito.Mockito.verifyNoInteractions(service);
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Code review regression: the timeout answered during the key lookup and the router then refuses the request:
+     * still exactly one record (timeout), and nothing is validated.
+     */
+    @Test
+    void aTimeoutDuringTheKeyLookupFollowedByARouterRefusalIsRecordedOnce(Vertx vertx, VertxTestContext ctx) {
+        FhirValidationService service = mock(FhirValidationService.class);
+        List<UsageRecord> records = new CopyOnWriteArrayList<>();
+        ValidationApi api = new ValidationApi(service);
+        api.setUsageWriter(collecting(records));
+        Caller caller = Caller.of(UUID.randomUUID(), "acme", ApiKeyRepository.Role.VALIDATE, UUID.randomUUID(), "acme-ci");
+        serve(vertx, api, caller, rc -> {
+                    rc.put(nzi.fhir.validator.web.RequestTimeoutHandler.TIMED_OUT, true);
+                    rc.response().setStatusCode(503).end();
+                    rc.next();
+                }, io.vertx.ext.web.RoutingContext::next)
+                .compose(port -> WebClient.create(vertx).post(port, "localhost", "/R4/validate")
+                        .putHeader("Content-Type", "application/fhir+json").putHeader("Accept", "text/plain")
+                        .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\"}")))
+                .compose(r -> vertx.timer(300).map(r))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(503, r.statusCode());
+                    assertEquals(1, records.size(), "exactly one record: " + records);
+                    assertEquals("timeout", records.get(0).outcome());
+                    org.mockito.Mockito.verifyNoInteractions(service);
+                    ctx.completeNow();
+                })));
+    }
 }

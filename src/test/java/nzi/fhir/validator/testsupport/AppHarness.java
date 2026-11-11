@@ -94,13 +94,14 @@ public final class AppHarness {
     }
 
     private Future<Void> poll(long deadline) {
-        return client.get(port(), "localhost", "/health/readiness").send()
-                .compose(r -> {
-                    if (r.statusCode() == 200) {
+        // Each poll has its own timeout, so one unanswered request can't outlast the deadline (a flaky full-suite run).
+        return client.get(port(), "localhost", "/health/readiness").timeout(5_000).send()
+                .transform(ar -> {
+                    if (ar.succeeded() && ar.result().statusCode() == 200) {
                         return Future.succeededFuture();
                     }
                     if (System.currentTimeMillis() > deadline) {
-                        return Future.failedFuture("not ready: " + r.bodyAsString());
+                        return Future.failedFuture("not ready: " + (ar.succeeded() ? ar.result().bodyAsString() : ar.cause()));
                     }
                     return vertx.timer(200).compose(v -> poll(deadline));
                 });

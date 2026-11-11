@@ -30,6 +30,19 @@ class ConstantMigrationConsistencyTest {
         }
     }
 
+    /** V13 lists the well-known key ids in its trigger. */
+    @Test
+    void v13UsesTheWellKnownKeyIds() throws IOException {
+        String sql;
+        try (InputStream in = getClass().getResourceAsStream("/db/migration/V13__revoked_well_known_key_hashes.sql")) {
+            assertNotNull(in, "V13 is on the classpath");
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        for (String id : List.of(Constant.SYS_ORG_ADMIN_API_KEY_ID, Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID)) {
+            assertTrue(sql.contains("'" + id + "'"), "V13 contains '" + id + "'");
+        }
+    }
+
     @Test
     void parsedFormsMatchTheStrings() {
         assertTrue(Constant.SYSTEM_ORG_UUID.toString().equals(Constant.SYSTEM_ORG_ID));

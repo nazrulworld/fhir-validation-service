@@ -30,11 +30,23 @@ Schema: `fhir_validator_schema`. Migrations: `V10` (key expiry and audit), `V11`
 created ──(expires_at passes)──▶ expired   (refused 401; row kept)
 created ──(revoke)─────────────▶ revoked   (refused 401)
 expired ──(well-known upsert at startup)──▶ active   (seeded keys only: expires_at reset)
-revoked ──(well-known upsert with a NEW value)──▶ active   (seeded keys only; the same value keeps it revoked)
+revoked ──(well-known upsert with a value never revoked before)──▶ active   (seeded keys only; a revoked value is refused)
 ```
 
-Seeded keys are revoked by name like any other key and stay revoked until their configured value changes. An instance
-without the variable never changes the stored key.
+Seeded keys are revoked by name like any other key. Every revocation of a seeded key records its hash in
+`revoked_key_hashes` (V13 trigger), and startup never installs a recorded hash: it logs an ERROR naming the variable and
+leaves the stored key unchanged. An instance without the variable never changes the stored key.
+
+## 1a. `revoked_key_hashes` (new, V13)
+
+| Column | Type | Notes |
+|---|---|---|
+| `key_hash` | BYTEA PK | SHA-256 of a revoked seeded key's value |
+| `key_id` | UUID | `…-200000000001` or `…-200000000002` |
+| `revoked_at` | TIMESTAMPTZ DEFAULT now() | |
+
+Filled by the trigger `api_keys_record_revoked_well_known` (any revocation of a seeded key, by the command line or SQL),
+and by V13 itself for seeded keys already revoked.
 
 **Java**:
 - `KeyInfo(UUID id, String name, Role role, UUID ownerId, String ownerShortName, boolean ownerActive, Instant expiresAt)`.

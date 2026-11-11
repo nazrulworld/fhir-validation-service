@@ -46,6 +46,8 @@ public final class DbUsageWriter implements UsageWriter {
     /** A size-triggered flush is queued on the event loop (at most one at a time). */
     private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
+    /** Set once close() has taken its last look at the queue: anything offered later is counted, never stranded. */
+    private final AtomicBoolean finished = new AtomicBoolean();
     private final AtomicLong lastWarn = new AtomicLong();
     private final long timer;
 
@@ -79,6 +81,11 @@ public final class DbUsageWriter implements UsageWriter {
             dropped("queue_full", 1);
             return;
         }
+        // close() ran between the check above and the offer (code review): take the record back and count it.
+        if (finished.get() && queue.remove(record)) {
+            dropped("closed", 1);
+            return;
+        }
         // A running flush reschedules itself while a full batch waits, so only an idle writer needs a nudge, and only
         // one nudge is queued at a time however many writes see the full batch.
         if (queue.size() >= batchSize && !flushing.get() && flushScheduled.compareAndSet(false, true)) {
@@ -100,8 +107,17 @@ public final class DbUsageWriter implements UsageWriter {
             return Future.succeededFuture();
         }
         List<UsageRecord> batch = new ArrayList<>(Math.min(batchSize, queue.size()));
-        queue.drainTo(batch, batchSize);
-        List<Tuple> tuples = batch.stream().map(UsageRecord::toTuple).toList();
+        List<Tuple> tuples;
+        try {
+            queue.drainTo(batch, batchSize);
+            tuples = batch.stream().map(UsageRecord::toTuple).toList();
+        } catch (RuntimeException e) {
+            // Never leave the flag set (code review): every later flush would be skipped and close() would wait forever.
+            flushing.set(false);
+            dropped("write_failed", batch.size());
+            logger.warn("Usage records could not be prepared ({} dropped): {}", batch.size(), e.toString());
+            return Future.succeededFuture();
+        }
         return pool.preparedQuery(INSERT).executeBatch(tuples)
                 .<Void>mapEmpty()
                 .onSuccess(v -> {
@@ -139,18 +155,27 @@ public final class DbUsageWriter implements UsageWriter {
         return done.future();
     }
 
+    /**
+     * Writes what is waiting, then completes. An insert in flight is waited for (the pool closes right after, FR-018),
+     * but never past the 5 s deadline (code review: a stalled database must not hang shutdown); whatever is left then
+     * is dropped and counted as {@code closed}.
+     */
     private void drain(long deadline, Promise<Void> done) {
-        // Never complete while an insert is in flight: the pool closes right after (code review, FR-018).
-        if (flushing.get()) {
+        boolean pastDeadline = System.currentTimeMillis() >= deadline;
+        if (flushing.get() && !pastDeadline) {
             vertx.setTimer(10, id -> drain(deadline, done));
             return;
         }
-        if (queue.isEmpty() || System.currentTimeMillis() >= deadline) {
-            if (!queue.isEmpty()) {
-                int left = queue.size();
-                queue.clear();
-                dropped("write_failed", left);
-                logger.warn("{} usage record(s) not written before shutdown", left);
+        if (queue.isEmpty() || pastDeadline) {
+            if (pastDeadline && flushing.get()) {
+                logger.warn("A usage insert was still running at shutdown; its records may be lost");
+            }
+            finished.set(true);
+            List<UsageRecord> left = new ArrayList<>();
+            queue.drainTo(left);
+            if (!left.isEmpty()) {
+                dropped("closed", left.size());
+                logger.warn("{} usage record(s) not written before shutdown", left.size());
             }
             done.complete();
             return;

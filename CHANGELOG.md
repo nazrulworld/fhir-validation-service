@@ -10,7 +10,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 API key hardening, key-only validation, usage accounting and well-known organisations (spec 008). A **minor release
 with breaking changes**, documented as constitution 1.3.0 (Principle IV) requires; see
-[docs/upgrade-4.1.md](docs/upgrade-4.1.md). Migrations V10 to V12 run automatically, but **not as a rolling upgrade**:
+[docs/upgrade-4.1.md](docs/upgrade-4.1.md). Migrations V10 to V13 run automatically, but **not as a rolling upgrade**:
 stop every 4.0 instance first.
 
 ### Breaking
@@ -24,7 +24,7 @@ stop every 4.0 instance first.
   and column default). 4.0 instances must not run against the upgraded database.
 - **The bootstrap key is renamed** to `system administrator` with the fixed id `00000000-0000-0000-0000-200000000001`.
   `system administrator` and `trial validator` are reserved names for `fv-admin key create`. They can be revoked by
-  name, and stay revoked until their configured value changes.
+  name; a revoked value is never installed again (V13), so a leaked key can't come back, also after a rotation.
 
 ### Added
 

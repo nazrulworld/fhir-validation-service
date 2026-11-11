@@ -201,6 +201,50 @@ class DbUsageWriterTest extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Code review regression: close() applies its 5 s deadline even while an insert is stuck (a locked table stands in
+     * for a stalled database), so shutdown can't hang; the stuck batch is not waited for.
+     */
+    @Test
+    @Timeout(value = 30, timeUnit = TimeUnit.SECONDS)
+    void closeNeverHangsOnAStuckInsert(Vertx vertx, VertxTestContext ctx) {
+        DbUsageWriter w = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        Pool locker = createPgPool(vertx);
+        locker.getConnection().compose(conn -> conn.begin().compose(tx ->
+                        conn.query("LOCK TABLE " + TABLE + " IN ACCESS EXCLUSIVE MODE").execute()
+                                .compose(v -> {
+                                    w.write(record(null, 1));
+                                    w.flush(); // blocks on the lock
+                                    long start = System.currentTimeMillis();
+                                    return w.close().map(x -> System.currentTimeMillis() - start);
+                                })
+                                .eventually(() -> tx.rollback().eventually(() -> conn.close()))))
+                .eventually(() -> locker.close())
+                .onComplete(ctx.succeeding(ms -> ctx.verify(() -> {
+                    assertTrue(ms >= 4_500 && ms < 8_000, "close() took " + ms + " ms");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Code review regression: a batch that can't be prepared never leaves the writer stuck "flushing". */
+    @Test
+    void aBatchThatCannotBePreparedDoesNotStickTheWriter(Vertx vertx, VertxTestContext ctx) {
+        writer = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        writer.write(new UsageRecord("bad", null, null, null, Constant.SYSTEM_ORG_UUID, "R4", null, 0, null, 0, "valid", 200,
+                0, 0, 0, 0, null, 1, 0, 0, 0, 0, 0)); // no start time: toTuple() throws
+        writer.flush()
+                .compose(v -> {
+                    ctx.verify(() -> assertEquals(1, counter("fv.usage.dropped", "reason", "write_failed")));
+                    writer.write(record(null, 2));
+                    return writer.flush();
+                })
+                .compose(v -> rows())
+                .onComplete(ctx.succeeding(n -> ctx.verify(() -> {
+                    assertEquals(1, n, "the next batch is written");
+                    ctx.completeNow();
+                })));
+    }
+
     /** Code review regression: a record whose key was deleted meanwhile is stored with no key and never fails the batch. */
     @Test
     void aKeyDeletedWhileQueuedNeverFailsTheBatch(Vertx vertx, VertxTestContext ctx) {

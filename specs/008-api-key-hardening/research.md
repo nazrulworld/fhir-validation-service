@@ -293,6 +293,8 @@ the current code.
     key.
   - The CLI reserves the names `system administrator` and `trial validator` instead of `bootstrap`.
     `BOOTSTRAP_NAME` is replaced by the `Constant` names.
+- **Revocations (code review):** every revocation of a seeded key records its hash (V13 trigger); `upsertWellKnown`
+  never installs a recorded hash, so a leaked value can't come back, also after the key was rotated.
 - **Rationale**: fixed ids make the seeded keys addressable across installations and idempotent on restart
   (SC-009). Upserting by id means a configured key rotation replaces the hash in place.
 - **Note**: if the operator reuses the same secret for both seeded keys, it fails on the `key_hash` unique index,

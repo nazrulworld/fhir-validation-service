@@ -61,49 +61,67 @@ public class ValidationApi {
         nzi.fhir.validator.core.usage.UsageWriter writer = usage;
         java.util.function.Consumer<nzi.fhir.validator.core.usage.UsageRecord> sink =
                 writer.enabled() && !caller.anonymous() && caller.orgId() != null ? writer::write : null;
-        java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
+        String clientIp = null;
+        if (sink != null) {
+            // Only needed for the record (code review: skip the formatting on the default sink "none").
+            java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
+            clientIp = client == null ? null : client.getHostAddress();
+        }
         return nzi.fhir.validator.core.usage.UsageMeter.start(nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller,
-                client == null ? null : client.getHostAddress(), version,
-                ctx.body() == null ? 0 : Math.max(0, ctx.body().length()), sink);
+                clientIp, version, ctx.body() == null ? 0 : Math.max(0, ctx.body().length()), sink);
     }
 
     private static final java.util.regex.Pattern VALIDATE_PATH = java.util.regex.Pattern.compile("^/([^/]+)/validate/?$");
 
     /**
-     * Convergence T076 (FR-011): a root handler, mounted after authorisation, that records an authorised
-     * {@code POST /{version}/validate} the router refuses before any operation handler runs (e.g. 406 on
-     * {@code Accept}, 415 on {@code Content-Type}). Requests the endpoint handles are metered there; this only fills the
-     * gap, when the response ends without a meter.
+     * Spec 008 (FR-011, code review): a root handler, mounted right after authorisation, that starts the request's one
+     * usage meter for every authorised {@code POST /{version}/validate}. Starting it here gives the record the real start
+     * time, and covers requests the router refuses before any operation handler runs (406, 415).
      */
     public io.vertx.core.Handler<RoutingContext> usageFallbackHandler() {
         return ctx -> {
             java.util.regex.Matcher m = VALIDATE_PATH.matcher(ctx.normalizedPath());
             if (ctx.request().method() == io.vertx.core.http.HttpMethod.POST && m.matches()) {
-                String version = m.group(1);
-                ctx.addEndHandler(ar -> {
-                    if (ctx.get(METER_KEY) == null) {
-                        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, version);
-                        meter.workNeverStarted();
-                        meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
-                                nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
-                    }
-                });
+                meterFor(ctx, m.group(1));
             }
             ctx.next();
         };
     }
 
-    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
-        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, ctx.pathParam("version"));
-        if (ctx.response().ended()) {
-            // End handlers have already run (e.g. the request timeout answered before this handler): record it now.
-            meter.responseEnded(ctx.response().getStatusCode(), false, nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
-        } else {
-            ctx.addEndHandler(ar -> meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
-                    nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx)));
+    /**
+     * The request's usage meter, created on first use and stored in the context (one per request). When the response
+     * ends, the meter records it, and also closes the work side unless the validation service was started (whose future
+     * signals it): so a request answered without validating (a router refusal, a timeout, an early 4xx) is recorded
+     * exactly once, whoever answered it.
+     */
+    private nzi.fhir.validator.core.usage.UsageMeter meterFor(RoutingContext ctx, String version) {
+        nzi.fhir.validator.core.usage.UsageMeter existing = ctx.get(METER_KEY);
+        if (existing != null) {
+            return existing;
         }
+        nzi.fhir.validator.core.usage.UsageMeter meter = newMeter(ctx, version);
         ctx.put(METER_KEY, meter);
+        if (ctx.response().ended()) {
+            // End handlers have already run (e.g. the request timeout answered during the key lookup): record it now.
+            endMeter(ctx, meter, false);
+        } else {
+            ctx.addEndHandler(ar -> endMeter(ctx, meter, ar.failed()));
+        }
         return meter;
+    }
+
+    private static void endMeter(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter, boolean reset) {
+        meter.responseEnded(ctx.response().getStatusCode(), reset, nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx));
+        if (!Boolean.TRUE.equals(ctx.get(WORK_STARTED_KEY))) {
+            meter.workNeverStarted();
+        }
+    }
+
+    /** Set just before the validation service is called: its future then signals the meter's work side. */
+    private static final String WORK_STARTED_KEY = "usageWorkStarted";
+
+    private nzi.fhir.validator.core.usage.UsageMeter startMeter(RoutingContext ctx) {
+        return meterFor(ctx, ctx.pathParam("version"));
     }
 
     private static final String METER_KEY = "usageMeter";
@@ -187,6 +205,7 @@ public class ValidationApi {
             return false;
         }
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
+        ctx.put(WORK_STARTED_KEY, true);
         Future<Rendered> rendered = validationService
                 .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles, meter,
                         outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel(),
@@ -256,14 +275,13 @@ public class ValidationApi {
      * content type is 415; everything else follows the common mapping.
      */
     private void handleValidateFailure(RoutingContext ctx) {
-        if (ctx.get(METER_KEY) == null) {
-            // Spec 008 FR-011: the contract layer refused the request before the handler ran; it is recorded too.
+        if (!Boolean.TRUE.equals(ctx.get(WORK_STARTED_KEY))) {
+            // Spec 008 FR-011: refused before validating (e.g. by the contract layer); the response end records it.
             nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
             if (ctx.failure() instanceof BodyProcessorException e
                     && e.getErrorType() == BodyProcessorException.BodyProcessorErrorType.PARSING_ERROR) {
                 meter.outcome(nzi.fhir.validator.core.metrics.ServiceMetrics.OUTCOME_UNPARSEABLE);
             }
-            meter.workNeverStarted();
         }
         // FR-009: the ig parameter's shape is checked before the body, also when the contract layer has already
         // refused the body (e.g. an empty or malformed JSON body).

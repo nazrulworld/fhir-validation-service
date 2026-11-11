@@ -45,7 +45,7 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
 
     private Future<Void> install(String key) {
         return repo.upsertWellKnown(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID, Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, key,
-                ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID, Constant.SYS_ORG_API_KEY_EXPIRES_AT);
+                ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID, Constant.SYS_ORG_API_KEY_EXPIRES_AT).mapEmpty();
     }
 
     /** A revoked seeded key stays revoked while the configured value is unchanged; a new value un-revokes it. */
@@ -76,6 +76,42 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
         }
         Future.all(installs)
                 .compose(cf -> pool.query("SELECT count(*) FROM fhir_validator_schema.api_keys").execute())
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(1, rows.iterator().next().getInteger(0));
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Code review regression (V13): a revoked value is never installed again, also after the key was rotated, so an
+     * instance still configured with a leaked value can't bring it back.
+     */
+    @Test
+    void aRevokedValueCannotComeBackAfterARotation(VertxTestContext ctx) {
+        install(KEY)
+                .compose(v -> repo.revokeNamed(Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME)) // KEY leaked: revoke it
+                .compose(org -> install(ROTATED)) // an instance with the new value
+                .compose(v -> repo.upsertWellKnown(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                        Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, KEY, ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID,
+                        Constant.SYS_ORG_API_KEY_EXPIRES_AT)) // an instance still configured with the leaked value restarts
+                .compose(installed -> {
+                    ctx.verify(() -> assertFalse(installed, "the leaked value is refused"));
+                    return Future.all(repo.findActive(ROTATED), repo.findActive(KEY));
+                })
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    assertTrue(((java.util.Optional<?>) cf.resultAt(0)).isPresent(), "the rotated key still works");
+                    assertTrue(((java.util.Optional<?>) cf.resultAt(1)).isEmpty(), "the leaked key stays dead");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** A revocation by hand-written SQL is recorded too (the trigger). */
+    @Test
+    void aRevocationBySqlIsRecorded(VertxTestContext ctx) {
+        install(KEY)
+                .compose(v -> pool.query("UPDATE fhir_validator_schema.api_keys SET revoked_at = now() WHERE id = '"
+                        + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'").execute())
+                .compose(v -> pool.query("SELECT count(*) FROM fhir_validator_schema.revoked_key_hashes").execute())
                 .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
                     assertEquals(1, rows.iterator().next().getInteger(0));
                     ctx.completeNow();

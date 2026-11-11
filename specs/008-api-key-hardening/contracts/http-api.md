@@ -40,7 +40,7 @@ The body is the same in every case: `"A valid API key is required (Authorization
 never says which case applied, so it can't be used as a key oracle.
 
 **503 `not-ready`** (problem+json, `Retry-After: 5`) is returned by a key lookup that runs before the warm-up has
-applied migrations V10–V12 (a missing column or table). It never reveals the database error. Every keyed operation
+applied migrations V10–V13 (a missing column or table). It never reveals the database error. Every keyed operation
 declares `503` in `openapi.yaml`.
 
 **403 `forbidden`** is returned for:

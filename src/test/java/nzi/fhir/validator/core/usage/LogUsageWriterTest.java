@@ -103,4 +103,42 @@ class LogUsageWriterTest {
         assertTrue(drainThread[0].startsWith(LogUsageWriter.POOL), drainThread[0]);
         vertx.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
     }
+
+    /** Code review regression: two writers in one Vert.x each get their own pool, so both write. */
+    @Test
+    void twoWritersInOneVertxBothWrite() throws Exception {
+        io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+        try {
+            java.util.List<String> a = new java.util.concurrent.CopyOnWriteArrayList<>();
+            java.util.List<String> b = new java.util.concurrent.CopyOnWriteArrayList<>();
+            LogUsageWriter first = new LogUsageWriter(vertx, null, 10, a::add);
+            LogUsageWriter second = new LogUsageWriter(vertx, null, 10, b::add);
+            first.write(sample());
+            second.write(sample());
+            second.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+            first.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(1, a.size());
+            assertEquals(1, b.size(), "the second writer's drain task ran");
+        } finally {
+            vertx.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
+
+    /** Code review regression: nothing written after close() is left stranded in the queue; it is counted. */
+    @Test
+    void writesAfterCloseAreCountedNotStranded() throws Exception {
+        io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+        try {
+            nzi.fhir.validator.core.metrics.ServiceMetrics metrics =
+                    new nzi.fhir.validator.core.metrics.ServiceMetrics(nzi.fhir.validator.core.metrics.ServiceMetrics.newRegistry());
+            LogUsageWriter w = new LogUsageWriter(vertx, metrics, 10, line -> { });
+            w.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+            w.write(sample());
+            w.write(sample());
+            assertEquals(0, w.queued());
+            assertEquals(2.0, metrics.registry().find("fv.usage.dropped").tags("reason", "closed").counter().count());
+        } finally {
+            vertx.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
 }

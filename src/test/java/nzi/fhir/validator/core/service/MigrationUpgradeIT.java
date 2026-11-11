@@ -560,6 +560,27 @@ class MigrationUpgradeIT extends BaseTestContainer {
         }
     }
 
+    /** V13 (code review): seeded keys revoked before it ran are recorded, and later revocations by the trigger. */
+    @Test
+    void v13RecordsRevokedSeededKeys() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("12")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".api_keys (id, name, key_hash, role, owner, revoked_at) VALUES ('"
+                    + ADMIN_KEY_ID + "', 'system administrator', '\\x0a', 'ADMIN', '" + NEW_SYSTEM_ID + "', now())");
+            st.execute("INSERT INTO " + S + ".api_keys (id, name, key_hash, role, owner) VALUES "
+                    + "('00000000-0000-0000-0000-200000000002', 'trial validator', '\\x0b', 'VALIDATE', '" + TRIAL_ID + "'), "
+                    + "('" + UUID.randomUUID() + "', 'other', '\\x0c', 'VALIDATE', '" + NEW_SYSTEM_ID + "')");
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertEquals(List.of("\\x0a"), column(c, "SELECT key_hash FROM " + S + ".revoked_key_hashes"), "already revoked");
+            st.execute("UPDATE " + S + ".api_keys SET revoked_at = now()");
+            assertEquals(List.of("\\x0a", "\\x0b"), column(c, "SELECT key_hash FROM " + S + ".revoked_key_hashes ORDER BY key_hash"),
+                    "the trigger records seeded keys only, not 'other'");
+        }
+    }
+
     private static <T> T join(io.vertx.core.Future<T> f) throws Exception {
         return f.toCompletionStage().toCompletableFuture().get(120, java.util.concurrent.TimeUnit.SECONDS);
     }

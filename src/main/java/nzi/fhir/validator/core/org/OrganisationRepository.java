@@ -1,7 +1,6 @@
 package nzi.fhir.validator.core.org;
 
 import io.vertx.core.Future;
-import io.vertx.pgclient.PgException;
 import io.vertx.sqlclient.Pool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.SqlClient;
@@ -78,8 +77,7 @@ public class OrganisationRepository {
                 .execute(Tuple.of(id, nameShort, nameLong, type))
                 .<Void>mapEmpty()
                 .recover(err -> {
-                    if (nzi.fhir.validator.core.security.ApiKeyRepository.isUniqueViolation(err)
-                            && NAME_SHORT_UNIQUE.equals(((PgException) err).getConstraint())) {
+                    if (isShortNameTaken(err)) {
                         return Future.failedFuture(new nzi.fhir.validator.core.StartupException("An organisation named '"
                                 + nameShort + "' already exists with another id; rename it before starting 4.1.0 "
                                 + "(the well-known '" + nameShort + "' organisation has id " + id + ")"));
@@ -230,6 +228,11 @@ public class OrganisationRepository {
         return update(Organisations.SYSTEM_ID, patch, fields.keySet());
     }
 
+    /** A unique violation of the short name (shared by {@link #ensureWellKnown} and {@link #mapConflict}). */
+    private static boolean isShortNameTaken(Throwable err) {
+        return nzi.fhir.validator.core.PgErrors.isUniqueViolation(err, NAME_SHORT_UNIQUE);
+    }
+
     // --- mapping ------------------------------------------------------------------------------------------------
 
     static Organisation toOrganisation(Row r) {
@@ -263,8 +266,7 @@ public class OrganisationRepository {
     }
 
     private static <T> Future<T> mapConflict(Throwable err) {
-        if (err instanceof PgException pg && "23505".equals(pg.getSqlState())
-                && pg.getConstraint() != null && pg.getConstraint().equals(NAME_SHORT_UNIQUE)) {
+        if (isShortNameTaken(err)) {
             return Future.failedFuture(new ProblemException(409, ProblemException.TYPE_CONFLICT,
                     "An organisation with this short name already exists (names are compared ignoring case)"));
         }

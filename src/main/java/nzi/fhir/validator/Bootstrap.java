@@ -215,7 +215,7 @@ public final class Bootstrap {
      * Installs (or rotates) a key from configuration under its fixed id. An unset variable changes nothing in the
      * database: instances may be configured differently (e.g. only admin-facing ones get {@code FV_ADMIN_API_KEY}), so
      * one instance's missing variable must not revoke a key the others rely on. Seeded keys are revoked with
-     * {@code fv-admin key revoke} and stay revoked until the variable is set to a new value.
+     * {@code fv-admin key revoke}; a revoked value is never installed again (V13), only a new one.
      */
     private static Future<Void> installWellKnownKey(ServiceRegistry services, String variable, String key, java.util.UUID id,
                                                     String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,
@@ -226,7 +226,16 @@ public final class Bootstrap {
             return Future.succeededFuture();
         }
         return services.apiKeys().upsertWellKnown(id, name, key, role, owner, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
-                .onSuccess(v -> logger().info("'{}' API key installed ({})", name, variable));
+                .onSuccess(installed -> {
+                    if (installed) {
+                        logger().info("'{}' API key installed ({})", name, variable);
+                    } else {
+                        // V13: a revoked value is never installed again; the stored key is left as it is.
+                        logger().error("{} is set to a value that was revoked: this instance does not install it, and the "
+                                + "stored '{}' key is unchanged. Configure a new value.", variable, name);
+                    }
+                })
+                .mapEmpty();
     }
 
     private Future<Void> awaitIdle(long deadline) {

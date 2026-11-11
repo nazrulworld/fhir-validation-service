@@ -56,7 +56,9 @@ Four related changes ship together as **4.1.0**. The release contains breaking c
 **Storage**: PostgreSQL, through Flyway:
 - `V10__api_key_expiry_and_audit.sql`: two columns on `api_keys`;
 - `V11__well_known_organisations.sql`: system org re-key, trial org seed, bootstrap key rename;
-- `V12__validation_usage.sql`: a new table and two indexes.
+- `V12__validation_usage.sql`: a new table and two indexes;
+- `V13__revoked_well_known_key_hashes.sql`: hashes of revoked seeded keys, recorded by a trigger, so a revoked value
+  is never installed again (code review).
 
 **Testing**:
 - JUnit 5 with `vertx-junit5`, Testcontainers PostgreSQL (`BaseTestContainer`), `AppHarness` / `CoreHarness`, and
@@ -99,7 +101,7 @@ proxy
 | **V. Test-first, real dependencies** | PASS | Migrations, seeding, expiry, audit and the `db` writer are tested on Testcontainers PostgreSQL, including an upgrade from a V9 schema with data. CIDR, client address, meter arithmetic and the JSON shape are pure unit tests. Every endpoint whose auth changes has IT coverage in `ApiKeyAuthIT`. |
 | **VI. Performance budgets** | PASS with justified exceptions | Impact is stated above. Every new size is bounded in `ConfigLoader` (data-model §6). The hot validation path changes, so the PR carries `perf/validate.js` results for `none` and `db` in `perf/results-4.1.0.md`. This also fixes the latent unbounded `lastTouched` map in `ApiKeyRepository` (research R7). Two new sizes are fixed rather than configurable, the `fv-usage-log` pool (1) and the `touch()` throttle bound (10 000 keys): see Complexity Tracking. |
 | **VII. Observability** | PASS | New metrics are listed in contracts/operations.md §3, with no high-cardinality tags. Usage records carry the request id. Startup logs name the setting, never secrets: `FV_VALIDATOR_API_KEY` is redacted like `FV_ADMIN_API_KEY`. All configuration comes from env vars. |
-| **VIII. Simplicity, dependencies** | PASS | There are no new dependencies (the CIDR matcher is about 60 lines, research R4). Schema changes go only through new migrations V10 to V12; V8 is not edited, and V11 replaces its constraint instead. |
+| **VIII. Simplicity, dependencies** | PASS | There are no new dependencies (the CIDR matcher is about 60 lines, research R4). Schema changes go only through new migrations V10 to V13; V8 is not edited, and V11 replaces its constraint instead. |
 | **Security & compliance** | PASS | No PHI in usage. Client addresses are operational data (spec Assumptions). Spoofed forwarded headers are ignored unless the peer is trusted. Admin operations can be limited to internal networks. |
 | **Workflow gate: migrations on top of the previous release** | PASS | `BootstrapOrganisationsIT#migratesA40Schema` migrates from V9 with data. A rolling upgrade is impossible and is documented (research R13). |
 

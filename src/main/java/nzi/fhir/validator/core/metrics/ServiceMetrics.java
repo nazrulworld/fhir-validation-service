@@ -187,8 +187,23 @@ public class ServiceMetrics {
 
     // --- Spec 008 (FR-020, research R11): resources per validation and usage-sink health. No key or org tags. -------
 
-    private final java.util.Map<String, io.micrometer.core.instrument.DistributionSummary> resourceSummaries =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * Summaries cached per version (a read-only map filled once) and outcome, so recording builds no keys or strings
+     * per validation (code review).
+     */
+    private final java.util.Map<SupportedFhirVersion, java.util.concurrent.ConcurrentMap<String, io.micrometer.core.instrument.DistributionSummary>> cpuSummaries =
+            perVersion();
+    private final java.util.Map<SupportedFhirVersion, java.util.concurrent.ConcurrentMap<String, io.micrometer.core.instrument.DistributionSummary>> allocSummaries =
+            perVersion();
+
+    private static java.util.Map<SupportedFhirVersion, java.util.concurrent.ConcurrentMap<String, io.micrometer.core.instrument.DistributionSummary>> perVersion() {
+        java.util.EnumMap<SupportedFhirVersion, java.util.concurrent.ConcurrentMap<String, io.micrometer.core.instrument.DistributionSummary>> m =
+                new java.util.EnumMap<>(SupportedFhirVersion.class);
+        for (SupportedFhirVersion v : SupportedFhirVersion.values()) {
+            m.put(v, new java.util.concurrent.ConcurrentHashMap<>());
+        }
+        return java.util.Collections.unmodifiableMap(m);
+    }
 
     /**
      * CPU time and bytes allocated by one validation's work, by version and outcome; a value below 0 (unknown or not
@@ -196,19 +211,19 @@ public class ServiceMetrics {
      */
     public void recordValidationResources(SupportedFhirVersion version, String outcome, long cpuNanos, long allocatedBytes) {
         if (cpuNanos >= 0) {
-            summary("fv.validation.cpu", "seconds", "CPU time of the validation work", version, outcome).record(cpuNanos / 1e9);
+            cpuSummaries.get(version).computeIfAbsent(outcome, o -> summary("fv.validation.cpu", "seconds",
+                    "CPU time of the validation work", version, o)).record(cpuNanos / 1e9);
         }
         if (allocatedBytes >= 0) {
-            summary("fv.validation.allocated", "bytes", "Bytes allocated by the validation work (shared heap, not resident)",
-                    version, outcome).record(allocatedBytes);
+            allocSummaries.get(version).computeIfAbsent(outcome, o -> summary("fv.validation.allocated", "bytes",
+                    "Bytes allocated by the validation work (shared heap, not resident)", version, o)).record(allocatedBytes);
         }
     }
 
     private io.micrometer.core.instrument.DistributionSummary summary(String name, String unit, String description,
                                                                        SupportedFhirVersion version, String outcome) {
-        return resourceSummaries.computeIfAbsent(name + '|' + version.name() + '|' + outcome,
-                k -> io.micrometer.core.instrument.DistributionSummary.builder(name).baseUnit(unit).description(description)
-                        .tag("version", version.name()).tag("outcome", outcome).register(registry));
+        return io.micrometer.core.instrument.DistributionSummary.builder(name).baseUnit(unit).description(description)
+                .tag("version", version.name()).tag("outcome", outcome).register(registry);
     }
 
     /** Usage records written by the db sink. */

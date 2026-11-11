@@ -29,7 +29,7 @@ the constitution allows when the break is documented (Principle IV, 1.3.0). Read
 3. **Remove `FV_AUTH_ANONYMOUS_VALIDATE`** from your environment, and `auth.anonymousValidate` from any
    `FV_CONFIG_FILE` (both are ignored with a warning).
 4. **Stop every 4.0 instance.**
-5. **Start 4.1.0.** Migrations V10 to V12 run automatically, then the service makes sure both well-known organisations
+5. **Start 4.1.0.** Migrations V10 to V13 run automatically, then the service makes sure both well-known organisations
    exist and installs the configured keys.
 6. Optionally set the new settings (below), and plan retention for usage records if you enable the `db` sink.
 
@@ -44,6 +44,8 @@ id.
   (`00000000-0000-0000-0000-100000000002`, `trial`, "Free trial validation service", non-commercial); renames the
   `bootstrap` key.
 - `V12__validation_usage.sql`: the `validation_usage` table, written only by the `db` usage sink.
+- `V13__revoked_well_known_key_hashes.sql`: remembers the hashes of revoked seeded keys (a trigger records every
+  revocation), so a revoked value is never installed again.
 
 ## If startup fails
 
@@ -75,11 +77,11 @@ The service stops (exit 1) instead of running half-configured when:
 
 `system administrator` and `trial validator` are installed from configuration at every start, with an expiry of
 2099-12-30T23:59:59Z. They are rotated by changing `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restarting.
-Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`. A revoked seeded key
-stays revoked while its configured value is unchanged, so restarting an instance with the old (leaked) value doesn't
-bring it back; deploying a new value un-revokes it. Change the value on all instances together: an instance that
-restarts with the old value writes the old key back. An instance started without the variable leaves the stored key as
-it is.
+Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`. A revoked seeded key's value is never installed again (it is remembered in `revoked_key_hashes`, V13): an instance
+still configured with a leaked, revoked value logs an ERROR and leaves the stored key alone, also after the key was
+rotated. Deploy a new value to replace it. Instances configured with different non-revoked values still overwrite each
+other's key, so change the value on all instances together. An instance started without the variable leaves the
+stored key as it is.
 
 ## Usage records on shutdown
 

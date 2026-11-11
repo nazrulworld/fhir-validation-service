@@ -66,7 +66,7 @@ appender with a file or another appender.
    trial key.
 3. Remove `FV_AUTH_ANONYMOUS_VALIDATE`.
 4. Optionally set `FV_AUTH_ADMIN_CIDRS`, `FV_AUTH_TRUSTED_PROXIES` and `FV_USAGE_SINK`.
-5. Start 4.1.0. Migrations V10 to V12 run, and the well-known orgs and seeded keys are ensured.
+5. Start 4.1.0. Migrations V10 to V13 run, and the well-known orgs and seeded keys are ensured.
 6. If you enable `db` usage, plan a retention job for `validation_usage`.
 
 Rollback: restore the database backup taken before step 5. V11 can't be reversed in place while 4.0 code expects
