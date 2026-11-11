@@ -34,6 +34,8 @@ class BootstrapFatalExitTest {
                 t.join(5_000);
                 assertEquals(1, status.get());
                 assertFalse(onVertxThread.get(), "the exit runs on its own thread");
+                assertTrue(Bootstrap.FATAL.get(), "code review: the shutdown hook skips the graceful drain");
+                Bootstrap.FATAL.set(false);
                 assertNull(Bootstrap.exitOnFatal(new IllegalStateException("not fatal"), code -> fail("no exit")));
             });
             ctx.completeNow();

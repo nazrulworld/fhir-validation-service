@@ -65,6 +65,14 @@ class CidrTest {
         assertNull(Cidr.parseAddress("localhost"));
         assertNull(Cidr.parseAddress("dead.beef"));
         assertNull(Cidr.parseAddress("cafe"));
+        // Code review regression: these pass the character check but would reach the system resolver.
+        assertNull(Cidr.parseAddress(".:"));
+        assertNull(Cidr.parseAddress("..::1"));
+        assertNull(Cidr.parseAddress(".1.2.3:"));
+        assertNull(Cidr.parseAddress("::1..2"));
+        assertNotNull(Cidr.parseAddress("::1"));
+        assertNotNull(Cidr.parseAddress("::ffff:10.1.2.3"));
+        assertNotNull(Cidr.parseAddress("fe80::1"));
     }
 
     @Test

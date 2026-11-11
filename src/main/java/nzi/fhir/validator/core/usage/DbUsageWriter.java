@@ -40,6 +40,8 @@ public final class DbUsageWriter implements UsageWriter {
     private final int batchSize;
     private final ArrayBlockingQueue<UsageRecord> queue;
     private final AtomicBoolean flushing = new AtomicBoolean();
+    /** A size-triggered flush is queued on the event loop (at most one at a time). */
+    private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final AtomicLong lastWarn = new AtomicLong();
     private final long timer;
@@ -74,9 +76,13 @@ public final class DbUsageWriter implements UsageWriter {
             dropped("queue_full", 1);
             return;
         }
-        // A running flush reschedules itself while a full batch waits, so only an idle writer needs a nudge.
-        if (queue.size() >= batchSize && !flushing.get()) {
-            vertx.runOnContext(v -> flush());
+        // A running flush reschedules itself while a full batch waits, so only an idle writer needs a nudge, and only
+        // one nudge is queued at a time however many writes see the full batch.
+        if (queue.size() >= batchSize && !flushing.get() && flushScheduled.compareAndSet(false, true)) {
+            vertx.runOnContext(v -> {
+                flushScheduled.set(false);
+                flush();
+            });
         }
     }
 
@@ -131,6 +137,11 @@ public final class DbUsageWriter implements UsageWriter {
     }
 
     private void drain(long deadline, Promise<Void> done) {
+        // Never complete while an insert is in flight: the pool closes right after (code review, FR-018).
+        if (flushing.get()) {
+            vertx.setTimer(10, id -> drain(deadline, done));
+            return;
+        }
         if (queue.isEmpty() || System.currentTimeMillis() >= deadline) {
             if (!queue.isEmpty()) {
                 int left = queue.size();
@@ -139,10 +150,6 @@ public final class DbUsageWriter implements UsageWriter {
                 logger.warn("{} usage record(s) not written before shutdown", left);
             }
             done.complete();
-            return;
-        }
-        if (flushing.get()) {
-            vertx.setTimer(10, id -> drain(deadline, done));
             return;
         }
         flush().onComplete(ar -> drain(deadline, done));

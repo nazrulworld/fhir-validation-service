@@ -44,10 +44,8 @@ final class UsageCommands {
         Future<UUID> scope = byOrg
                 ? ctx.organisations().findByShortName(cmd.required("org")).compose(o -> o.isPresent()
                 ? Future.succeededFuture(o.get().id()) : Future.failedFuture(OrganisationRepository.notFound()))
-                : ctx.pool().preparedQuery("SELECT id FROM " + DB_POSTGRES_SCHEMA_NAME + ".api_keys WHERE name = $1")
-                .execute(Tuple.of(cmd.required("key")))
-                .compose(rows -> rows.size() == 1 ? Future.succeededFuture(rows.iterator().next().getUUID(0))
-                        : Future.failedFuture(new nzi.fhir.validator.web.ProblemException(404, "not-found", "API key not found")));
+                : ctx.keys().findIdByName(cmd.required("key")).compose(id -> id.isPresent()
+                ? Future.succeededFuture(id.get()) : Future.failedFuture(nzi.fhir.validator.core.security.ApiKeyRepository.notFound()));
         String column = byOrg ? "org_id" : "api_key_id";
         JsonObject result = new JsonObject()
                 .put("scope", new JsonObject().put(byOrg ? "org" : "key", cmd.required(byOrg ? "org" : "key")))

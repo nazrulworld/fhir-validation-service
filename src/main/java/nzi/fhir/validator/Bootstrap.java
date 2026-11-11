@@ -54,6 +54,8 @@ public final class Bootstrap {
     }
 
     private static volatile Bootstrap running;
+    /** Set by a fatal startup error: the shutdown hook then closes Vert.x without the graceful drain. */
+    static final java.util.concurrent.atomic.AtomicBoolean FATAL = new java.util.concurrent.atomic.AtomicBoolean();
 
     public static void main(String[] args) {
         // Spec 005: "org|key|package|snapshot ..." runs one administrative command instead of the server.
@@ -110,6 +112,8 @@ public final class Bootstrap {
             return null;
         }
         logger().error("Startup failed: {}", err.getMessage(), err);
+        // The instance never became ready: no pre-drain window or grace period, just stop.
+        FATAL.set(true);
         return exitFromOwnThread(exit, 1);
     }
 
@@ -128,7 +132,7 @@ public final class Bootstrap {
      * JVM shutdown hook (SIGTERM): drain, stop, close Vert.x. Waits on a latch, never on a future (Principle I).
      */
     private static void shutdown(Vertx vertx, ApplicationConfig config) {
-        Bootstrap b = running;
+        Bootstrap b = FATAL.get() ? null : running;
         long timeoutMs = config.shutdownPreDrainMs() + config.shutdownGraceMs() + 5_000;
         try {
             if (b != null) {
@@ -192,42 +196,37 @@ public final class Bootstrap {
                 .mapEmpty();
     }
 
+    /** The system administrator key from {@code FV_ADMIN_API_KEY} (spec 005 FR-006, spec 008). */
     private static Future<Void> installBootstrapKey(ServiceRegistry services) {
-        String key = services.config().bootstrapAdminKey();
-        if (key == null || key.isBlank()) {
-            logger().warn("FV_ADMIN_API_KEY is not set: administrative operations are refused");
-            // Spec 008: unsetting the variable revokes the key it installed earlier.
-            return services.apiKeys().revokeWellKnown(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID)
-                    .onSuccess(revoked -> {
-                        if (revoked) {
-                            logger().warn("The system administrator API key was revoked (FV_ADMIN_API_KEY is not set)");
-                        }
-                    })
-                    .mapEmpty();
-        }
-        return services.apiKeys().upsertBootstrap(key)
-                .onSuccess(v -> logger().info("System administrator API key installed (FV_ADMIN_API_KEY)"));
+        return installWellKnownKey(services, "FV_ADMIN_API_KEY", services.config().bootstrapAdminKey(),
+                nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME,
+                nzi.fhir.validator.core.security.ApiKeyRepository.Role.ADMIN, nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID);
     }
 
     /** Spec 008 FR-026: the trial organisation's shared VALIDATE key, from {@code FV_VALIDATOR_API_KEY}. */
     private static Future<Void> installTrialValidatorKey(ServiceRegistry services) {
-        String key = services.config().validatorKey();
+        return installWellKnownKey(services, "FV_VALIDATOR_API_KEY", services.config().validatorKey(),
+                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME,
+                nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID);
+    }
+
+    /**
+     * Installs (or rotates) a key from configuration under its fixed id. An unset variable changes nothing in the
+     * database: instances may be configured differently (e.g. only admin-facing ones get {@code FV_ADMIN_API_KEY}), so
+     * one instance's missing variable must not revoke a key the others rely on. Seeded keys are revoked with
+     * {@code fv-admin key revoke}; an instance that still has the variable installs it again at its next start.
+     */
+    private static Future<Void> installWellKnownKey(ServiceRegistry services, String variable, String key, java.util.UUID id,
+                                                    String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,
+                                                    java.util.UUID owner) {
         if (key == null || key.isBlank()) {
-            logger().warn("FV_VALIDATOR_API_KEY is not set: validation requires keys created with 'keys create'");
-            // Spec 008: unsetting the variable revokes the trial key it installed earlier.
-            return services.apiKeys().revokeWellKnown(nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID)
-                    .onSuccess(revoked -> {
-                        if (revoked) {
-                            logger().warn("The trial validator API key was revoked (FV_VALIDATOR_API_KEY is not set)");
-                        }
-                    })
-                    .mapEmpty();
+            logger().warn("{} is not set: this instance installs no '{}' key (one stored earlier stays valid until revoked)",
+                    variable, name);
+            return Future.succeededFuture();
         }
-        return services.apiKeys().upsertWellKnown(nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
-                        nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, key,
-                        nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE,
-                        nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
-                .onSuccess(v -> logger().info("Trial validator API key installed (FV_VALIDATOR_API_KEY)"));
+        return services.apiKeys().upsertWellKnown(id, name, key, role, owner, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
+                .onSuccess(v -> logger().info("'{}' API key installed ({})", name, variable));
     }
 
     private Future<Void> awaitIdle(long deadline) {

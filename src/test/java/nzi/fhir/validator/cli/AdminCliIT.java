@@ -188,10 +188,8 @@ class AdminCliIT extends BaseTestContainer {
         // Spec 008: the keys installed from configuration have reserved names; 'bootstrap' is an ordinary name now.
         assertExit(cli("key", "create", "--org", "acme", "--name", "system administrator", "--role", "ADMIN"), 4);
         assertExit(cli("key", "create", "--org", "acme", "--name", "Trial Validator", "--role", "VALIDATE"), 4);
-        Run reservedRevoke = cli("key", "revoke", "--name", "trial validator");
-        assertExit(reservedRevoke, 4);
-        assertTrue(reservedRevoke.err().contains("FV_VALIDATOR_API_KEY"), reservedRevoke.err());
-        assertExit(cli("key", "revoke", "--name", "system administrator"), 4);
+        // Seeded keys may be revoked by name (none is installed here: no server has started, so 3 = not found).
+        assertExit(cli("key", "revoke", "--name", "trial validator"), 3);
         assertExit(cli("key", "create", "--org", "acme", "--name", "bootstrap", "--role", "VALIDATE"), 0);
         assertExit(cli("key", "create", "--org", "acme", "--name", "acme-ci", "--role", "ADMIN"), 4);
         assertExit(cli("key", "create", "--org", "nobody", "--name", "x-ci", "--role", "ADMIN"), 3);

@@ -107,9 +107,9 @@ final class KeyCommands {
     private static Future<Object> revoke(CliArgs.Command cmd, CliContext ctx) {
         String name = cmd.required("name");
         if (ApiKeyRepository.isReserved(name)) {
-            // Spec 008: a seeded key would come back at the next start; it is revoked through its configuration.
-            throw new CliException(CliException.CONFLICT, "conflict", "'" + name + "' is installed from configuration; "
-                    + "rotate or unset FV_ADMIN_API_KEY / FV_VALIDATOR_API_KEY and restart");
+            // Spec 008: allowed; an instance that still has the variable set installs the key again at its next start.
+            logger.warn("cli: '{}' is installed from configuration; an instance that still sets its variable re-installs it "
+                    + "at its next start", name);
         }
         return ctx.keys().revokeNamed(name).map(org -> {
             logger.info("cli: key revoke name={} org={}", name, org);

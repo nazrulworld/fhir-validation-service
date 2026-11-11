@@ -268,8 +268,9 @@ totals with the records.
 - A short name `trial` is already taken by another organisation: startup fails loudly.
 - A request refused by authentication or authorisation has no usage record; those refusals are visible in the HTTP
   metrics.
-- A seeded key (system administrator, trial validator) is revoked by rotating or removing its configuration value, not
-  by the command line, which refuses to revoke it.
+- A seeded key (system administrator, trial validator) is revoked by name like any other key; an instance that still
+  sets the variable installs it again at its next start. An instance started without the variable leaves the stored
+  key unchanged, so differently configured instances can't revoke each other's keys (code review).
 - The upgrade could not rename the old bootstrap key because the name or the secret is already used by another key:
   startup fails with a message naming the conflicting key, never the secret.
 

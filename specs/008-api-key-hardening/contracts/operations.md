@@ -23,7 +23,7 @@ The full table, with bounds, is in [data-model.md](../data-model.md) §6. Behavi
 |---|---|
 | `keys create --org <o> --name <n> --role <r> [--expires <ISO-8601 instant>]` | new `--expires`; a past instant is a usage error (exit 2) |
 | `keys list [--org <o>]` | JSON rows gain `"expiresAt"` and `"lastUsedIp"` |
-| `keys create/revoke` | the names `system administrator` and `trial validator` are reserved (was `bootstrap`); `keys revoke` refuses them, because they are installed from configuration: rotate or unset `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restart |
+| `keys create/revoke` | the names `system administrator` and `trial validator` are reserved (was `bootstrap`); `keys revoke` accepts them (an instance that still sets the variable re-installs the key at its next start) |
 | `usage summary (--org <o> \| --key <n>) [--since <instant>]` | **new, optional (FR-022)**; JSON `{scope, since, validations, byOutcome{…}, totalMs, avgMs, validateMs, cpuTimeNs, allocatedBytes}` |
 
 ## 3. Metrics (Prometheus names)

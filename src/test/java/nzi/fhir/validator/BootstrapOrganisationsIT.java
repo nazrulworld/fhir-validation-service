@@ -229,28 +229,36 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
         assertTrue(e.getMessage().contains("must differ from FV_ADMIN_API_KEY"), e.getMessage());
     }
 
-    /** Spec 008: unsetting a seeded key's variable revokes the key at the next start; setting it again restores it. */
+    /**
+     * Code review regression: an instance without the variables (e.g. a worker that isn't given FV_ADMIN_API_KEY) must
+     * not revoke the keys other instances rely on. Seeded keys are revoked by name; an instance that still sets the
+     * variable installs the key again at its next start.
+     */
     @Test
-    void unsettingASeededKeyRevokesIt() throws Exception {
+    void anUnsetVariableNeverRevokesAndRevokedKeysComeBackWithTheVariable() throws Exception {
         PgConnectOptions db = freshDatabase();
         JsonObject config = config(db);
         join(startReady(config).stop());
-        config.getJsonObject("auth").remove("validatorKey");
-        config.getJsonObject("auth").remove("bootstrapAdminKey");
-        AppHarness app = startReady(config);
+        JsonObject worker = config(db);
+        worker.getJsonObject("auth").remove("validatorKey");
+        worker.getJsonObject("auth").remove("bootstrapAdminKey");
+        AppHarness app = startReady(worker);
         try {
             join(app.awaitReady(90_000));
-            assertEquals(401, validate(app, AppHarness.VALIDATOR_AUTH).statusCode(), "the trial key is revoked");
-            assertEquals(List.of("false", "false"), column(db, "SELECT (revoked_at IS NULL)::text FROM " + S
+            assertEquals(200, validate(app, AppHarness.VALIDATOR_AUTH).statusCode(), "still valid on every instance");
+            assertEquals(List.of("true", "true"), column(db, "SELECT (revoked_at IS NULL)::text FROM " + S
                     + ".api_keys WHERE id IN ('" + Constant.SYS_ORG_ADMIN_API_KEY_ID + "', '"
                     + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "')"));
+            join(app.bootstrap().services().apiKeys().revokeNamed(Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME));
+            assertEquals(List.of("false"), column(db, "SELECT (revoked_at IS NULL)::text FROM " + S
+                    + ".api_keys WHERE id = '" + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'"), "revoked by name");
         } finally {
             join(app.stop());
         }
-        AppHarness again = startReady(config(db));
+        AppHarness again = startReady(config);
         try {
             join(again.awaitReady(90_000));
-            assertEquals(200, validate(again, AppHarness.VALIDATOR_AUTH).statusCode(), "setting it again restores it");
+            assertEquals(200, validate(again, AppHarness.VALIDATOR_AUTH).statusCode(), "an instance with the variable re-installs it");
         } finally {
             join(again.stop());
         }

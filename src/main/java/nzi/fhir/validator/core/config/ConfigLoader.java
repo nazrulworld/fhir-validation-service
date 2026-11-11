@@ -304,7 +304,7 @@ public final class ConfigLoader {
             throw new IllegalStateException("Invalid FV_PG_SSL_MODE: '" + ssl + "' (allowed: " + SSL_MODES + ")");
         }
         String key = section(c, "auth").getString("bootstrapAdminKey");
-        if (key != null && !key.isEmpty() && !key.matches("[A-Za-z0-9_-]{32,128}")) {
+        if (key != null && !key.isEmpty() && !nzi.fhir.validator.core.security.ApiKeyRepository.isWellFormed(key)) {
             throw new IllegalStateException("Invalid FV_ADMIN_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
         }
         for (String[] cidrs : new String[][]{{"FV_AUTH_ADMIN_CIDRS", "adminCidrs"}, {"FV_AUTH_TRUSTED_PROXIES", "trustedProxies"}}) {
@@ -330,7 +330,7 @@ public final class ConfigLoader {
         }
         String validatorKey = section(c, "auth").getString("validatorKey");
         if (validatorKey != null && !validatorKey.isEmpty()) {
-            if (!validatorKey.matches("[A-Za-z0-9_-]{32,128}")) {
+            if (!nzi.fhir.validator.core.security.ApiKeyRepository.isWellFormed(validatorKey)) {
                 throw new IllegalStateException("Invalid FV_VALIDATOR_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
             }
             if (validatorKey.equals(key)) {

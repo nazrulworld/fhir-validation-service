@@ -32,7 +32,7 @@ public final class ThreadMetrics {
 
     /** Bytes allocated by the current thread so far, or -1. */
     public static long allocatedBytes() {
-        return ALLOC == null ? -1 : ALLOC.getThreadAllocatedBytes(Thread.currentThread().getId());
+        return ALLOC == null ? -1 : ALLOC.getCurrentThreadAllocatedBytes();
     }
 
     private static boolean cpuSupported() {

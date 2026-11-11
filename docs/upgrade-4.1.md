@@ -71,9 +71,10 @@ The service stops (exit 1) instead of running half-configured when:
 ## Seeded keys
 
 `system administrator` and `trial validator` are installed from configuration at every start, with an expiry of
-2099-12-30T23:59:59Z. They are rotated by changing `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restarting, and
-revoked by unsetting the variable and restarting (the start revokes the key it installed earlier). `fv-admin key
-revoke` refuses them, because the next start would install them again.
+2099-12-30T23:59:59Z. They are rotated by changing `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restarting.
+Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`; an instance that still sets
+the variable installs the key again at its next start, so also remove or change the variable everywhere. An instance
+started without the variable leaves the stored key as it is (instances may be configured differently).
 
 ## Usage retention
 

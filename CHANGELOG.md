@@ -22,14 +22,15 @@ stop every 4.0 instance first.
 - **The system organisation's id changes** to `00000000-0000-0000-0000-100000000001` (V11, with every owner reference
   and column default). 4.0 instances must not run against the upgraded database.
 - **The bootstrap key is renamed** to `system administrator` with the fixed id `00000000-0000-0000-0000-200000000001`.
-  `system administrator` and `trial validator` are reserved names; `fv-admin key revoke` refuses them (unset their
-  variable and restart instead).
+  `system administrator` and `trial validator` are reserved names for `fv-admin key create`. They can be revoked by
+  name; an instance that still sets the variable installs the key again at its next start.
 
 ### Added
 
 - **Trial organisation and key**: the `trial` organisation (`…-100000000002`) is seeded; `FV_VALIDATOR_API_KEY`
   installs its shared VALIDATE key (`trial validator`) at every start. Startup fails loudly when a well-known name is
-  already taken or a configured key conflicts. Unsetting a seeded key's variable revokes the key at the next start.
+  already taken or a configured key conflicts, and exits without the graceful drain. An instance without the variable
+  leaves the stored key unchanged.
 - **Admin network allowlist** `FV_AUTH_ADMIN_CIDRS`: administrative operations from other networks get 403 for every
   key, before any key lookup.
 - **Trusted proxies** `FV_AUTH_TRUSTED_PROXIES`: the forwarding header is believed only from these peers (right-most

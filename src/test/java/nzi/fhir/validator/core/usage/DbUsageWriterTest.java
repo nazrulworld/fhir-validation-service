@@ -149,6 +149,22 @@ class DbUsageWriterTest extends BaseTestContainer {
                 })));
     }
 
+    /** Code review regression (FR-018): close() waits for an insert already in flight before the pool may close. */
+    @Test
+    void closeWaitsForAnInFlightFlush(Vertx vertx, VertxTestContext ctx) {
+        DbUsageWriter w = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
+        for (int i = 0; i < 50; i++) {
+            w.write(record(null, i));
+        }
+        w.flush(); // in flight: the queue is now empty
+        w.close()
+                .compose(v -> rows())
+                .onComplete(ctx.succeeding(n -> ctx.verify(() -> {
+                    assertEquals(50, n, "every record of the in-flight batch is written when close() completes");
+                    ctx.completeNow();
+                })));
+    }
+
     /** Review regression: a record without an organisation is dropped as "unattributed", not "queue_full". */
     @Test
     void unattributedRecordsAreCountedAsSuch(Vertx vertx, VertxTestContext ctx) {

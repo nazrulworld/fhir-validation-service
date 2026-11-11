@@ -21,8 +21,8 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
  */
 public class ApiKeyRepository {
     /**
-     * Names of the keys installed from configuration (spec 008): the command line can't create or revoke them; they are
-     * rotated or revoked through {@code FV_ADMIN_API_KEY} / {@code FV_VALIDATOR_API_KEY}. Compared ignoring case.
+     * Names of the keys installed from configuration (spec 008): the command line can't create them (they are rotated
+     * through {@code FV_ADMIN_API_KEY} / {@code FV_VALIDATOR_API_KEY}), but may revoke them. Compared ignoring case.
      */
     public static final java.util.Set<String> RESERVED_NAMES = java.util.Set.of(
             nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME,
@@ -121,16 +121,6 @@ public class ApiKeyRepository {
     }
 
     /**
-     * Installs (or replaces) the bootstrap admin key from configuration under its well-known id and name (spec 008).
-     * It always belongs to the system organisation (spec 005 FR-006), also when the row existed with another owner.
-     */
-    public Future<Void> upsertBootstrap(String key) {
-        return upsertWellKnown(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID,
-                nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME, key, Role.ADMIN, Organisations.SYSTEM_ID,
-                nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT);
-    }
-
-    /**
      * Installs or replaces a key from configuration under a fixed id (spec 008, research R15): the hash, name, role,
      * owner and expiry are overwritten and the key is un-revoked, so restarting is idempotent and a changed value
      * rotates the key in place.
@@ -161,18 +151,6 @@ public class ApiKeyRepository {
     }
 
     /**
-     * Revokes the key with the fixed id {@code id}, if it exists and is active (spec 008): a key installed from
-     * configuration whose variable is no longer set must stop working, or unsetting the variable wouldn't revoke it.
-     *
-     * @return whether a key was revoked
-     */
-    public Future<Boolean> revokeWellKnown(UUID id) {
-        return pool.preparedQuery("UPDATE " + TABLE + " SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL")
-                .execute(Tuple.of(id))
-                .map(rows -> rows.rowCount() > 0);
-    }
-
-    /**
      * Creates a new key; unlike {@link #save} it never replaces an existing one.
      *
      * @return fails with 409 {@code conflict} when a key of that name exists (revoked or not)
@@ -198,6 +176,18 @@ public class ApiKeyRepository {
                         nzi.fhir.validator.web.ProblemException.TYPE_CONFLICT, "An API key with this name already exists")));
     }
 
+    /** The id of the key called {@code name}, if any (spec 008: usage summary by key). */
+    public Future<Optional<UUID>> findIdByName(String name) {
+        return pool.preparedQuery("SELECT id FROM " + TABLE + " WHERE name = $1")
+                .execute(Tuple.of(name))
+                .map(rows -> rows.size() == 0 ? Optional.<UUID>empty() : Optional.of(rows.iterator().next().getUUID(0)));
+    }
+
+    /** The error for a key name that doesn't exist. */
+    public static nzi.fhir.validator.web.ProblemException notFound() {
+        return new nzi.fhir.validator.web.ProblemException(404, "not-found", "API key not found");
+    }
+
     public Future<Void> revoke(String name) {
         return pool.preparedQuery("UPDATE " + TABLE + " SET revoked_at = now() WHERE name = $1")
                 .execute(Tuple.of(name))
@@ -214,7 +204,7 @@ public class ApiKeyRepository {
                         + ORGANISATIONS + " o WHERE k.name = $1 AND o.id = k.owner RETURNING o.name_short")
                 .execute(Tuple.of(name))
                 .compose(rows -> rows.size() == 0
-                        ? Future.failedFuture(new nzi.fhir.validator.web.ProblemException(404, "not-found", "API key not found"))
+                        ? Future.failedFuture(notFound())
                         : Future.succeededFuture(rows.iterator().next().getString(0)));
     }
 

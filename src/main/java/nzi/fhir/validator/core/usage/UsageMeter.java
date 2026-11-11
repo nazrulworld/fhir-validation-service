@@ -48,6 +48,23 @@ public class UsageMeter {
     /** A meter that records nothing (callers outside HTTP: the command line, tests). */
     public static final UsageMeter NONE = new UsageMeter(System::nanoTime, Probe.THREAD, Instant.EPOCH, null, null, null,
             null, 0, null) {
+        // Shared by every non-HTTP caller: nothing may write its fields.
+        @Override
+        public void contentType(String contentType) {
+        }
+
+        @Override
+        public void profiles(int profiles) {
+        }
+
+        @Override
+        public void ig(String ig) {
+        }
+
+        @Override
+        public void outcome(String outcome) {
+        }
+
         @Override
         public void markAdmitted() {
         }

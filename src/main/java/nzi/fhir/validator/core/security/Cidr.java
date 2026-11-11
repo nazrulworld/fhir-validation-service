@@ -49,6 +49,12 @@ public record Cidr(byte[] network, int prefix) {
         if (text == null || text.isEmpty() || !LITERAL.matcher(text).matches() || (text.indexOf(':') < 0 && !isDottedQuad(text))) {
             return null;
         }
+        // An IPv6 literal starts with a hex digit or ':' and never has ".." (code review: ".:" or "..::1" otherwise
+        // reach the system resolver, a blocking DNS lookup).
+        char first = text.charAt(0);
+        if (!(first == ':' || Character.digit(first, 16) >= 0) || text.contains("..")) {
+            return null;
+        }
         try {
             return InetAddress.getByName(text);
         } catch (UnknownHostException e) {

@@ -32,8 +32,8 @@ created ──(revoke)─────────────▶ revoked   (refu
 expired/revoked ──(well-known upsert at startup)──▶ active   (seeded keys only: revoked_at = NULL, expires_at reset)
 ```
 
-Seeded keys can't be revoked from the command line (`keys revoke` refuses reserved names). They are revoked by
-rotating or unsetting their configuration value and restarting.
+Seeded keys are revoked by name like any other key; an instance that still sets the variable re-installs the key at
+its next start. An instance without the variable never changes the stored key.
 
 **Java**:
 - `KeyInfo(UUID id, String name, Role role, UUID ownerId, String ownerShortName, boolean ownerActive, Instant expiresAt)`.
