@@ -2,6 +2,7 @@
 # Rolling restart under load (SC-008, FR-029): two validators behind the `cluster` load balancer, steady k6 load,
 # restart one instance at a time, and fail if 0.1% or more of the requests failed.
 # Usage: sh scripts/rolling-restart.sh   (from the repository root; needs docker compose and jq)
+#   Validates with FV_KEY, else FV_VALIDATOR_API_KEY or FV_ADMIN_API_KEY from .env (4.1.0: validation is key-only).
 #   Refuses to run when the running validator image and the version being built differ in major version.
 #   ROLLING_VUS (default 8, keep it at or below the admission limit), ROLLING_DURATION (default 150s, at least 2m)
 set -eu
@@ -51,7 +52,27 @@ if [ -n "$running" ] && [ -n "$target_version" ]; then
     echo "Rolling restart across major versions is not supported; see docs/upgrade-2.0.md" >&2
     exit 1
   fi
+  # 4.0 → 4.1 is a minor release, but migration V11 re-keys the system organisation while 4.0 instances still use the
+  # old id: every 4.0 instance must be stopped first (spec 008, docs/upgrade-4.1.md).
+  case "$running_version" in
+    4.0.*)
+      case "$target_version" in
+        4.0.*) ;;
+        4.*)
+          echo "ROLLING RESTART REFUSED: running $running_version, target $target_version." >&2
+          echo "The 4.1 upgrade needs every 4.0 instance stopped first; see docs/upgrade-4.1.md" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+  esac
 fi
+
+# Since 4.1.0 every validation needs a key: FV_KEY, else the trial validator key from .env, else the admin key.
+env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
+KEY="${FV_KEY:-$(env_value FV_VALIDATOR_API_KEY)}"
+[ -n "$KEY" ] || KEY=$(env_value FV_ADMIN_API_KEY)
+[ -n "$KEY" ] || fail "no key to validate with: set FV_VALIDATOR_API_KEY (or FV_ADMIN_API_KEY) in .env, or FV_KEY"
 
 echo "==> starting the cluster profile"
 docker compose --profile cluster up -d --build --wait --wait-timeout "$READY_TIMEOUT" || fail "cluster did not become healthy"
@@ -61,7 +82,7 @@ wait_ready validator-2
 echo "==> load: $VUS VUs for $DURATION through the load balancer"
 chmod 777 "$out"
 docker run --rm --network "${PROJECT}_default" -v "$PWD":/work:ro -v "$out":/out "$K6_IMAGE" run -q \
-  -e BASE=http://lb:80 -e VUS="$VUS" -e DURATION="$DURATION" \
+  -e BASE=http://lb:80 -e VUS="$VUS" -e DURATION="$DURATION" -e FV_KEY="$KEY" \
   --summary-export /out/summary.json /work/perf/validate.js > "$out/k6.log" 2>&1 &
 k6_pid=$!
 sleep 20

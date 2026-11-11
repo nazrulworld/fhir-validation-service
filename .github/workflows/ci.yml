@@ -44,6 +44,8 @@ jobs:
           cp .env.example .env
           sed -i "s/^PG_PASSWORD=.*/PG_PASSWORD=ci-$(openssl rand -hex 12)/" .env
           sed -i "s/^FV_ADMIN_API_KEY=.*/FV_ADMIN_API_KEY=ci$(openssl rand -hex 24)/" .env
+          # 4.1.0: validation is key-only; the smoke test validates with the trial validator key.
+          sed -i "s/^FV_VALIDATOR_API_KEY=.*/FV_VALIDATOR_API_KEY=civ$(openssl rand -hex 24)/" .env
       - name: Validate compose file
         run: docker compose config -q
       - name: Smoke test (build, start, validate, graceful stop)
