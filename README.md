@@ -522,7 +522,8 @@ allocated by the request's work: the heap is shared, so resident memory can't be
   appender (`UsageConsole`, just the JSON), so it can be routed to a file without touching the application log;
 - `db`: rows in `fhir_validator_schema.validation_usage`, written in batches from a bounded queue
   (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`). A full queue or a failed write drops records and
-  counts them (`fv_usage_dropped_total`); a validation never waits for usage;
+  counts them (`fv_usage_dropped_total`); a validation never waits for usage. A graceful stop writes what is
+  buffered; a hard kill (SIGKILL) loses at most the last `FV_USAGE_FLUSH_MS` of records;
 - `log,db`: both.
 
 Nothing deletes old rows: schedule `DELETE FROM fhir_validator_schema.validation_usage WHERE created_at < now() -

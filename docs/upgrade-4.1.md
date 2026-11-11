@@ -81,6 +81,11 @@ bring it back; deploying a new value un-revokes it. Change the value on all inst
 restarts with the old value writes the old key back. An instance started without the variable leaves the stored key as
 it is.
 
+## Usage records on shutdown
+
+The `db` sink buffers records for up to `FV_USAGE_FLUSH_MS` (1 s by default). A graceful stop (SIGTERM) writes them
+before exiting; a hard kill (SIGKILL, `docker rm -f`, an OOM kill) loses at most that last interval.
+
 ## Usage retention
 
 With `FV_USAGE_SINK=db`, every authorised validation adds one row (about 250 bytes) to
