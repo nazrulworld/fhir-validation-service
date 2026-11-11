@@ -31,7 +31,7 @@ public interface UsageWriter {
         Set<String> sinks = config.usageSinks();
         List<UsageWriter> writers = new ArrayList<>();
         if (sinks.contains("log")) {
-            writers.add(new LogUsageWriter(metrics));
+            writers.add(new LogUsageWriter(vertx, metrics));
         }
         if (sinks.contains("db")) {
             writers.add(new DbUsageWriter(vertx, pool, metrics, config.usageQueueSize(), config.usageBatchSize(),

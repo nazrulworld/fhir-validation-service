@@ -26,9 +26,14 @@ class LogUsageWriterTest {
     @Test
     void oneJsonLineWithTheDocumentedKeys() {
         try (LogCapture logs = LogCapture.start()) {
-            LogUsageWriter w = new LogUsageWriter(null);
-            w.write(sample());
-            w.close().toCompletionStage().toCompletableFuture().join();
+            io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+            try {
+                LogUsageWriter w = new LogUsageWriter(vertx, null);
+                w.write(sample());
+                w.close().toCompletionStage().toCompletableFuture().join();
+            } finally {
+                vertx.close().toCompletionStage().toCompletableFuture().join();
+            }
             List<LogCapture.Captured> lines = logs.from(LogUsageWriter.LOGGER).stream().map(e -> e).distinct().toList();
             List<String> messages = lines.stream().map(LogCapture.Captured::message).distinct().toList();
             assertEquals(1, messages.size(), messages.toString());
@@ -71,7 +76,10 @@ class LogUsageWriterTest {
                 new nzi.fhir.validator.core.metrics.ServiceMetrics(nzi.fhir.validator.core.metrics.ServiceMetrics.newRegistry());
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         java.util.List<String> written = new java.util.concurrent.CopyOnWriteArrayList<>();
-        LogUsageWriter w = new LogUsageWriter(metrics, 10, line -> {
+        io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+        String[] drainThread = new String[1];
+        LogUsageWriter w = new LogUsageWriter(vertx, metrics, 10, line -> {
+            drainThread[0] = Thread.currentThread().getName();
             try {
                 release.await(); // a stuck stdout
             } catch (InterruptedException e) {
@@ -91,5 +99,8 @@ class LogUsageWriterTest {
         release.countDown();
         w.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
         assertEquals(30 - (int) dropped, written.size(), "everything not dropped is written by close()");
+        // Convergence T079 (constitution I): the lines are written on the named worker pool, not a raw thread.
+        assertTrue(drainThread[0].startsWith(LogUsageWriter.POOL), drainThread[0]);
+        vertx.close().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
     }
 }

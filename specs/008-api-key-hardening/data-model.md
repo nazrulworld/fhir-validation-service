@@ -107,7 +107,7 @@ trial constants). `Organisations.SYSTEM_ID` and `DEFAULT_SYSTEM_SHORT_NAME` dele
 |---|---|---|
 | `Caller` | `core/security` | + `UUID apiKeyId`, `String apiKeyName` (null for anonymous and `Caller.system`) |
 | `Cidr`, `CidrList` | `core/security` | network bytes + prefix; `contains(InetAddress)`; `CidrList.EMPTY` matches nothing |
-| `ClientAddress` | `core/security` | `resolve(peer, headers, trusted)` → `InetAddress`; root handler stores it under `ClientAddress.KEY` |
+| `ClientAddress` | `core/security` | `resolve(peer, values, header, trusted)` → the client `InetAddress`, or `null` when unknown (no untrusted hop, an unparseable entry or peer); only the header named by `FV_AUTH_FORWARDED_HEADER` is read; the root handler stores it under `ClientAddress.KEY` |
 | `UsageRecord` | `core/usage` | immutable record of every §3 column except `id` and `created_at`; `toJson()` for the log sink |
 | `UsageMeter` | `core/usage` | mutable per-request marks; `NONE` no-op instance; two-latch emit (research R10) |
 | `UsageWriter` | `core/usage` | `write(UsageRecord)`, `close(): Future<Void>` |

@@ -196,7 +196,8 @@ the current code.
     timer named `fv.validation.duration`.
   - Add two DistributionSummaries tagged `version` and `outcome`: `fv.validation.cpu` (base unit seconds) and
     `fv.validation.allocated` (base unit bytes).
-  - Add counters `fv.usage.dropped` (tag `reason` = `queue_full` | `write_failed`) and `fv.usage.written`.
+  - Add counters `fv.usage.dropped` (tag `reason` = `queue_full` | `write_failed` | `closed` | `unattributed` |
+    `log_full`) and `fv.usage.written`.
   - There are no key or organisation tags.
 - **Rationale**: a second duration timer would duplicate data and dashboards. Tag names follow the existing
   `version` convention rather than the outline's `fhir_version`.
@@ -207,9 +208,16 @@ the current code.
   - The interface is `UsageWriter { void write(UsageRecord); Future<Void> close(); }`. `FV_USAGE_SINK` takes a
     comma-separated set of `none`, `log` and `db`; anything else fails startup. `none` combined with others is an
     error.
-  - **`LogUsageWriter`**: Log4j2 logger `nzi.fhir.validator.usage`, one `JsonObject.encode()` line per record at
-    INFO. It is declared in `log4j2.xml` with `additivity="false"` and its own `AppenderRef` (Console by default),
-    so operators can point it at a file or a separate stream without touching the application log.
+  - **`LogUsageWriter`**: one `JsonObject.encode()` line per record at INFO on the Log4j2 logger
+    `nzi.fhir.validator.usage`, declared in `log4j2.xml` with `additivity="false"` and its own appender
+    (`UsageConsole`, `%msg%n`), so operators can point it at a file or a separate stream without touching the
+    application log.
+    - `write` (on the event loop) only offers the line to a bounded queue (8 192). When the queue is full, the line is
+      dropped and counted as `log_full`.
+    - One long-running task on the named worker pool `fv-usage-log` (size 1, constitution I) writes the queue to the
+      logger.
+    - `close()` stops accepting lines and completes once the waiting ones are written, or after 5 s, when the rest are
+      dropped and counted as `closed`.
   - **`DbUsageWriter`**:
     - An `ArrayBlockingQueue` (`FV_USAGE_QUEUE_SIZE`, 100 to 1 000 000, default 10 000). `write` calls `offer`,
       never `put`; on overflow it counts `queue_full`.
