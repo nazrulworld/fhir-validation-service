@@ -172,6 +172,18 @@ class UsageIT extends BaseTestContainer {
                 })));
     }
 
+    /** Code review regression: a request without a body records 0 bytes, never -1. */
+    @Test
+    void aRequestWithoutABodyRecordsZeroBytes(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, "db", null)
+                .compose(a -> validateRequest(AppHarness.VALIDATOR_AUTH).send())
+                .compose(r -> awaitRows(vertx, 1))
+                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
+                    assertEquals(0, rows.get(0).getInteger(14), "request_bytes");
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void aTimedOutValidationIsRecordedOnceWithItsCpuTime(Vertx vertx, VertxTestContext ctx) {
         start(vertx, "db", 1_000)

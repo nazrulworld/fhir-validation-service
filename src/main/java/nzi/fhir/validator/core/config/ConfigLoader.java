@@ -207,6 +207,13 @@ public final class ConfigLoader {
     }
 
     private static ApplicationConfig finish(JsonObject merged) {
+        // Spec 008: a config file (or JSON overrides) may still carry the removed setting; warn like the variable.
+        JsonObject auth = merged.getJsonObject("auth");
+        if (auth != null && auth.containsKey("anonymousValidate")) {
+            auth.remove("anonymousValidate");
+            logger.warn("auth.anonymousValidate (configuration file) is deprecated and ignored: {}",
+                    DEPRECATED.get("FV_AUTH_ANONYMOUS_VALIDATE"));
+        }
         applyComputedDefaults(merged);
         validate(merged);
         return new ApplicationConfig(merged);

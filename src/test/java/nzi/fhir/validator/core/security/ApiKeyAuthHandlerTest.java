@@ -215,4 +215,29 @@ class ApiKeyAuthHandlerTest {
             ctx.completeNow();
         })));
     }
+
+    /** Code review regression: before the migrations ran (missing column), key lookups answer 503, not 500. */
+    @Test
+    void aSchemaThatIsNotMigratedYetIsNotReady(Vertx vertx, VertxTestContext ctx) {
+        String key = "early-key-0123456789abcdefghijklmnopqrst";
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        when(repository.findActive(key)).thenReturn(Future.failedFuture(
+                new io.vertx.pgclient.PgException("column k.expires_at does not exist", "ERROR", "42703", null)));
+        ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
+        Router router = Router.router(vertx);
+        router.route().handler(new RequestIdHandler());
+        router.route().handler(auth.rootHandler());
+        router.route().handler(rc -> rc.response().end("ok"));
+        ErrorResponder.install(router);
+
+        vertx.createHttpServer().requestHandler(router).listen(0)
+                .compose(server -> WebClient.create(vertx).post(server.actualPort(), "localhost", "/R4/validate")
+                        .putHeader("Authorization", "Bearer " + key).send())
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(503, r.statusCode(), r.bodyAsString());
+                    assertNotNull(r.getHeader("Retry-After"));
+                    assertFalse(r.bodyAsString().contains("expires_at"), "no internal detail");
+                    ctx.completeNow();
+                })));
+    }
 }

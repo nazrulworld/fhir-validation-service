@@ -131,6 +131,19 @@ class ConfigLoaderTest {
         }
     }
 
+    /** Code review regression: the removed setting in a configuration file is ignored with a warning too. */
+    @Test
+    void anonymousValidateInAConfigFileIsIgnoredWithAWarning(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("auth", new JsonObject().put("anonymousValidate", true)).encode());
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString()));
+            assertNull(cfg.json().getJsonObject("auth").getValue("anonymousValidate"));
+            assertTrue(logs.from(ConfigLoader.class.getName()).stream().anyMatch(e -> e.level() == org.apache.logging.log4j.Level.WARN
+                    && e.message().contains("auth.anonymousValidate") && e.message().contains("ignored")));
+        }
+    }
+
     @Test
     void retiredOnDemandSettingsWarnAndAreIgnored() {
         // Spec 007 FR-025: the on-demand settings are gone; a deployment that still sets them starts with one WARN per

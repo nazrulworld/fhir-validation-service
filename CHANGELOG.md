@@ -18,12 +18,13 @@ stop every 4.0 instance first.
 - **Validation needs a key.** `POST /{version}/validate` and the package reads (`/igs/{name}/{version}/dependencies`,
   `/conformance`) answer **401** without a VALIDATE or ADMIN key. `openapi.yaml` now declares `security: apiKey` on
   every keyed operation.
-- **`FV_AUTH_ANONYMOUS_VALIDATE` is removed**; set, it logs a deprecation warning and is ignored.
+- **`FV_AUTH_ANONYMOUS_VALIDATE` is removed** (also `auth.anonymousValidate` in `FV_CONFIG_FILE`); set, it logs a
+  deprecation warning and is ignored.
 - **The system organisation's id changes** to `00000000-0000-0000-0000-100000000001` (V11, with every owner reference
   and column default). 4.0 instances must not run against the upgraded database.
 - **The bootstrap key is renamed** to `system administrator` with the fixed id `00000000-0000-0000-0000-200000000001`.
   `system administrator` and `trial validator` are reserved names for `fv-admin key create`. They can be revoked by
-  name; an instance that still sets the variable installs the key again at its next start.
+  name, and stay revoked until their configured value changes.
 
 ### Added
 
@@ -42,7 +43,7 @@ stop every 4.0 instance first.
   with key, organisation, outcome, issue counts, phase timings, CPU time and allocated bytes. The `log` sink writes one
   JSON line on the `nzi.fhir.validator.usage` logger; the `db` sink batches into `validation_usage` through a bounded
   queue (`FV_USAGE_QUEUE_SIZE`, `FV_USAGE_BATCH_SIZE`, `FV_USAGE_FLUSH_MS`) and never blocks a request. Retention is
-  the operator's job. `fv-admin usage summary --org|--key [--since]` aggregates the table.
+  the operator's job. `fv-admin usage summary --org|--key [--since]` aggregates the table by request start time.
 - **Metrics**: `fv_validation_cpu_seconds` and `fv_validation_allocated_bytes` (by version and outcome, whatever the
   sink), `fv_usage_written_total`, `fv_usage_dropped_total{reason}` (`queue_full`, `write_failed`, `closed`, `unattributed`), `fv_usage_queue_size`. No metric is labelled by
   key or organisation.

@@ -75,6 +75,15 @@ class CidrTest {
         assertNotNull(Cidr.parseAddress("fe80::1"));
     }
 
+    /** Code review regression: a parsed network can't be changed through its accessor. */
+    @Test
+    void theNetworkCannotBeChangedFromOutside() throws Exception {
+        Cidr ten = Cidr.parse("10.0.0.0/8");
+        ten.network()[0] = 0;
+        assertTrue(ten.contains(ip("10.1.2.3")));
+        assertFalse(ten.contains(ip("0.1.2.3")));
+    }
+
     @Test
     void lists() throws Exception {
         CidrList list = CidrList.parse(" 10.0.0.0/8 , 192.168.0.0/16,,");

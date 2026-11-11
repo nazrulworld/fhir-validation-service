@@ -255,9 +255,12 @@ class AdminCliIT extends BaseTestContainer {
                     + "(now(), 'b', " + key + ", 'acme-ci', " + org + ", 0, 1, 'valid', 200, 20, 0, 0, 18, 2000, 200), "
                     + "(now(), 'c', " + key + ", 'acme-ci', " + org + ", 0, 1, 'invalid', 200, 30, 0, 0, 28, -1, -1), "
                     + "(now(), 'd', NULL, NULL, '" + nzi.fhir.validator.core.Constant.SYSTEM_ORG_ID + "', 0, 1, 'valid', 200, 99, 0, 0, 90, 5, 5)");
+            // Code review: --since filters on when the request started, not when its batch was inserted.
+            st.execute(insert + "('2026-01-01T23:59:59.9Z', 'e', " + key + ", 'acme-ci', " + org
+                    + ", 0, 1, 'valid', 200, 1000, 0, 0, 999, 7, 7)");
         }
         for (String[] scope : new String[][]{{"--org", "acme"}, {"--key", "acme-ci"}}) {
-            Run r = cli("usage", "summary", scope[0], scope[1], "--since", "2000-01-01T00:00:00Z");
+            Run r = cli("usage", "summary", scope[0], scope[1], "--since", "2026-01-02T00:00:00Z");
             assertExit(r, 0);
             JsonObject s = r.json();
             assertEquals(3, s.getLong("validations"), r.out());

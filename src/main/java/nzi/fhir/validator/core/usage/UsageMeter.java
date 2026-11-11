@@ -107,6 +107,8 @@ public class UsageMeter {
     private final int requestBytes;
     private final Consumer<UsageRecord> sink;
     private final AtomicInteger pending = new AtomicInteger(2);
+    private final java.util.concurrent.atomic.AtomicBoolean workSignalled = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean responseSignalled = new java.util.concurrent.atomic.AtomicBoolean();
 
     private volatile String contentType;
     private volatile int profiles;
@@ -210,14 +212,18 @@ public class UsageMeter {
         return allocatedBytes;
     }
 
-    /** The validation service's future completed. */
+    /** The validation service's future completed. Only the first work signal counts. */
     public void workDone() {
-        countDown();
+        if (workSignalled.compareAndSet(false, true)) {
+            countDown();
+        }
     }
 
-    /** The endpoint answered before calling the validation service. */
+    /** The endpoint answered (or failed) before the validation service's future existed. Only the first work signal counts. */
     public void workNeverStarted() {
-        countDown();
+        if (workSignalled.compareAndSet(false, true)) {
+            countDown();
+        }
     }
 
     /**
@@ -227,7 +233,9 @@ public class UsageMeter {
         this.status = status;
         this.reset = reset;
         this.timedOut = timedOut;
-        countDown();
+        if (responseSignalled.compareAndSet(false, true)) {
+            countDown();
+        }
     }
 
     private void countDown() {

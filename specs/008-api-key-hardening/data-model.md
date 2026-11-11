@@ -29,11 +29,12 @@ Schema: `fhir_validator_schema`. Migrations: `V10` (key expiry and audit), `V11`
 ```
 created ──(expires_at passes)──▶ expired   (refused 401; row kept)
 created ──(revoke)─────────────▶ revoked   (refused 401)
-expired/revoked ──(well-known upsert at startup)──▶ active   (seeded keys only: revoked_at = NULL, expires_at reset)
+expired ──(well-known upsert at startup)──▶ active   (seeded keys only: expires_at reset)
+revoked ──(well-known upsert with a NEW value)──▶ active   (seeded keys only; the same value keeps it revoked)
 ```
 
-Seeded keys are revoked by name like any other key; an instance that still sets the variable re-installs the key at
-its next start. An instance without the variable never changes the stored key.
+Seeded keys are revoked by name like any other key and stay revoked until their configured value changes. An instance
+without the variable never changes the stored key.
 
 **Java**:
 - `KeyInfo(UUID id, String name, Role role, UUID ownerId, String ownerShortName, boolean ownerActive, Instant expiresAt)`.

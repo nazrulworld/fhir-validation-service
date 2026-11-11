@@ -133,21 +133,36 @@ public class ApiKeyRepository {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
         }
-        return pool.preparedQuery("INSERT INTO " + TABLE + " (id, name, key_hash, role, owner, expires_at) "
-                        + "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
-                        + "key_hash = EXCLUDED.key_hash, role = EXCLUDED.role, owner = EXCLUDED.owner, "
-                        + "expires_at = EXCLUDED.expires_at, revoked_at = NULL")
-                .execute(Tuple.of(id, name, Buffer.buffer(hash(key)), role.name(), owner,
-                        expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC)))
+        Tuple params = Tuple.of(id, name, Buffer.buffer(hash(key)), role.name(), owner,
+                expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC));
+        // A revoked key stays revoked while the configured value is unchanged (code review): revoking a leaked seeded
+        // key must survive restarts of instances that still have the old value. A new value un-revokes it (rotation).
+        String sql = "INSERT INTO " + TABLE + " AS k (id, name, key_hash, role, owner, expires_at) "
+                + "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
+                + "role = EXCLUDED.role, owner = EXCLUDED.owner, expires_at = EXCLUDED.expires_at, "
+                + "revoked_at = CASE WHEN k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
+                + "key_hash = EXCLUDED.key_hash";
+        return pool.preparedQuery(sql).execute(params)
+                // Instances starting at once on a database without the row: a concurrent insert can surface as a unique
+                // violation on name or key_hash instead of the DO UPDATE path. The row exists now, so one retry updates.
+                .recover(err -> isUniqueViolation(err) ? pool.preparedQuery(sql).execute(params) : Future.failedFuture(err))
                 .<Void>mapEmpty()
                 .recover(err -> {
                     if (err instanceof io.vertx.pgclient.PgException pg && "23505".equals(pg.getSqlState())) {
+                        boolean value = "api_keys_key_hash_key".equals(pg.getConstraint());
                         return Future.failedFuture(new nzi.fhir.validator.core.StartupException("Cannot install the '" + name
-                                + "' key: another key already uses its " + ("api_keys_key_hash_key".equals(pg.getConstraint())
-                                ? "value" : "name") + " (" + pg.getConstraint() + "); rename or revoke that key, then restart"));
+                                + "' key: another key (revoked keys count too) already uses its " + (value ? "value" : "name")
+                                + " (" + pg.getConstraint() + "). " + (value
+                                ? "Configure a different value for this key"
+                                : "Rename that key in the database (UPDATE fhir_validator_schema.api_keys SET name = '<new name>' "
+                                + "WHERE name = '" + name + "')") + ", then restart"));
                     }
                     return Future.failedFuture(err);
                 });
+    }
+
+    private static boolean isUniqueViolation(Throwable err) {
+        return err instanceof io.vertx.pgclient.PgException pg && "23505".equals(pg.getSqlState());
     }
 
     /**

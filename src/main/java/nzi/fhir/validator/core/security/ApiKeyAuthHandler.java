@@ -126,7 +126,9 @@ public class ApiKeyAuthHandler {
         }
         lookup(key).onComplete(ar -> {
             if (ar.failed()) {
-                ErrorResponder.fail(ctx, ar.cause());
+                ErrorResponder.fail(ctx, schemaNotReady(ar.cause())
+                        ? new ProblemException(503, "not-ready", "The service is still starting; retry shortly")
+                        .withHeader("Retry-After", "5") : ar.cause());
                 return;
             }
             Optional<KeyInfo> info = ar.result();
@@ -176,6 +178,15 @@ public class ApiKeyAuthHandler {
                 }
             }
         });
+    }
+
+    /**
+     * HTTP listens while warm-up still migrates the database (code review): a missing column or table (SQLState 42703,
+     * 42P01) means the schema isn't there yet, which is "not ready" (503), not an internal error.
+     */
+    static boolean schemaNotReady(Throwable err) {
+        return err instanceof io.vertx.pgclient.PgException pg
+                && ("42703".equals(pg.getSqlState()) || "42P01".equals(pg.getSqlState()));
     }
 
     private static void unauthorized(RoutingContext ctx) {

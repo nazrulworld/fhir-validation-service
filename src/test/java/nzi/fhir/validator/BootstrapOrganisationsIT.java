@@ -214,6 +214,9 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
         assertTrue(failure.getMessage().contains("api_keys_key_hash_key") || failure.getMessage().contains("api_keys_name_key"),
                 failure.getMessage());
         assertFalse(failure.getMessage().contains(AppHarness.ADMIN_KEY), "the secret is never in the message");
+        // Code review: revoking frees neither the name nor the value, so the advice must not suggest it.
+        assertFalse(failure.getMessage().contains("revoke that key"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("then restart"), failure.getMessage());
     }
 
     @Test
@@ -231,11 +234,11 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
 
     /**
      * Code review regression: an instance without the variables (e.g. a worker that isn't given FV_ADMIN_API_KEY) must
-     * not revoke the keys other instances rely on. Seeded keys are revoked by name; an instance that still sets the
-     * variable installs the key again at its next start.
+     * not revoke the keys other instances rely on. Seeded keys are revoked by name, and stay revoked until the configured
+     * value changes.
      */
     @Test
-    void anUnsetVariableNeverRevokesAndRevokedKeysComeBackWithTheVariable() throws Exception {
+    void anUnsetVariableNeverRevokesAndARevocationLastsUntilTheValueChanges() throws Exception {
         PgConnectOptions db = freshDatabase();
         JsonObject config = config(db);
         join(startReady(config).stop());
@@ -258,9 +261,19 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
         AppHarness again = startReady(config);
         try {
             join(again.awaitReady(90_000));
-            assertEquals(200, validate(again, AppHarness.VALIDATOR_AUTH).statusCode(), "an instance with the variable re-installs it");
+            assertEquals(401, validate(again, AppHarness.VALIDATOR_AUTH).statusCode(),
+                    "code review: an instance with the same (leaked) value doesn't bring the revoked key back");
         } finally {
             join(again.stop());
+        }
+        String rotated = "rotated-validator-key-0123456789abcdefghij";
+        config.getJsonObject("auth").put("validatorKey", rotated);
+        AppHarness rotatedApp = startReady(config);
+        try {
+            join(rotatedApp.awaitReady(90_000));
+            assertEquals(200, validate(rotatedApp, "Bearer " + rotated).statusCode(), "a new value un-revokes it");
+        } finally {
+            join(rotatedApp.stop());
         }
     }
 

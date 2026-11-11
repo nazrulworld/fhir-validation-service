@@ -1,6 +1,5 @@
 package nzi.fhir.validator.core.security;
 
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -62,6 +61,12 @@ public record Cidr(byte[] network, int prefix) {
         }
     }
 
+    /** A copy: the network can't be changed through it (code review). */
+    @Override
+    public byte[] network() {
+        return network.clone();
+    }
+
     public boolean contains(InetAddress address) {
         if (address == null) {
             return false;
@@ -119,7 +124,7 @@ public record Cidr(byte[] network, int prefix) {
         if (a instanceof Inet6Address && isMappedV4(b)) {
             return Arrays.copyOfRange(b, 12, 16);
         }
-        return a instanceof Inet4Address || b.length == 4 ? b : b.clone();
+        return b; // getAddress() already returns a fresh array
     }
 
     private static boolean isMappedV4(byte[] b) {

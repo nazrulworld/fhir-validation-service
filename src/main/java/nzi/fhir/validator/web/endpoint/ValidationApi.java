@@ -64,7 +64,7 @@ public class ValidationApi {
         java.net.InetAddress client = nzi.fhir.validator.core.security.ClientAddress.of(ctx);
         nzi.fhir.validator.core.usage.UsageMeter meter = nzi.fhir.validator.core.usage.UsageMeter.start(
                 nzi.fhir.validator.web.RequestIdHandler.requestId(ctx), caller, client == null ? null : client.getHostAddress(),
-                ctx.pathParam("version"), ctx.body() == null ? 0 : ctx.body().length(), sink);
+                ctx.pathParam("version"), Math.max(0, ctx.body().length()), sink);
         ctx.addEndHandler(ar -> meter.responseEnded(ctx.response().getStatusCode(), ar.failed(),
                 nzi.fhir.validator.web.RequestTimeoutHandler.timedOut(ctx)));
         ctx.put(METER_KEY, meter);
@@ -92,6 +92,18 @@ public class ValidationApi {
 
     private void handleDoValidation(RoutingContext ctx) {
         nzi.fhir.validator.core.usage.UsageMeter meter = startMeter(ctx);
+        try {
+            doValidation(ctx, meter);
+        } catch (RuntimeException e) {
+            // Code review: an unexpected exception must not leave the meter open (the failure handler skips metering
+            // because the meter exists). The record is still written when the error response ends; the work-done
+            // signal is idempotent, so a later one changes nothing.
+            meter.workNeverStarted();
+            throw e;
+        }
+    }
+
+    private void doValidation(RoutingContext ctx, nzi.fhir.validator.core.usage.UsageMeter meter) {
         SupportedFhirVersion version;
         try {
             version = version(ctx);

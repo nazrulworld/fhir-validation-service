@@ -26,7 +26,8 @@ the constitution allows when the break is documented (Principle IV, 1.3.0). Read
    (32–128 characters of `[A-Za-z0-9_-]`, different from `FV_ADMIN_API_KEY`). That key is installed at every start as
    `trial validator`, a VALIDATE key of the new **trial** organisation: it may use shareable content only, like
    anonymous callers could before.
-3. **Remove `FV_AUTH_ANONYMOUS_VALIDATE`** from your environment.
+3. **Remove `FV_AUTH_ANONYMOUS_VALIDATE`** from your environment, and `auth.anonymousValidate` from any
+   `FV_CONFIG_FILE` (both are ignored with a warning).
 4. **Stop every 4.0 instance.**
 5. **Start 4.1.0.** Migrations V10 to V12 run automatically, then the service makes sure both well-known organisations
    exist and installs the configured keys.
@@ -51,10 +52,12 @@ The service stops (exit 1) instead of running half-configured when:
 - **another organisation is already called `trial`**: `An organisation named 'trial' already exists with another id;
   rename it before starting 4.1.0`. Rename it (`fv-admin org update --name-short trial --rename <other>`) and start
   again.
-- **the system administrator key conflicts**: `Cannot install the 'system administrator' key: another key already uses
-  its name (api_keys_name_key)` or `... its value (api_keys_key_hash_key)`. V11 skips the rename when a key called
-  `system administrator` already exists, so the old `bootstrap` row and that key are both still there. Rename or revoke
-  the conflicting key (`fv-admin key revoke --name <name>`), then restart.
+- **a seeded key conflicts**: `Cannot install the 'system administrator' key: another key (revoked keys count too)
+  already uses its name (api_keys_name_key)` or `... its value (api_keys_key_hash_key)`. Revoking doesn't help: revoked
+  keys still hold their name and value. For a name conflict, rename the other key in the database
+  (`UPDATE fhir_validator_schema.api_keys SET name = '<new name>' WHERE name = 'system administrator';`); for a value
+  conflict, configure a different value. Then restart. (V11 skips the bootstrap rename when a key called
+  `system administrator` already exists, which leads to the name conflict.)
 - **`FV_VALIDATOR_API_KEY` is malformed or equals `FV_ADMIN_API_KEY`**: a configuration error names the variable.
 
 ## New settings (all optional)
@@ -72,9 +75,11 @@ The service stops (exit 1) instead of running half-configured when:
 
 `system administrator` and `trial validator` are installed from configuration at every start, with an expiry of
 2099-12-30T23:59:59Z. They are rotated by changing `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restarting.
-Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`; an instance that still sets
-the variable installs the key again at its next start, so also remove or change the variable everywhere. An instance
-started without the variable leaves the stored key as it is (instances may be configured differently).
+Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`. A revoked seeded key
+stays revoked while its configured value is unchanged, so restarting an instance with the old (leaked) value doesn't
+bring it back; deploying a new value un-revokes it. Change the value on all instances together: an instance that
+restarts with the old value writes the old key back. An instance started without the variable leaves the stored key as
+it is.
 
 ## Usage retention
 
