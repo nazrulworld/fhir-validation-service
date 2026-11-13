@@ -29,17 +29,6 @@ public final class ServedVersions {
         this.configured = configured;
     }
 
-    /** Exactly {@code versions}, which must all be versions this release serves. */
-    public static ServedVersions of(SupportedFhirVersion... versions) {
-        EnumSet<SupportedFhirVersion> set = EnumSet.noneOf(SupportedFhirVersion.class);
-        for (SupportedFhirVersion v : versions) {
-            if (!v.isEnabled()) {
-                throw new IllegalArgumentException(v + " is not served by this release");
-            }
-            set.add(v);
-        }
-        return set.isEmpty() ? ALL : new ServedVersions(set, true);
-    }
 
     /**
      * Parses the setting: names separated by commas, trimmed, in any case, duplicates ignored. Nothing left means

@@ -185,6 +185,9 @@ public final class Bootstrap {
                                     .mapEmpty())
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
+                            // Spec 009 FR-015: the total, counted by the sync's start, at every start (not only changes).
+                            .onSuccess(v -> logger().info("{} validator context(s) inactive (FHIR version not enabled)",
+                                    services.healthService().inactiveCount()))
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
                             .onFailure(err -> logger().error("Validator initialisation failed", err));
                     return new Bootstrap(vertx, services, id, warmUp);

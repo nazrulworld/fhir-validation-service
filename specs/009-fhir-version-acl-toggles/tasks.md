@@ -595,3 +595,11 @@ Each checkpoint leaves `./mvnw verify` green and the service releasable with the
 - Never log a key value (env or generated). `NoSecretsInLogsTest` (T039) guards this.
 - Do not edit applied migrations V1–V13.
 - Commit after each task or logical group. Do not commit or push unless asked.
+
+---
+
+## Phase 10: Convergence
+
+- [X] T058 Log the number of inactive validator contexts at every start, not only the contexts that changed: after `services.configSync().start()` in `main/Bootstrap.java`, log at INFO `<n> validator context(s) inactive (FHIR version not enabled)`, taking the count the configuration sync reports (`ConfigSync.setInactiveCountListener` / `HealthService.inactiveCount()`), and add the assertion to `test/core/validator/ContextActivationIT.java` (the restart with an unchanged setting) per FR-015 (partial)
+- [X] T059 Remove the unused `ServedVersions.of(SupportedFhirVersion...)` factory from `main/core/enums/ServedVersions.java` (no production or test caller), or cover it with a test if it is kept on purpose per plan: ServedVersions decision (unrequested)
+- [X] T060 Remove the unused `ContextActivation.Result.changed()` from `main/core/validator/ContextActivation.java` (no caller) per plan: startup reconcile decision (unrequested)

@@ -55,9 +55,6 @@ public final class ContextActivation {
 
     /** What one reconciliation changed. */
     public record Result(List<Changed> deactivated, List<Changed> reactivated) {
-        public boolean changed() {
-            return !deactivated.isEmpty() || !reactivated.isEmpty();
-        }
     }
 
     private ContextActivation() {

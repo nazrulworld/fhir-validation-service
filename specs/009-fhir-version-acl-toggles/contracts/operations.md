@@ -38,6 +38,7 @@ Key values never appear in any of these lines (SC-008).
 | Served versions change confirmed | WARN | `Served FHIR versions change from R4,R5 to R5 (FV_FHIR_VERSIONS_CHANGE_CONFIRMED)` |
 | Version confirmation set, versions unchanged | WARN | `FV_FHIR_VERSIONS_CHANGE_CONFIRMED is set but the served versions are unchanged (R4); remove it so an accidental change is refused` |
 | Disabled mode, a fixed key is revoked | WARN | `The 'trial validator' key is revoked: requests that run as it are refused with 403 while access control is disabled, also after restarts` |
+| Every start, after the contexts are loaded | INFO | `2 validator context(s) inactive (FHIR version not enabled)` (also `0`) |
 | Each deactivated context | WARN | `Validator context deactivated: R4 hl7.fhir.us.core#6.1.0 (owner acme): FHIR version R4 is not enabled` |
 | After deactivations | WARN | `3 validator context(s) deactivated because their FHIR version is not enabled` |
 | Each reactivated context | INFO | `Validator context reactivated: R4 hl7.fhir.us.core#6.1.0 (owner acme)` |

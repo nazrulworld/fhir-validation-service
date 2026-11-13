@@ -183,7 +183,13 @@ class ContextActivationIT extends BaseTestContainer {
                 })
                 .compose(a -> {
                     try (LogCapture l = logs[0]) {
-                        ctx.verify(() -> assertEquals(List.of(), messages(l, Level.WARN)));
+                        ctx.verify(() -> {
+                            assertEquals(List.of(), messages(l, Level.WARN));
+                            // FR-015 (T058): the total is logged at every start, also when nothing changed.
+                            assertTrue(l.from(nzi.fhir.validator.Bootstrap.class.getName()).stream()
+                                    .anyMatch(e -> e.message().equals("1 validator context(s) inactive (FHIR version not enabled)")),
+                                    "the startup log reports the inactive contexts");
+                        });
                     }
                     return stop(a);
                 })
