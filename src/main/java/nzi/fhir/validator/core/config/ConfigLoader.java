@@ -82,6 +82,8 @@ public final class ConfigLoader {
             new Entry("FV_ACL_MODE_CHANGE_CONFIRMED", "auth.aclModeChangeConfirmed", Kind.FLAG, NO_MIN, NO_MAX),
             // Spec 009: the FHIR versions this instance serves (comma-separated; unset = all supported).
             new Entry("FV_ENABLED_FHIR_VERSIONS", "fhir.enabledVersions", Kind.STRING, NO_MIN, NO_MAX),
+            // Spec 009 FR-033: a start whose served versions differ from the stored ones must be confirmed.
+            new Entry("FV_FHIR_VERSIONS_CHANGE_CONFIRMED", "fhir.versionsChangeConfirmed", Kind.FLAG, NO_MIN, NO_MAX),
             // Spec 008 (FR-014, FR-016): usage accounting.
             new Entry("FV_USAGE_SINK", "usage.sink", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_USAGE_QUEUE_SIZE", "usage.queueSize", Kind.INT, 100, 1_000_000),
@@ -221,6 +223,7 @@ public final class ConfigLoader {
                     DEPRECATED.get("FV_AUTH_ANONYMOUS_VALIDATE"));
         }
         normaliseFlags(merged);
+        normaliseEnabledVersions(merged);
         applyComputedDefaults(merged);
         validate(merged);
         return new ApplicationConfig(merged);
@@ -292,6 +295,32 @@ public final class ConfigLoader {
                 set(merged, e.path(), flag(e.env(), String.valueOf(v)));
             }
         }
+    }
+
+    /**
+     * A config file may give {@code fhir.enabledVersions} as a JSON array ({@code ["R4","R5"]}) or a string; anything
+     * else is a configuration error naming the variable (code review of PR #72).
+     */
+    private static void normaliseEnabledVersions(JsonObject merged) {
+        JsonObject fhir = merged.getJsonObject("fhir");
+        Object v = fhir == null ? null : fhir.getValue("enabledVersions");
+        if (v == null || v instanceof String) {
+            return;
+        }
+        if (v instanceof io.vertx.core.json.JsonArray array) {
+            List<String> names = new java.util.ArrayList<>();
+            for (Object item : array) {
+                if (!(item instanceof String name)) {
+                    throw new IllegalStateException("Invalid FV_ENABLED_FHIR_VERSIONS: fhir.enabledVersions must list "
+                            + "version names (strings)");
+                }
+                names.add(name);
+            }
+            fhir.put("enabledVersions", String.join(",", names));
+            return;
+        }
+        throw new IllegalStateException("Invalid FV_ENABLED_FHIR_VERSIONS: fhir.enabledVersions must be a comma-separated "
+                + "string or a list of version names");
     }
 
     private static void applyComputedDefaults(JsonObject c) {

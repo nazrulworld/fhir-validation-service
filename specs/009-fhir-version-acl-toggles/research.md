@@ -162,8 +162,10 @@ Each one gives the decision, the reason and the alternatives considered.
   (`ApiKeyRepository.findById`, new, returning `KeyInfo` with owner active and revoked or expired state). It caches
   them for `FV_AUTH_CACHE_TTL_MS`, like key lookups. A deactivated organisation answers 403, as today. A fixed key
   that an operator revoked during the run answers 403 "This operation's fixed caller key is revoked; restart to
-  re-create it". The next disabled-mode start re-randomises the key, which un-revokes it, as `upsertWellKnown` does
-  for any new value.
+  re-create it". Code review of PR #72: the next disabled-mode start re-randomises the value but keeps the revocation
+  (`upsertWellKnown(..., keepRevocation)`), logging a WARN, so an operator can stop anonymous validation by revoking
+  the trial validator. Switching back to enforced access control with a new configured value un-revokes it (a
+  rotation, as in 4.1).
 - **Alternatives**: building `Caller` objects from constants was rejected because it would skip the organisation
   active check and the short name used in logs.
 

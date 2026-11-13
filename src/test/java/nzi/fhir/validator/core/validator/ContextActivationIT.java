@@ -44,10 +44,13 @@ class ContextActivationIT extends BaseTestContainer {
     private static final String R5_PKG = "act.r5#1.0.0";
 
     private final List<AppHarness> apps = new ArrayList<>();
+    /** The served set of the previous start in this test: a different one is a confirmed change (FR-033). */
+    private String lastVersions;
 
     @BeforeEach
     void setUp() {
         resetSchema();
+        lastVersions = null;
     }
 
     @AfterEach
@@ -69,7 +72,12 @@ class ContextActivationIT extends BaseTestContainer {
     }
 
     private Future<AppHarness> start(Vertx vertx, String enabledVersions) {
-        return AppHarness.start(vertx, config(enabledVersions)).compose(a -> {
+        JsonObject config = config(enabledVersions);
+        if (lastVersions != null && !lastVersions.equals(enabledVersions)) {
+            config.getJsonObject("fhir").put("versionsChangeConfirmed", true);
+        }
+        lastVersions = enabledVersions;
+        return AppHarness.start(vertx, config).compose(a -> {
             apps.add(a);
             return a.awaitReady(120_000).map(a);
         });
@@ -151,7 +159,8 @@ class ContextActivationIT extends BaseTestContainer {
                         ctx.verify(() -> {
                             assertEquals(List.of("R4|" + R4_PKG + "|false|fhir-version-disabled", "R5|" + R5_PKG + "|true|"),
                                     cf.<List<String>>resultAt(0));
-                            assertEquals(List.of("Validator context deactivated: R4 " + R4_PKG + " (owner system): FHIR version "
+                            assertEquals(List.of("Served FHIR versions change from R4,R5 to R5 (FV_FHIR_VERSIONS_CHANGE_CONFIRMED)",
+                                    "Validator context deactivated: R4 " + R4_PKG + " (owner system): FHIR version "
                                             + "R4 is not enabled (FV_ENABLED_FHIR_VERSIONS)",
                                     "1 validator context(s) deactivated because their FHIR version is not enabled"),
                                     messages(l, Level.WARN));
@@ -210,7 +219,7 @@ class ContextActivationIT extends BaseTestContainer {
                                     + "RAISE EXCEPTION 'boom'; END; $$ LANGUAGE plpgsql").execute()
                             .compose(v -> pool.query("CREATE TRIGGER t_fail BEFORE UPDATE ON fhir_validator_schema.fhir_validator_logs "
                                     + "FOR EACH ROW EXECUTE FUNCTION fhir_validator_schema.t_fail()").execute())
-                            .compose(v -> ContextActivation.reconcile(pool, ServedVersions.parse("R5")).transform(ar -> {
+                            .compose(v -> ContextActivation.reconcile(pool, ServedVersions.parse("R5"), true).transform(ar -> {
                                 ctx.verify(() -> {
                                     assertTrue(ar.failed());
                                     assertInstanceOf(StartupException.class, ar.cause());
@@ -334,5 +343,65 @@ class ContextActivationIT extends BaseTestContainer {
                     assertFalse(r.bodyAsString().contains("act.r4"), "the private context is not named");
                     ctx.completeNow();
                 })));
+    }
+
+    /** FR-033: a start whose served versions differ from the stored ones is refused unless confirmed; nothing changes. */
+    @Test
+    void anUnconfirmedChangeOfTheServedVersionsIsRefused(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, "R4,R5")
+                .compose(a -> includeBoth(a).map(a))
+                .compose(this::stop)
+                .compose(v -> AppHarness.start(vertx, config("R5")))
+                .compose(a -> {
+                    apps.add(a);
+                    return a.bootstrap().warmUp().transform(ar -> {
+                        ctx.verify(() -> {
+                            assertTrue(ar.failed());
+                            assertInstanceOf(StartupException.class, ar.cause());
+                            assertEquals("FHIR version change refused: the stored served versions are R4,R5, this instance is "
+                                    + "configured R5 (FV_ENABLED_FHIR_VERSIONS). To change them, set "
+                                    + "FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true on the instances being changed (see "
+                                    + "docs/upgrade-4.2.md)", ar.cause().getMessage());
+                        });
+                        return rows(a.bootstrap().services().pool());
+                    });
+                })
+                .compose(r -> {
+                    ctx.verify(() -> assertEquals(List.of("R4|" + R4_PKG + "|true|", "R5|" + R5_PKG + "|true|"), r,
+                            "nothing was deactivated"));
+                    return apps.get(apps.size() - 1).bootstrap().services().pool()
+                            .query("SELECT value FROM fhir_validator_schema.service_settings WHERE name = 'fhir_versions'")
+                            .execute();
+                })
+                .onComplete(ctx.succeeding(rs -> ctx.verify(() -> {
+                    assertEquals("R4,R5", rs.iterator().next().getString(0), "the stored set is unchanged");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** FR-033: the confirmation left set while the served versions are unchanged is warned about. */
+    @Test
+    void confirmationWithUnchangedVersionsIsWarnedAbout(Vertx vertx, VertxTestContext ctx) {
+        LogCapture[] logs = new LogCapture[1];
+        start(vertx, "R4")
+                .compose(this::stop)
+                .compose(v -> {
+                    logs[0] = LogCapture.start();
+                    JsonObject config = config("R4");
+                    config.getJsonObject("fhir").put("versionsChangeConfirmed", true);
+                    return AppHarness.start(vertx, config);
+                })
+                .compose(a -> {
+                    apps.add(a);
+                    return a.bootstrap().warmUp();
+                })
+                .onComplete(ctx.succeeding(v -> {
+                    try (LogCapture l = logs[0]) {
+                        ctx.verify(() -> assertEquals(List.of("FV_FHIR_VERSIONS_CHANGE_CONFIRMED is set but the served "
+                                + "versions are unchanged (R4); remove it so an accidental change is refused"),
+                                messages(l, Level.WARN)));
+                    }
+                    ctx.completeNow();
+                }));
     }
 }

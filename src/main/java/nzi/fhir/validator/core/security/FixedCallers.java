@@ -49,7 +49,12 @@ public class FixedCallers {
         }
         return repository.findById(id).compose(info -> {
             if (ttlMs > 0) {
-                store.accept(new Cached(info, System.currentTimeMillis() + ttlMs));
+                // As for key lookups (spec 008 FR-006): a cached key never outlives its expiry.
+                long until = System.currentTimeMillis() + ttlMs;
+                if (info.isPresent() && info.get().expiresAt() != null) {
+                    until = Math.min(until, info.get().expiresAt().toEpochMilli());
+                }
+                store.accept(new Cached(info, until));
             }
             return result(info);
         });

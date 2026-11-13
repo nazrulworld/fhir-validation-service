@@ -43,6 +43,11 @@ change. Turning off a version with the new setting is an operator choice. The se
 
 ### Session 2026-11-13 (code review of PR #72)
 
+- Q: Should a start with different served versions be refused like an access-control mode change? → A: Yes (FR-033):
+  the served set is stored, and a different one needs `FV_FHIR_VERSIONS_CHANGE_CONFIRMED`.
+- Q: Should a fixed key revoked while access control is disabled stay revoked across restarts? → A: Yes. Its value
+  is still replaced at every start, but the revocation is kept and logged at WARN.
+
 - Q: Which fixed caller should the package reads run as while access control is off? → A: The `trial validator`
   (FR-018, US4-5). As the `system administrator` they disclosed every organisation's private packages to anonymous
   callers from any network, contrary to FR-031; the admin network allowlist doesn't cover them.
@@ -263,8 +268,10 @@ mode-change confirmation and both keys configured. Check that the keys work and 
 - **Reading a deactivated context**: inactive contexts are listed in the health report with their FHIR version, IG
   package, owner and reason (FR-015). Any request for their version gets the "version not served" response (FR-005).
   Administrators can still remove or change them (FR-032).
-- **Instances with different version settings in one fleet**: the setting must be the same on every instance (see
-  Assumptions). An instance that deactivates contexts tells the other instances, which unload them.
+- **Instances with different version settings in one fleet**: not supported, and prevented at startup (FR-033). An
+  instance whose served versions differ from the stored ones refuses to start unless
+  `FV_FHIR_VERSIONS_CHANGE_CONFIRMED` is set. During a confirmed change, an instance that deactivates contexts tells
+  the other instances, which unload them.
 - **Instances with different access-control modes in one fleet**: not supported, and prevented at startup. An
   instance whose mode differs from the stored one refuses to start unless the mode-change confirmation is set
   (FR-029). During a deliberate switch, instances still on the old mode keep running until restarted. Once one
@@ -382,6 +389,12 @@ mode-change confirmation and both keys configured. Check that the keys work and 
   without building the context, and the context MUST stay inactive. A later reactivation (FR-014) uses the stored
   settings. Including (adding) a context for a disabled version is still refused (FR-008), also when an inactive
   context for it already exists.
+- **FR-033**: The service MUST store the served FHIR versions of each start as a durable, shared setting. An instance
+  whose served versions differ from the stored ones MUST refuse to start, with an error naming both and the setting
+  `FV_FHIR_VERSIONS_CHANGE_CONFIRMED`, unless that setting is `true`, `1` or `yes`. A refused start changes nothing.
+  With the confirmation, the instance logs a WARN naming both, reconciles (FR-010, FR-014) and stores the new set. No
+  stored set yet needs no confirmation. The confirmation with unchanged versions logs a WARN asking for it to be
+  removed. This mirrors FR-029, so one instance with a stale setting can't switch contexts off for the whole fleet.
 
 - **Enabled FHIR version set**: the FHIR versions an instance serves, taken from configuration at startup. Empty means
   all supported versions.
@@ -421,8 +434,8 @@ mode-change confirmation and both keys configured. Check that the keys work and 
 ## Assumptions
 
 - Both settings are configured the same on every instance of a fleet. Mixed fleets are not supported. For the
-  access-control mode, a mismatch with the stored mode stops startup unless confirmed (FR-029). For the enabled
-  versions, the service does not detect a mismatch.
+  access-control mode and for the served versions, a mismatch with the stored value stops startup unless confirmed
+  (FR-029, FR-033).
 - "Registering a validator" in the input note means adding a validator context (the existing "include IG" operation).
   The FHIR version checked is the version named in that request, which the IG package must already declare (existing
   rule).

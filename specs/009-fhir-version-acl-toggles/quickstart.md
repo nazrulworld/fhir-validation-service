@@ -52,12 +52,12 @@ POST `/R4/validator` for the R4 IG → 200, and the row has `is_active = true`.
 ### C. Deactivate and reactivate (US3)
 
 1. Start with `FV_ENABLED_FHIR_VERSIONS=R4,R5` and include one R4 and one R5 context.
-2. Restart with `R5`. The log shows one `Validator context deactivated: R4 …` WARN and a count line.
+2. Restart with `R5` and `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true` (without it the start is refused, FR-033). The log shows one `Validator context deactivated: R4 …` WARN and a count line.
    `/health` → `fhirVersions.inactiveContexts.count = 1`. `psql` shows the R4 row with
    `is_active=false, inactive_reason='fhir-version-disabled'`.
 3. While R4 is disabled: `PATCH /R4/validator?ig=…` with `{"shareable": false}` → 200; the row changes and stays
    inactive (US3-6).
-4. Restart with `R4,R5`. You get the `reactivated` INFO, the R4 context is READY in `/health/readiness`, and
+4. Restart with `R4,R5` (confirmed again). You get the `reactivated` INFO, the R4 context is READY in `/health/readiness`, and
    `shareable=false` from step 3 is kept.
 
 ### D. Public mode (US4, US5)

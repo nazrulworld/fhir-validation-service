@@ -190,15 +190,33 @@ class BootstrapAclModeIT extends BaseTestContainer {
         }
     }
 
-    /** A revoked fixed key is un-revoked by the new random value (spec 008's rule for a new value). */
+    /**
+     * Code review of PR #72: a fixed key revoked while access control is disabled stays revoked across restarts (an
+     * operator may revoke the trial validator to stop anonymous validation); its value still changes.
+     */
     @Test
-    void aRevokedFixedKeyIsUnrevokedByADisabledStart() throws Exception {
+    void aRevokedFixedKeyStaysRevokedAcrossDisabledStarts() throws Exception {
         PgConnectOptions db = freshDatabase();
-        startAndStop(config(db, false, false));
-        execute(db, "UPDATE " + S + ".api_keys SET revoked_at = now() WHERE id = '" + Constant.SYS_ORG_ADMIN_API_KEY_ID + "'");
-        startAndStop(config(db, true, true));
-        assertEquals(List.of("true"), column(db, "SELECT (revoked_at IS NULL)::text FROM " + S + ".api_keys WHERE id = '"
-                + Constant.SYS_ORG_ADMIN_API_KEY_ID + "'"));
+        startAndStop(config(db, true, false));
+        execute(db, "UPDATE " + S + ".api_keys SET revoked_at = now() WHERE id = '" + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'");
+        String before = column(db, TRIAL_HASH).get(0);
+        AppHarness app;
+        try (LogCapture logs = LogCapture.start()) {
+            app = startReady(config(db, true, false));
+            assertTrue(messages(logs, Level.WARN).contains("The 'trial validator' key is revoked: requests that run as it are "
+                    + "refused with 403 while access control is disabled, also after restarts"), messages(logs, Level.WARN).toString());
+        }
+        try {
+            assertEquals(List.of("false"), column(db, "SELECT (revoked_at IS NULL)::text FROM " + S + ".api_keys WHERE id = '"
+                    + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'"), "still revoked");
+            assertNotEquals(before, column(db, TRIAL_HASH).get(0), "the value still changes");
+            HttpResponse<Buffer> refused = validate(app, null);
+            assertEquals(403, refused.statusCode(), refused.bodyAsString());
+            assertEquals(List.of("1"), column(db, "SELECT count(*)::text FROM " + S + ".revoked_key_hashes"),
+                    "the restart recorded no further revoked value");
+        } finally {
+            join(app.stop());
+        }
     }
 
     // ---- US6 ----
@@ -371,5 +389,21 @@ class BootstrapAclModeIT extends BaseTestContainer {
                 join(a.stop());
             }
         }
+    }
+
+    /** Code review of PR #72: any failure of the access-control step is fatal (exit 1), never a stuck, gated instance. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aFailingAccessControlStepIsFatal() {
+        io.vertx.sqlclient.Pool pool = org.mockito.Mockito.mock(io.vertx.sqlclient.Pool.class);
+        org.mockito.Mockito.doReturn(Future.failedFuture(new IllegalStateException("connection reset")))
+                .when(pool).withTransaction(org.mockito.ArgumentMatchers.any(java.util.function.Function.class));
+        nzi.fhir.validator.core.config.ApplicationConfig cfg = nzi.fhir.validator.core.config.ApplicationConfig.of(
+                AppHarness.baseConfig("localhost", 5432, "x", "u", "p"));
+        Future<?> result = AclModeStartup.run(pool, new ApiKeyRepository(pool), cfg,
+                new nzi.fhir.validator.core.security.ApiKeyAuthHandler(new ApiKeyRepository(pool), 1000));
+        assertTrue(result.failed());
+        assertInstanceOf(StartupException.class, result.cause());
+        assertEquals("the access-control startup step failed: connection reset", result.cause().getMessage());
     }
 }

@@ -131,6 +131,11 @@ public final class ApplicationConfig {
     public nzi.fhir.validator.core.enums.ServedVersions servedVersions() {
         return servedVersions;
     }
+
+    /** Spec 009 FR-033: a start may change the stored served versions ({@code FV_FHIR_VERSIONS_CHANGE_CONFIRMED}). */
+    public boolean fhirVersionsChangeConfirmed() {
+        return Boolean.TRUE.equals(section("fhir").getBoolean("versionsChangeConfirmed"));
+    }
     /** Networks administrative operations may come from ({@code FV_AUTH_ADMIN_CIDRS}, spec 008); empty = any. */
     public nzi.fhir.validator.core.security.CidrList adminCidrs() {
         return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("adminCidrs"));

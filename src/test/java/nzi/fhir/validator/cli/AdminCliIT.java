@@ -329,7 +329,8 @@ class AdminCliIT extends BaseTestContainer {
         await(TestPackages.includePackage(app.bootstrap().services(), TestPackages.profilePackage("cli.pkg", "1.0.0"),
                 "cli.pkg", "1.0.0"));
         await(app.stop());
-        app = await(AppHarness.start(vertx, config.copy().put("fhir", new JsonObject().put("enabledVersions", "R5"))));
+        app = await(AppHarness.start(vertx, config.copy().put("fhir", new JsonObject().put("enabledVersions", "R5")
+                .put("versionsChangeConfirmed", true))));
         await(app.awaitReady(90_000));
         Run share = cli("snapshot", "share", "--fhir-version", "R4", "--ig", "cli.pkg#1.0.0", "--shareable", "false");
         assertExit(share, 0);

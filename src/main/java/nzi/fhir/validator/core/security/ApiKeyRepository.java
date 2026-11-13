@@ -168,12 +168,22 @@ public class ApiKeyRepository {
      */
     public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
                                            UUID owner, java.time.Instant expiresAt) {
+        return upsertWellKnown(client, id, name, key, role, owner, expiresAt, false);
+    }
+
+    /**
+     * As above; with {@code keepRevocation} a revoked key stays revoked although its value changes (spec 009: the fixed
+     * keys' random values while access control is disabled). Without it a new value un-revokes the key (a rotation).
+     */
+    public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
+                                           UUID owner, java.time.Instant expiresAt, boolean keepRevocation) {
         if (!isWellFormed(key)) {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
         }
         Tuple params = Tuple.of(id, name, Buffer.buffer(hash(key)), role.name(), owner,
-                expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC));
+                expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC))
+                .addBoolean(keepRevocation);
         // A value whose hash was revoked is never installed again (V13, code review): an instance still configured with a
         // leaked, revoked value can't bring it back, also after the key was rotated to a new value. A revoked key also
         // stays revoked while the configured value is unchanged; a new value un-revokes it (rotation).
@@ -182,7 +192,7 @@ public class ApiKeyRepository {
                 + "WHERE NOT EXISTS (SELECT 1 FROM " + REVOKED_HASHES + " r WHERE r.key_hash = $3::bytea) "
                 + "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
                 + "role = EXCLUDED.role, owner = EXCLUDED.owner, expires_at = EXCLUDED.expires_at, "
-                + "revoked_at = CASE WHEN k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
+                + "revoked_at = CASE WHEN $7::boolean OR k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
                 + "key_hash = EXCLUDED.key_hash";
         return client.preparedQuery(sql).execute(params)
                 .map(rows -> rows.rowCount() > 0)
@@ -199,6 +209,12 @@ public class ApiKeyRepository {
                     }
                     return Future.failedFuture(err);
                 });
+    }
+
+    /** Whether the key {@code id} is revoked (spec 009: a revoked fixed key stays revoked in disabled mode). */
+    public Future<Boolean> isRevoked(io.vertx.sqlclient.SqlClient client, UUID id) {
+        return client.preparedQuery("SELECT revoked_at IS NOT NULL FROM " + TABLE + " WHERE id = $1").execute(Tuple.of(id))
+                .map(rows -> rows.size() > 0 && rows.iterator().next().getBoolean(0));
     }
 
     /**

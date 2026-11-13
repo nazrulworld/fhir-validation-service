@@ -416,4 +416,30 @@ class ConfigLoaderTest {
         assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
                 "FV_VALIDATOR_API_KEY", "short")), "enforced mode still checks it");
     }
+
+    /** Code review of PR #72: a config file may list the versions as a JSON array; another type is a named error. */
+    @Test
+    void enabledFhirVersionsAsAJsonArray(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("fhir", new JsonObject().put("enabledVersions",
+                new io.vertx.core.json.JsonArray().add("R5").add("r4"))).encode());
+        assertEquals(nzi.fhir.validator.core.enums.ServedVersions.parse("R4,R5"),
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString())).servedVersions());
+        Files.writeString(file, new JsonObject().put("fhir", new JsonObject().put("enabledVersions", 4)).encode());
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString())));
+        assertTrue(e.getMessage().startsWith("Invalid FV_ENABLED_FHIR_VERSIONS"), e.getMessage());
+        Files.writeString(file, new JsonObject().put("fhir", new JsonObject().put("enabledVersions",
+                new io.vertx.core.json.JsonArray().add("R4").add("X1"))).encode());
+        e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString())));
+        assertTrue(e.getMessage().contains("'X1'"), e.getMessage());
+    }
+
+    @Test
+    void fhirVersionsChangeConfirmationIsAFlag() {
+        assertFalse(ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).fhirVersionsChangeConfirmed());
+        assertTrue(ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_FHIR_VERSIONS_CHANGE_CONFIRMED", "yes"))
+                .fhirVersionsChangeConfirmed());
+    }
 }

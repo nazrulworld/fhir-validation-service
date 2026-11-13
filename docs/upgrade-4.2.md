@@ -49,10 +49,17 @@ What changes for the versions that are not listed:
 
 Uploading or registering IG packages is not restricted.
 
-**Restricting versions in a fleet:**
-1. Set `FV_ENABLED_FHIR_VERSIONS` to the same value on every instance.
+Every instance records its served versions in `service_settings.fhir_versions`. **An instance whose served versions
+differ from the stored ones refuses to start** (exit 1, nothing changed) unless `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true`
+is also set, so one instance with a stale setting can't switch contexts off for the whole fleet. The first start after
+the upgrade stores the set without needing the confirmation.
+
+**Restricting (or changing) versions in a fleet:**
+1. Set `FV_ENABLED_FHIR_VERSIONS` to the same value, and `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true`, on every instance.
 2. Restart them. The first instance to start marks the other versions' contexts inactive, and instances still running
    the old setting drop them within the configuration poll interval.
+3. Remove `FV_FHIR_VERSIONS_CHANGE_CONFIRMED` in the next deployment. While it stays set, a start logs a WARN asking for
+   it to be removed.
 
 ## Turning access control off (public mode)
 
@@ -73,7 +80,9 @@ In public mode:
 - Usage records are charged to the trial validator and the trial organisation.
 - `FV_AUTH_ADMIN_CIDRS` **still applies**: administrative operations from other networks get 403.
 - Both fixed keys get new random values (256 bits) at every start. These values are never logged or shown.
-  `FV_ADMIN_API_KEY` and `FV_VALIDATOR_API_KEY` are ignored, and their format is not checked.
+- A fixed key you revoke stays revoked across restarts (logged at WARN): revoking `trial validator`
+  (`fv-admin key revoke --name "trial validator"`) stops anonymous validation and package reads (403).
+- `FV_ADMIN_API_KEY` and `FV_VALIDATOR_API_KEY` are ignored, and their format is not checked.
 - The startup log has a prominent WARN. `GET /health` reports `security.aclSecurity: "disabled"`, and
   `fv_acl_security_disabled` is 1.
 

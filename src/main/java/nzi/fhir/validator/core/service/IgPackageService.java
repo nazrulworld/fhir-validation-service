@@ -80,13 +80,6 @@ public class IgPackageService {
         this.applyLocally = applyLocally;
     }
 
-    /**
-     * This instance applies the latest configuration of {@code version}. For a version it doesn't serve the sync
-     * completes at once (spec 009 FR-032: a change of an inactive context is stored, never built).
-     */
-    private Future<Void> applyLocal(SupportedFhirVersion version) {
-        return applyLocally.apply(version);
-    }
 
     /**
      * @param admitBuild given the expanded size of a new resolved package set, fails (413 {@code package-too-large})
@@ -261,7 +254,7 @@ public class IgPackageService {
                                         contextAccess, txSettings));
                     });
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             // The cause goes to the log (with the request id); clients get curated text (Principle IV).
@@ -339,7 +332,7 @@ public class IgPackageService {
                                     .put("excluded", key)
                                     .put("included", new JsonArray(remaining)));
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             logger.warn("Excluded IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
@@ -438,7 +431,7 @@ public class IgPackageService {
                                             .put("terminology", after.terminologyOf(key).toJson())
                                             .put("revision", revision)));
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             logger.warn("Access change of IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);

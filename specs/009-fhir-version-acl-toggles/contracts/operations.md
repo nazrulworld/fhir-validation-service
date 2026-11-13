@@ -8,6 +8,7 @@
 |---|---|---|---|---|
 | `FV_ENABLED_FHIR_VERSIONS` | `fhir.enabledVersions` | comma list of `STU3`, `R4`, `R4B`, `R5` (trimmed, any case, duplicates ignored) | unset = all | Versions this instance serves. Must be the same on every instance. |
 | `FV_GLOBAL_DISABLED_ACL_SECURITY` | `auth.globalDisabledAclSecurity` | `true`/`1`/`yes` = disabled; anything else = enforced | enforced | Turns off API-key checks for every endpoint. Must be the same on every instance. |
+| `FV_FHIR_VERSIONS_CHANGE_CONFIRMED` | `fhir.versionsChangeConfirmed` | same as above | false | Allows a start whose served versions differ from the stored ones (FR-033). Remove it after the change. |
 | `FV_ACL_MODE_CHANGE_CONFIRMED` | `auth.aclModeChangeConfirmed` | same as above | false | Allows a start whose access-control mode differs from the stored one. Remove it after the switch. |
 
 Existing settings with new behaviour:
@@ -24,6 +25,8 @@ Existing settings with new behaviour:
 | Context (de)activation transaction fails | `Startup failed: validator context activation could not be stored: …` | 1 |
 | Stored ACL mode ≠ configured mode, no confirmation | `Startup failed: access control mode change refused: stored mode is <a>, this instance is configured <b>. To switch, set FV_ACL_MODE_CHANGE_CONFIRMED=true on the instances being switched (see docs/upgrade-4.2.md)` | 1, nothing changed |
 | No stored mode (fresh database or first 4.2 start) | starts in the configured mode, stores it | — |
+| Stored served versions ≠ configured, no confirmation | `Startup failed: FHIR version change refused: the stored served versions are <a>, this instance is configured <b> (FV_ENABLED_FHIR_VERSIONS). To change them, set FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true on the instances being changed (see docs/upgrade-4.2.md)` | 1, nothing changed |
+| Any other failure of the access-control step (e.g. a database error) | `Startup failed: the access-control startup step failed: …` | 1 |
 
 ## 3. Log lines (level, logger `nzi.fhir.validator.Bootstrap` unless noted)
 
@@ -32,6 +35,9 @@ Key values never appear in any of these lines (SC-008).
 | When | Level | Message (shape) |
 |---|---|---|
 | Every start | INFO | `FHIR versions served: R4, R5 (FV_ENABLED_FHIR_VERSIONS)` or `… : STU3, R4, R4B, R5 (all; FV_ENABLED_FHIR_VERSIONS not set)` |
+| Served versions change confirmed | WARN | `Served FHIR versions change from R4,R5 to R5 (FV_FHIR_VERSIONS_CHANGE_CONFIRMED)` |
+| Version confirmation set, versions unchanged | WARN | `FV_FHIR_VERSIONS_CHANGE_CONFIRMED is set but the served versions are unchanged (R4); remove it so an accidental change is refused` |
+| Disabled mode, a fixed key is revoked | WARN | `The 'trial validator' key is revoked: requests that run as it are refused with 403 while access control is disabled, also after restarts` |
 | Each deactivated context | WARN | `Validator context deactivated: R4 hl7.fhir.us.core#6.1.0 (owner acme): FHIR version R4 is not enabled` |
 | After deactivations | WARN | `3 validator context(s) deactivated because their FHIR version is not enabled` |
 | Each reactivated context | INFO | `Validator context reactivated: R4 hl7.fhir.us.core#6.1.0 (owner acme)` |
@@ -68,9 +74,10 @@ one that isn't served, so FR-032 holds on the command line too. It doesn't read 
   reinstalls the configured keys on every start, which would undo the random keys and make the configured key values
   valid again.
 
-**Restrict versions**:
-1. Set `FV_ENABLED_FHIR_VERSIONS` on every instance.
+**Restrict versions** (or change them):
+1. Set `FV_ENABLED_FHIR_VERSIONS` and `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true` on every instance.
 2. Restart them. The first instance to start deactivates the other versions' contexts. The others see nothing to do.
+3. Remove the confirmation in the next deployment.
 
 **Turn access control off**:
 1. Set `FV_GLOBAL_DISABLED_ACL_SECURITY=true` and `FV_ACL_MODE_CHANGE_CONFIRMED=true` on every instance.

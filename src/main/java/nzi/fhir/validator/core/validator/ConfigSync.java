@@ -249,7 +249,8 @@ public class ConfigSync {
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
         Serial state = states.get(version);
-        // Spec 009: a version this instance doesn't serve has nothing to apply (its contexts are inactive here).
+        // Spec 009 FR-032: a version this instance doesn't serve has nothing to apply (its contexts are inactive here),
+        // so a change of an inactive context answers as soon as it is committed.
         return state == null ? Future.succeededFuture() : enqueue(state, () -> { }, () -> runSync(version));
     }
 
@@ -294,6 +295,7 @@ public class ConfigSync {
      */
     private Future<Void> runSync(SupportedFhirVersion version) {
         return ConfigRevisionRepository.current(pool)
+                .onSuccess(this::reportInactive)
                 .compose(rows -> {
                     ConfigRevisionRepository.ConfigRow row = rows.get(version);
                     if (row == null) {

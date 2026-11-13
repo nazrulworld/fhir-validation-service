@@ -181,7 +181,8 @@ public final class Bootstrap {
                                     services.apiKeys(), services.config(), services.auth()))
                             // Spec 009 FR-010 to FR-014: stored contexts follow FV_ENABLED_FHIR_VERSIONS before any is built.
                             .compose(v -> nzi.fhir.validator.core.validator.ContextActivation.reconcile(services.pool(),
-                                    services.config().servedVersions()).mapEmpty())
+                                    services.config().servedVersions(), services.config().fhirVersionsChangeConfirmed())
+                                    .mapEmpty())
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))

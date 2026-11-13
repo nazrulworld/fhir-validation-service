@@ -10,6 +10,7 @@ import nzi.fhir.validator.core.StartupException;
 import nzi.fhir.validator.core.enums.ServedVersions;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.service.ConfigRevisionRepository;
+import nzi.fhir.validator.core.settings.ServiceSettingsRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,17 +70,69 @@ public final class ContextActivation {
      * @return what changed; fails with {@link StartupException} when the transaction fails (nothing changed, FR-011)
      */
     public static Future<Result> reconcile(Pool pool, ServedVersions served) {
+        return reconcile(pool, served, false);
+    }
+
+    /**
+     * As {@link #reconcile(Pool, ServedVersions)}, after the served-set guard (FR-033): the transaction first locks the
+     * {@value ServiceSettingsRepository#FHIR_VERSIONS} setting. A start whose served set differs from the one stored
+     * by the previous start is refused (nothing changes) unless {@code confirmed} ({@code FV_FHIR_VERSIONS_CHANGE_CONFIRMED}),
+     * so one instance with a stale setting can't switch contexts off for the whole fleet. No stored set (a fresh or
+     * just-upgraded database) needs no confirmation.
+     */
+    public static Future<Result> reconcile(Pool pool, ServedVersions served, boolean confirmed) {
         String[] names = served.asList().stream().map(Enum::name).toArray(String[]::new);
-        return pool.withTransaction(tx -> run(tx, names))
-                .recover(err -> Future.failedFuture(new StartupException(
+        List<Runnable> afterCommit = new ArrayList<>();
+        return pool.withTransaction(tx -> guard(tx, served, confirmed, afterCommit).compose(v -> run(tx, names)))
+                .recover(err -> Future.failedFuture(err instanceof StartupException ? err : new StartupException(
                         "validator context activation could not be stored: " + err.getMessage(), err)))
+                .onSuccess(r -> afterCommit.forEach(Runnable::run))
                 .onSuccess(ContextActivation::log);
     }
 
+    /** The served set as stored: version names joined with commas in declaration order ({@code R4,R5}). */
+    static String stored(ServedVersions served) {
+        return String.join(",", served.asList().stream().map(Enum::name).toList());
+    }
+
+    /** FR-033: compares with the stored served set (locking it) and stores the new one. */
+    private static Future<Void> guard(SqlClient tx, ServedVersions served, boolean confirmed, List<Runnable> afterCommit) {
+        String setting = ServiceSettingsRepository.FHIR_VERSIONS;
+        String value = stored(served);
+        return ServiceSettingsRepository.lockForUpdate(tx, setting)
+                .compose(stored -> stored.isPresent() ? Future.succeededFuture(stored)
+                        : ServiceSettingsRepository.insertIfAbsent(tx, setting, value).compose(inserted -> inserted
+                        ? Future.succeededFuture(java.util.Optional.<String>empty())
+                        : ServiceSettingsRepository.lockForUpdate(tx, setting)))
+                .compose(previous -> {
+                    if (previous.isPresent() && !previous.get().equals(value)) {
+                        if (!confirmed) {
+                            return Future.failedFuture(new StartupException("FHIR version change refused: the stored served "
+                                    + "versions are " + previous.get() + ", this instance is configured " + value + " ("
+                                    + ServedVersions.VARIABLE + "). To change them, set FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true "
+                                    + "on the instances being changed (see docs/upgrade-4.2.md)"));
+                        }
+                        afterCommit.add(() -> logger.warn("Served FHIR versions change from {} to {} "
+                                + "(FV_FHIR_VERSIONS_CHANGE_CONFIRMED)", previous.get(), value));
+                    } else if (previous.isPresent() && confirmed) {
+                        afterCommit.add(() -> logger.warn("FV_FHIR_VERSIONS_CHANGE_CONFIRMED is set but the served versions "
+                                + "are unchanged ({}); remove it so an accidental change is refused", value));
+                    }
+                    return ServiceSettingsRepository.upsert(tx, setting, value, ServiceSettingsRepository.instanceName());
+                });
+    }
+
+    /**
+     * Locks every version row of the configuration first (code review of PR #72): exclude and PATCH lock a version row
+     * and then its context rows, so taking the locks in the same order here can't deadlock with them.
+     */
     private static Future<Result> run(SqlClient tx, String[] served) {
         List<Changed> deactivated = new ArrayList<>();
         List<Changed> reactivated = new ArrayList<>();
-        return tx.preparedQuery(DEACTIVATE_SQL).execute(Tuple.of((Object) served))
+        return tx.preparedQuery("SELECT fhir_version FROM " + DB_POSTGRES_SCHEMA_NAME + ".fhir_validator_logs WHERE "
+                        + "validator_id = $1 ORDER BY fhir_version FOR UPDATE")
+                .execute(Tuple.of(ConfigRevisionRepository.VALIDATOR_ID))
+                .compose(locked -> tx.preparedQuery(DEACTIVATE_SQL).execute(Tuple.of((Object) served)))
                 .compose(rows -> {
                     collect(rows, deactivated);
                     return tx.preparedQuery(REACTIVATE_SQL).execute(Tuple.of((Object) served));

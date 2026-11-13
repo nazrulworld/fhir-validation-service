@@ -614,7 +614,9 @@ versions:
 - Their stored contexts are marked inactive at startup (logged at WARN). They become active again when the version is
   listed again. Inactive contexts can still be changed or excluded.
 
-Unset, every version is served. Use the same value on every instance. `GET /health` reports `fhirVersions`. See
+Unset, every version is served. Use the same value on every instance: a start whose versions differ from those stored
+by the previous start is refused unless `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true` is also set (remove it after the
+change). `GET /health` reports `fhirVersions`. See
 [docs/upgrade-4.2.md](docs/upgrade-4.2.md#serving-fewer-fhir-versions).
 
 ### Database connection security
@@ -651,6 +653,7 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_AUTH_FORWARDED_HEADER`                                                   | `x-forwarded-for`                                               | the header the trusted proxies write (`forwarded` for RFC 7239)   |
 | `FV_ENABLED_FHIR_VERSIONS`                                                   | *(unset: all)*                                                  | FHIR versions this instance serves, e.g. `R4,R5` (4.2.0)          |
 | `FV_GLOBAL_DISABLED_ACL_SECURITY`                                            | `false`                                                         | `true`/`1`/`yes`: no endpoint needs a key (public mode, 4.2.0)    |
+| `FV_FHIR_VERSIONS_CHANGE_CONFIRMED`                                          | `false`                                                         | allow a start that changes the stored served versions (4.2.0)     |
 | `FV_ACL_MODE_CHANGE_CONFIRMED`                                               | `false`                                                         | allow a start that changes the stored access-control mode (4.2.0) |
 | `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db` (4.1.0)              |
 | `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching (4.1.0)                |

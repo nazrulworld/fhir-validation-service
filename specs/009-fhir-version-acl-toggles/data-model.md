@@ -43,8 +43,8 @@ There is one row per (FHIR version, included IG package): the context's identity
 
 | Column | Type | Rule |
 |---|---|---|
-| `name` | `VARCHAR(64) PRIMARY KEY` | 4.2 uses `acl_security` only |
-| `value` | `VARCHAR(256) NOT NULL` | For `acl_security`: `enabled` or `disabled` |
+| `name` | `VARCHAR(64) PRIMARY KEY` | 4.2 uses `acl_security` and `fhir_versions` |
+| `value` | `VARCHAR(256) NOT NULL` | `acl_security`: `enabled` or `disabled`; `fhir_versions`: served versions, e.g. `R4,R5` (FR-033) |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | When the last start wrote it |
 | `updated_by` | `VARCHAR(128) NULL` | Host name of the instance that wrote it (audit) |
 
@@ -62,7 +62,8 @@ There is one row per (FHIR version, included IG package): the context's identity
 | VALIDATE | `00000000-0000-0000-0000-200000000002` | `trial validator` | VALIDATE | trial (`Constant.TRIAL_ORG_ID`) |
 
 - **Disabled mode, at every start**: `key_hash` = SHA-256 of a fresh 256-bit random value. Expiry stays
-  `Constant.SYS_ORG_API_KEY_EXPIRES_AT`. A new hash clears `revoked_at` (existing `upsertWellKnown` rule).
+  `Constant.SYS_ORG_API_KEY_EXPIRES_AT`. `revoked_at` is kept: a revoked fixed key stays revoked (code review of
+  PR #72).
 - **Enabled mode**: as in 4.1, `key_hash` = hash of the configured value when one is set. A previous random hash stays
   when the variable is unset, so that key is unusable.
 - Random values are never added to `revoked_key_hashes`.
@@ -84,6 +85,7 @@ There is one row per (FHIR version, included IG package): the context's identity
 | `FV_ENABLED_FHIR_VERSIONS` | `fhir.enabledVersions` | STRING → `ServedVersions` | all supported | each item ∈ {STU3, R4, R4B, R5}; otherwise a configuration error with exit 1 (FR-003) |
 | `FV_GLOBAL_DISABLED_ACL_SECURITY` | `auth.globalDisabledAclSecurity` | FLAG | false (enforced) | `true`/`1`/`yes` mean disabled; another value means enforced, with a WARN (FR-016) |
 | `FV_ACL_MODE_CHANGE_CONFIRMED` | `auth.aclModeChangeConfirmed` | FLAG | false | same parsing (FR-029) |
+| `FV_FHIR_VERSIONS_CHANGE_CONFIRMED` | `fhir.versionsChangeConfirmed` | FLAG | false | same parsing (FR-033) |
 
 When the mode is disabled, the format check on `FV_ADMIN_API_KEY` and `FV_VALIDATOR_API_KEY` is skipped (research R13).
 

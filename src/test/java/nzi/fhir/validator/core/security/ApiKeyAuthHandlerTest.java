@@ -456,4 +456,27 @@ class ApiKeyAuthHandlerTest {
                     ctx.completeNow();
                 }));
     }
+
+    /** Code review of PR #72: a cached fixed caller never outlives its key's expiry (as key lookups, spec 008 FR-006). */
+    @Test
+    void aCachedFixedCallerNeverOutlivesItsExpiry(VertxTestContext ctx) throws Exception {
+        ApiKeyRepository repository = mock(ApiKeyRepository.class);
+        ApiKeyRepository.KeyInfo expiring = new ApiKeyRepository.KeyInfo(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID,
+                "system administrator", ApiKeyRepository.Role.ADMIN, SYSTEM_ORG, "system", true,
+                java.time.Instant.now().plusMillis(150));
+        when(repository.findById(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID))
+                .thenReturn(Future.succeededFuture(Optional.of(expiring)));
+        FixedCallers fixed = new FixedCallers(repository, 60_000);
+        fixed.admin().compose(first -> fixed.admin()).onComplete(ar -> {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            fixed.admin().onComplete(third -> ctx.verify(() -> {
+                org.mockito.Mockito.verify(repository, times(2)).findById(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID);
+                ctx.completeNow();
+            }));
+        });
+    }
 }

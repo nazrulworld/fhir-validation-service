@@ -15,6 +15,8 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
 public final class ServiceSettingsRepository {
     /** The access-control mode of the most recent start: {@code enabled} or {@code disabled} (spec 009 FR-024). */
     public static final String ACL_SECURITY = "acl_security";
+    /** The FHIR versions served by the most recent start, e.g. {@code R4,R5} (spec 009 FR-033). */
+    public static final String FHIR_VERSIONS = "fhir_versions";
 
     private static final String TABLE = DB_POSTGRES_SCHEMA_NAME + ".service_settings";
 
@@ -33,6 +35,14 @@ public final class ServiceSettingsRepository {
         return tx.preparedQuery("INSERT INTO " + TABLE + " (name, value) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING")
                 .execute(Tuple.of(name, value))
                 .map(rows -> rows.rowCount() > 0);
+    }
+
+    /** For {@code updated_by}: the container host name, or the JVM's {@code pid@host} name (at most 128 characters). */
+    public static String instanceName() {
+        String host = System.getenv("HOSTNAME");
+        String name = host != null && !host.isBlank() ? host
+                : java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+        return name.length() > 128 ? name.substring(0, 128) : name;
     }
 
     /** Sets {@code name = value}, recording when and by which instance ({@code updatedBy}, may be null). */

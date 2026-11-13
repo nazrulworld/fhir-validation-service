@@ -183,6 +183,10 @@ public class HealthService {
      * only), or {@code null} when the query fails (the field is then left out; health never fails because of it).
      */
     public Future<JsonObject> inactiveContexts() {
+        if (inactiveCount.get() == 0) {
+            // The usual case: the configuration sync counted none (start and every poll), so no query is needed.
+            return Future.succeededFuture(new JsonObject().put("count", 0L).put("private", 0L).put("items", new JsonArray()));
+        }
         return pgPool.query(INACTIVE_CONTEXTS_QUERY).execute()
                 .map(rows -> {
                     JsonArray items = new JsonArray();

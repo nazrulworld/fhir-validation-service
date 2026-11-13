@@ -72,7 +72,7 @@ public final class AclModeStartup {
                                     : installConfiguredKeys(tx, apiKeys, config,
                                     previous.filter(p -> p == AclMode.DISABLED).isPresent(), afterCommit);
                             return keys.compose(v -> ServiceSettingsRepository.upsert(tx, ServiceSettingsRepository.ACL_SECURITY,
-                                    mode.value(), instanceName()));
+                                    mode.value(), ServiceSettingsRepository.instanceName()));
                         }))
                 .onSuccess(v -> {
                     afterCommit.forEach(Runnable::run);
@@ -84,6 +84,10 @@ public final class AclModeStartup {
                                 ? "open from any network" : "limited to FV_AUTH_ADMIN_CIDRS");
                     }
                 })
+                // Code review of PR #72: any failure is fatal (exit 1, the orchestrator restarts the instance); otherwise
+                // the instance would stay up with its gate closed, answering every keyed request 503.
+                .recover(err -> Future.failedFuture(err instanceof StartupException ? err
+                        : new StartupException("the access-control startup step failed: " + err.getMessage(), err)))
                 .map(mode);
     }
 
@@ -133,11 +137,18 @@ public final class AclModeStartup {
             if (configured != null) {
                 afterCommit.add(() -> logger.info("{} is ignored: access control is disabled", key.variable()));
             }
-            chain = chain.compose(v -> {
-                String value = randomKey();
-                return apiKeys.upsertWellKnown(tx, key.id(), key.name(), value, key.role(), key.owner(),
-                        Constant.SYS_ORG_API_KEY_EXPIRES_AT).mapEmpty();
-            });
+            // Code review of PR #72: a revoked fixed key stays revoked across restarts (an operator may revoke the trial
+            // validator to stop anonymous validation); only its value is replaced.
+            chain = chain.compose(v -> apiKeys.upsertWellKnown(tx, key.id(), key.name(), randomKey(), key.role(), key.owner(),
+                            Constant.SYS_ORG_API_KEY_EXPIRES_AT, true)
+                    .compose(installed -> apiKeys.isRevoked(tx, key.id()))
+                    .map(revoked -> {
+                        if (revoked) {
+                            afterCommit.add(() -> logger.warn("The '{}' key is revoked: requests that run as it are refused "
+                                    + "with 403 while access control is disabled, also after restarts", key.name()));
+                        }
+                        return null;
+                    }));
         }
         return chain;
     }
@@ -198,11 +209,4 @@ public final class AclModeStartup {
         return value;
     }
 
-    /** For {@code service_settings.updated_by}: the container host name, or the JVM's {@code pid@host} name. */
-    private static String instanceName() {
-        String host = System.getenv("HOSTNAME");
-        String name = host != null && !host.isBlank() ? host
-                : java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
-        return name.length() > 128 ? name.substring(0, 128) : name;
-    }
 }

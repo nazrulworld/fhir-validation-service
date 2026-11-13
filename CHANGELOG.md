@@ -27,6 +27,9 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
   - they become active again when their version is listed again;
   - other instances follow through the configuration notification;
   - `DELETE` and `PATCH /{version}/validator` (and `fv-admin snapshot share|transfer`) still work on them.
+- **`FV_FHIR_VERSIONS_CHANGE_CONFIRMED`**: the served versions are stored (`service_settings.fhir_versions`); a start
+  whose versions differ is refused unless it is set, so one instance with a stale setting can't switch contexts off
+  for the whole fleet.
 - **`FV_GLOBAL_DISABLED_ACL_SECURITY`** (`true`/`1`/`yes`): public mode.
   - No endpoint needs a key, and the `Authorization` header is ignored.
   - Requests run as fixed callers: validation and the package reads as `trial validator` (shareable content only),
@@ -46,6 +49,8 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
 - While it is on, both fixed-caller keys get new 256-bit random values (`SecureRandom`) at every start. These values
   are never logged, returned or stored readably, so no key value known while the service was open still works
   afterwards.
+- A fixed key revoked while public mode is on stays revoked across restarts (logged at WARN), so revoking
+  `trial validator` stops anonymous validation and package reads.
 - A keyed request is answered 503 (in both modes) until the instance's startup access-control step has
   committed. An instance whose mode change is refused never serves public requests, and after a switch back the
   restored keys are never refused (and the refusal cached) against the previous run's random ones.
