@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-13
+
 Retires every release before 4.0.0. A **minor release with a breaking change for pre-4.0 databases only**: 4.x
 databases upgrade as usual, with a rolling restart, and 4.2 can still run on them.
 

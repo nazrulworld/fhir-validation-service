@@ -9,6 +9,10 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+> **Upgrading from 4.2?** 4.3.0 retires every release before 4.0.0 and squashes the database migrations up to 4.0.0
+> into one. A 4.x database keeps its migration history, so a rolling upgrade is fine and 4.2 can still run on it. A
+> database from before 4.0.0 is refused at startup. See [docs/upgrade-4.3.md](docs/upgrade-4.3.md).
+>
 > **Upgrading from 4.1?** 4.2.0 adds two opt-in switches, `FV_ENABLED_FHIR_VERSIONS` and
 > `FV_GLOBAL_DISABLED_ACL_SECURITY`, and nothing changes while they are unset. A rolling upgrade is fine; turn the
 > switches on only after every instance runs 4.2. See [docs/upgrade-4.2.md](docs/upgrade-4.2.md).
