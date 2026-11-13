@@ -7,10 +7,9 @@ import java.util.List;
 
 /**
  * The service's JSON validation result ({@code application/json}): {@code {valid, messages[{severity, location,
- * message}], fhirVersion, appliedProfiles, igPackage, igOwner, igShareable}}. {@code fhirVersion} and
- * {@code appliedProfiles} were added in 1.0.0; {@code igPackage} (the IG package the result came from, {@code null} for
- * the core-only base context) in 3.0.0; {@code igOwner} and {@code igShareable} (the context's owner and sharing) in
- * 3.1.0.
+ * message}], fhirVersion, appliedProfiles, igPackage, igOwner, igShareable}}.
+ * {@code igPackage} is the IG package the result came from ({@code null} for the core-only base context);
+ * {@code igOwner} and {@code igShareable} are the context's owner and sharing.
  *
  * @author Md Nazrul Islam
  */
@@ -33,8 +32,8 @@ public class ValidationResponse {
     }
 
     /**
-     * @param igOwner     short name of the organisation owning the context (3.1.0)
-     * @param igShareable whether the context is shareable (3.1.0)
+     * @param igOwner     short name of the organisation owning the context
+     * @param igShareable whether the context is shareable
      */
     public ValidationResponse(boolean valid, JsonArray messages, String fhirVersion, List<String> appliedProfiles,
                               String igPackage, String igOwner, Boolean igShareable) {

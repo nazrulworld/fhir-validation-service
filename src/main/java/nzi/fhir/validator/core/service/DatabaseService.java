@@ -1,6 +1,7 @@
 package nzi.fhir.validator.core.service;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -78,22 +79,39 @@ public final class DatabaseService {
     }
 
     /**
-     * The last retired migration version: 4.3.0 squashed the original V1 to V9 into {@code V9__baseline_4_0.sql}.
+     * The last retired migration version: the migrations of development builds (V1 to V15) are merged into
+     * {@code V15__baseline_1_0.sql}, which builds the same schema. New migrations start at V16.
      */
-    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("9");
+    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("15");
 
     /**
-     * One migration attempt (4.3.0, squashed baseline). A new database runs the baseline. A database that ran the original
-     * V1 to V9 keeps its history unchanged (so 4.2 still starts on it): only versions up to {@link #LAST_RETIRED} are
-     * validated leniently, and V10 onwards are validated as usual. A schema older than 4.0.0 is refused.
+     * One migration attempt. A new database runs the baseline. A database that ran the earlier migrations keeps its
+     * history unchanged: only versions up to {@link #LAST_RETIRED} are validated leniently, and later ones are
+     * validated as usual. A schema that stops before {@link #LAST_RETIRED} is from an unsupported early build and is
+     * refused, as is a history with a failed migration.
      */
     static void migrateOnce(PgConnectOptions options) {
-        Flyway plain = flyway(options);
+        migrateOnce(() -> flywayBuilder(options));
+    }
+
+    /**
+     * {@link #migrateOnce(PgConnectOptions)} with the Flyway configuration supplied (a fresh one per call; tests add
+     * migration locations this way).
+     */
+    static void migrateOnce(Supplier<FluentConfiguration> config) {
+        Flyway plain = config.get().load();
         boolean retiredHistory = false;
         MigrationVersion maxApplied = null;
         for (MigrationInfo info : plain.info().applied()) {
             MigrationVersion v = info.getVersion();
-            if (v == null || info.getType().isBaseline() || !info.getState().isApplied() || info.getState().isFailed()) {
+            if (v == null || info.getType().isBaseline()) {
+                continue;
+            }
+            if (info.getState().isFailed()) {
+                throw new StartupException("Database migration " + v + " (" + info.getDescription() + ") failed earlier and"
+                        + " left a failed row in flyway_schema_history; repair the database before starting");
+            }
+            if (!info.getState().isApplied()) {
                 continue;
             }
             if (v.compareTo(LAST_RETIRED) < 0 && v.compareTo(MigrationVersion.fromVersion("1")) >= 0) {
@@ -108,11 +126,11 @@ public final class DatabaseService {
             return;
         }
         if (maxApplied.compareTo(LAST_RETIRED) < 0) {
-            throw new StartupException("Database schema is from a release before 4.0.0 (migration " + maxApplied
-                    + "); this release cannot upgrade it. Upgrade with 4.2.0 first (FV_TAG=4.2.0), then start this release"
-                    + " (docs/upgrade-4.3.md)");
+            throw new StartupException("Database schema is from an unsupported early build (migration " + maxApplied
+                    + "): this release needs one that reached migration " + LAST_RETIRED + " and cannot upgrade it."
+                    + " Nothing was changed. Back up the database before recreating it (docs/operations.md)");
         }
-        Flyway lenient = flywayBuilder(options)
+        Flyway lenient = config.get()
                 .ignoreMigrationPatterns("*:missing", "*:pending", "*:future")
                 .validateOnMigrate(false)
                 .load();
@@ -124,7 +142,8 @@ public final class DatabaseService {
         if (!errors.isEmpty()) {
             throw new IllegalStateException("Migration validation failed: " + String.join("; ", errors));
         }
-        logger.info("Database keeps the original V1-V{} history; retired versions validated leniently", LAST_RETIRED);
+        logger.info("Database keeps its pre-1.0.0 migration history (up to V{}); those versions are validated leniently",
+                LAST_RETIRED);
         lenient.migrate();
     }
 

@@ -231,7 +231,7 @@ class BootstrapAclModeIT extends BaseTestContainer {
         assertInstanceOf(StartupException.class, failure);
         assertEquals("access control mode change refused: stored mode is disabled, this instance is configured enabled. "
                 + "To switch, set FV_ACL_MODE_CHANGE_CONFIRMED=true on the instances being switched (see "
-                + "docs/upgrade-4.2.md)", failure.getMessage());
+                + "docs/operations.md)", failure.getMessage());
         assertEquals(before, List.of(column(db, ADMIN_HASH).get(0), column(db, TRIAL_HASH).get(0)), "keys unchanged");
         assertEquals(List.of("disabled|true"), column(db, MODE), "mode unchanged");
     }

@@ -8,7 +8,7 @@ import { check } from 'k6';
 
 const BASE = __ENV.BASE || 'http://127.0.0.1:8880';
 const AUTH = __ENV.ADMIN_KEY ? { Authorization: `Bearer ${__ENV.ADMIN_KEY}` } : {};
-// Spec 008 (4.1.0): validation always needs a VALIDATE or ADMIN key.
+// Spec 008: validation always needs a VALIDATE or ADMIN key.
 const KEY_HEADER = __ENV.FV_KEY ? { Authorization: `Bearer ${__ENV.FV_KEY}` } : {};
 const patient = open('../src/test/resources/fhir/resources/dk/Patient.json');
 const PACKAGE = __ENV.PACKAGE || '../src/test/resources/ig/packages/hl7/fhir/us/core/hl7.fhir.us.core-7.0.0.tgz';

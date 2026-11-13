@@ -3,9 +3,9 @@
 Constitution Principle VI: attach these results to any PR that changes the validation hot path.
 
 `perf/compare-run.sh` runs `validate.js` once against a fresh PostgreSQL + service container pair (4 CPUs, 4 GB) with
-the `grafana/k6` image; the 4.1.0 release comparison in [results-4.1.0.md](results-4.1.0.md) used it.
+the `grafana/k6` image, for comparing two builds on the same machine.
 
-Since 4.1.0 validation always needs a key (spec 008). Every script reads it from `FV_KEY`, for example
+Validation always needs a key (spec 008). Every script reads it from `FV_KEY`, for example
 `k6 run -e FV_KEY="$FV_VALIDATOR_API_KEY" perf/validate.js`. Without it, every validation is refused with 401.
 
 ## Throughput scaling (SC-003: 4 cores ≥ 3× one core, p95 < 200 ms)
@@ -99,11 +99,10 @@ docker run --rm --network fhir_default -v "$PWD":/work:ro grafana/k6:0.54.0 \
 
 ## Terminology (spec 007, SC-008, SC-009)
 
-The validation hot path changed in 4.0.0 (included-only contexts, a terminology budget per request). Attach both runs
-to the PR:
+Terminology routing adds a budget per request to the validation hot path. Attach both runs to the PR:
 
 ```bash
-# 1. Mode none / base context: before (3.2.1) and after (4.0.0), same machine and load. p95 must stay within
+# 1. Mode none / base context: before and after the change, same machine and load. p95 must stay within
 #    run-to-run noise (SC-008, target < 200 ms on a warm context).
 k6 run -e VUS=8 -e DURATION=60s perf/validate.js
 

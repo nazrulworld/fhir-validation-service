@@ -14,7 +14,6 @@ import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import nzi.fhir.validator.testsupport.AppHarness;
 import nzi.fhir.validator.testsupport.LogCapture;
 import nzi.fhir.validator.testsupport.TestPackages;
-import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -192,7 +191,9 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
     @Test
     void clashingTrialNameFailsStartup() throws Exception {
         PgConnectOptions db = freshDatabase();
-        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        DatabaseService.flyway(db).migrate();
+        // The well-known trial organisation is gone and another organisation took its name.
+        execute(db, "DELETE FROM " + S + ".organisations WHERE id = '" + nzi.fhir.validator.core.Constant.TRIAL_ORG_ID + "'");
         execute(db, "INSERT INTO " + S + ".organisations (id, name_short, name_long, type) VALUES ('" + UUID.randomUUID()
                 + "', 'trial', 'Someone else', 'COMMERCIAL')");
         Throwable failure = warmUpFailure(config(db));
@@ -201,9 +202,10 @@ class BootstrapOrganisationsIT extends BaseTestContainer {
     }
 
     @Test
-    void skippedBootstrapRenameFailsWithClearMessage() throws Exception {
+    void conflictingSeededKeyFailsWithClearMessage() throws Exception {
         PgConnectOptions db = freshDatabase();
-        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("10")).load().migrate();
+        DatabaseService.flyway(db).migrate();
+        // Other keys already hold the seeded admin key's value and name.
         String adminHash = java.util.HexFormat.of().formatHex(
                 nzi.fhir.validator.core.security.ApiKeyRepository.hash(AppHarness.ADMIN_KEY));
         execute(db, "INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('bootstrap', '\\x" + adminHash

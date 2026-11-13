@@ -26,7 +26,7 @@ import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEM
 
 /**
  * Validator configuration rows ({@code fhir_validator_logs}): one per FHIR version, holding the set of included IG
- * packages ({@code name#version}, each its own pinned validator context since 3.0.0) and a revision that increases on
+ * packages ({@code name#version}, each its own pinned validator context) and a revision that increases on
  * every include, exclude or access change. The access of each included context lives in
  * {@code fhir_validator_snapshots} (spec 005, research R1) and is written in the same transaction, with the version
  * row locked. Writes notify other instances through {@code pg_notify}, which PostgreSQL delivers only when the

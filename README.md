@@ -9,20 +9,8 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
-> **Upgrading from 4.2?** 4.3.0 retires every release before 4.0.0 and squashes the database migrations up to 4.0.0
-> into one. A 4.x database keeps its migration history, so a rolling upgrade is fine and 4.2 can still run on it. A
-> database from before 4.0.0 is refused at startup. See [docs/upgrade-4.3.md](docs/upgrade-4.3.md).
->
-> **Upgrading from 4.1?** 4.2.0 adds two opt-in switches, `FV_ENABLED_FHIR_VERSIONS` and
-> `FV_GLOBAL_DISABLED_ACL_SECURITY`, and nothing changes while they are unset. A rolling upgrade is fine; turn the
-> switches on only after every instance runs 4.2. See [docs/upgrade-4.2.md](docs/upgrade-4.2.md).
->
-> **Upgrading from 4.0?** 4.1.0 requires a key for every validation (`FV_AUTH_ANONYMOUS_VALIDATE` is gone), re-keys
-> the system organisation (stop every 4.0 instance first) and adds usage accounting. Read
-> [docs/upgrade-4.1.md](docs/upgrade-4.1.md) before upgrading.
->
-> **Upgrading from before 4.0?** Releases before 4.0.0 are retired. Upgrade to 4.2.0 first (`FV_TAG=4.2.0`,
-> following that release's upgrade notes), then to this release.
+> **1.0.0** is the first release. Settings, API and behaviour details are below; procedures for operating the
+> service are in [docs/operations.md](docs/operations.md).
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
 - Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
@@ -39,7 +27,7 @@ PostgreSQL database; IG changes reach every instance within seconds, without res
 - PostgreSQL 16 (provided by the Compose setup)
 - Up to 4 GB of memory per instance (the default container limit; the JVM takes 75% as heap). Warmed core-only
   validators for four FHIR versions take about 0.9 GB of heap. Every IG in use has its own validator context (the IG
-  plus its dependencies): one per included IG (since 4.0.0 nothing is built on demand). A build
+  plus its dependencies): one per included IG (nothing is built on demand). A build
   holds about 6 times the context's expanded size. Size the heap as 0.9 GB + the contexts you keep + 64 MB + 6 × the
   largest context's expanded size: 4 GB fits contexts up to about 350 MB expanded (roughly a 30 MB archive), including
   a 20 MB IG such as `hl7.fhir.r4.examples` (180 MB expanded). The cluster profile runs two instances, so the host needs
@@ -72,15 +60,12 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `4.1.0`        | an exact release (recommended for production: pin it)      |
-| `4.1`          | the newest patch release of 4.1                            |
+| `1.0.0`        | an exact release (recommended for production: pin it)      |
+| `1.0`          | the newest patch release of 1.0                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
-`latest` is now 4.1.0, a minor release with breaking changes. A 4.0 deployment that tracks `latest` (the default
-`FV_TAG` in `compose.yaml`) would upgrade on its next pull: every validation without an API key would answer 401, and
-the database upgrade needs every 4.0 instance stopped first. Pin `FV_TAG` to your current release and follow
-[docs/upgrade-4.1.md](docs/upgrade-4.1.md) before moving to 4.1.0.
+Pin `FV_TAG` to an exact release in production, so a pull never upgrades without you.
 
 **1. Create a directory and an `.env` file**
 
@@ -88,10 +73,10 @@ the database upgrade needs every 4.0 instance stopped first. Pin `FV_TAG` to you
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=4.1.0
+FV_TAG=1.0.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
-# Every validation needs a key (4.1.0): this shared trial key, or keys created per client with 'fv-admin key create'.
+# Every validation needs a key: this shared trial key, or keys created per client with 'fv-admin key create'.
 FV_VALIDATOR_API_KEY=$(openssl rand -hex 32)
 EOF
 chmod 600 .env
@@ -230,7 +215,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=4.1.0
+VERSION=1.0.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -247,11 +232,11 @@ export FV_PG_DATABASE=fhir_validator
 export FV_PG_USER=fhir_validator
 export FV_PG_PASSWORD='choose-a-strong-password'
 export FV_ADMIN_API_KEY='<output of openssl rand -hex 32>'
-export FV_VALIDATOR_API_KEY='<another output of openssl rand -hex 32>'   # optional shared trial key (4.1.0)
+export FV_VALIDATOR_API_KEY='<another output of openssl rand -hex 32>'   # optional shared trial key
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-4.1.0.jar
+  -jar fhir-validation-service-1.0.0.jar
 ```
 
 ```bash
@@ -299,7 +284,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-4.1.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-1.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
@@ -318,7 +303,7 @@ does not need to be running) and applies pending migrations first.
 In the shell from step 4, with the variables still exported:
 
 ```bash
-java -jar fhir-validation-service-4.1.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
+java -jar fhir-validation-service-1.0.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
 ```
 
 For a systemd installation, a small wrapper gives the same `fv-admin` command the container image has, reading the
@@ -353,7 +338,7 @@ sudo fv-admin key list --org acme
 
 ### Validate a resource
 
-Every validation needs a VALIDATE or ADMIN key (4.1.0): a key created with `fv-admin key create`, or the shared trial
+Every validation needs a VALIDATE or ADMIN key: a key created with `fv-admin key create`, or the shared trial
 key set in `FV_VALIDATOR_API_KEY` (see [Organisations and API keys](#organisations-and-api-keys)).
 
 ```bash
@@ -369,7 +354,7 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
 
 - `?ig=<name>#<version>` validates against that one IG package, its dependencies and the core specification, like
   `validator_cli.jar -ig`. URL-encode `#` as `%23`: `?ig=hl7.fhir.us.core%237.0.0`. `?ig=<name>` or `#latest` uses the
-  highest **included** version. Without `ig`, only the core specification applies. Since 4.0.0 only IG versions
+  highest **included** version. Without `ig`, only the core specification applies. Only IG versions
   **included** for the FHIR version (see below) can be named; a stored version that isn't included is refused with
   **400** `invalid-request` ("IG package name#version is not included for R4; include it first"). Validation never
   builds a context. The response names the context used in the `X-Validation-Context` header (`name#version` or
@@ -404,7 +389,7 @@ curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us
 # Without a version (or "latest") the registries are asked for the newest release; the answer says which version was
 # chosen and whether it was downloaded ("downloaded": true) or already stored.
 curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core"}' http://127.0.0.1:8880/igs/register
-# A version series (3.2.0): the newest 6.1.x release the registries list. The answer reports the concrete "version"
+# A version series: the newest 6.1.x release the registries list. The answer reports the concrete "version"
 # and the "requestedVersion" you sent.
 curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"name":"hl7.fhir.us.core","version":"6.1.x"}' http://127.0.0.1:8880/igs/register
 
@@ -423,7 +408,7 @@ A request validates against the IG it names, its dependencies and the core speci
 package contributes. A version series is `N.x`, `N.x.x` or `N.N.x`; versions are compared part by part, so `1.2.x`
 never matches `1.20.0`, and a release wins over a pre-release. `?ig=` on validation needs an exact version (or none):
 a series there is 400. `/igs/register` stores the dependencies too (unless `"includeDependency": false`), resolving a
-dependency declared as a series (`"1.0.x"`) or as `latest` the same way as the package itself (3.2.1); a package
+dependency declared as a series (`"1.0.x"`) or as `latest` the same way as the package itself; a package
 uploaded through `/igs/upload` needs its dependencies stored before it is included. To use your own
 profiles, put the StructureDefinitions in an IG package (`package/package.json` with `name`, `version`, `fhirVersions`
 and `dependencies`, plus the `.json` resources under `package/`), then upload it, include it, and name it in `ig`.
@@ -431,7 +416,7 @@ and `dependencies`, plus the `.json` resources under `package/`), then upload it
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
-### Terminology servers (4.0.0)
+### Terminology servers
 
 By default every context is offline: codes are checked only against code systems in its packages and the built-in
 common code systems (UCUM, BCP-47, ISO 3166/4217, MIME types). An included IG can instead use a terminology server,
@@ -474,10 +459,10 @@ curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminolo
 
 ### Organisations and API keys
 
-Since 3.1.0 every API key, IG package and included IG belongs to an **organisation**. A built-in **system
-organisation** (id `00000000-0000-0000-0000-100000000001` since 4.1.0) owns everything that existed before the upgrade,
-and the key from `FV_ADMIN_API_KEY` (`system administrator`) belongs to it. A built-in **trial organisation** (`trial`,
-4.1.0) owns the shared VALIDATE key from `FV_VALIDATOR_API_KEY` (`trial validator`): a free-trial key that may use
+Every API key, IG package and included IG belongs to an **organisation**. A built-in **system
+organisation** (id `00000000-0000-0000-0000-100000000001`) owns everything not created by another organisation,
+and the key from `FV_ADMIN_API_KEY` (`system administrator`) belongs to it. A built-in **trial organisation**
+(`trial`) owns the shared VALIDATE key from `FV_VALIDATOR_API_KEY` (`trial validator`): a free-trial key that may use
 shareable content only. Organisations and keys are managed with the command line in the service jar and image (no SQL needed):
 
 ```bash
@@ -486,7 +471,7 @@ $APP org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIA
 $APP org create --file beta.json --email ops@beta.example      # a JSON file, with flags overriding its fields
 $APP org update --name-short acme --phone "+45 12 34 56 78"   # only the given fields change
 $APP key create --org acme --name acme-ci --role VALIDATE      # prints the key once; only its hash is stored
-$APP key create --org acme --name acme-temp --role VALIDATE --expires 2027-01-01T00:00:00Z   # 4.1.0: refused after that
+$APP key create --org acme --name acme-temp --role VALIDATE --expires 2027-01-01T00:00:00Z   # refused after that
 $APP key list --org acme                                        # never shows keys or hashes; shows expiresAt, lastUsedIp
 $APP key revoke --name acme-ci
 $APP org deactivate --name-short acme                           # its keys get 403 within FV_AUTH_CACHE_TTL_MS
@@ -498,7 +483,7 @@ Commands print one JSON document on stdout, write errors to stderr as `error: <c
 settings as the service and apply migrations first. The full reference is
 [`specs/005-organisation-ownership/contracts/cli.md`](specs/005-organisation-ownership/contracts/cli.md).
 
-Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints; since 4.1.0 these always need a key). To
+Roles are `ADMIN` and `VALIDATE` (validation and the package read endpoints always need a key). To
 rotate a key without downtime, create the new one under a second name, switch the client over, then revoke the old one.
 Instances cache key lookups for `FV_AUTH_CACHE_TTL_MS` (30 s by default), so revocations and organisation deactivations
 take effect within that time; an expired key is refused at its expiry, cached or not. `key list` shows each key's
@@ -512,7 +497,7 @@ rotated. Deploy a new value to replace it. Instances configured with different n
 other's key, so change the value on all instances together. An instance started without the variable leaves the
 stored key as it is.
 
-#### Network controls (4.1.0)
+#### Network controls
 
 - `FV_AUTH_ADMIN_CIDRS` (comma-separated IPv4/IPv6 networks) limits administrative operations to those networks: any
   other client gets 403, whatever key it sends, before the key is even looked up. Unset, nothing is restricted.
@@ -524,7 +509,7 @@ stored key as it is.
   can't be parsed, the client is unknown: administrative calls are refused and nothing is recorded as its address. The same address is used for the
   allowlist, `lastUsedIp` and usage records.
 
-#### Public mode: access control disabled (4.2.0)
+#### Public mode: access control disabled
 
 > **Security warning.** `FV_GLOBAL_DISABLED_ACL_SECURITY=true` (or `1` / `yes`) makes every endpoint answer without a
 > key. Use it only on a closed network, behind a gateway that authenticates callers, or on a developer machine.
@@ -544,7 +529,7 @@ stored key as it is.
   is set, so one misconfigured instance can't replace the fleet's keys. Remove the confirmation after the switch.
 - `GET /health` reports `security.aclSecurity`.
 
-The procedure is in [docs/upgrade-4.2.md](docs/upgrade-4.2.md#turning-access-control-off-public-mode).
+The procedure is in [docs/operations.md](docs/operations.md#turning-access-control-off-public-mode).
 
 #### Who may use what
 
@@ -577,7 +562,7 @@ The owner (or the system organisation) may change `shareable`; another organisat
 isn't the system organisation gets 403 for a transfer. Changes reach every instance within seconds and never rebuild a
 validator.
 
-### Usage accounting (4.1.0)
+### Usage accounting
 
 Every authorised validation can be recorded, attributed to its key and organisation, with its outcome, issue counts,
 phase timings (`totalMs`, `queueMs`, `contextMs`, `validateMs`), CPU time and allocated bytes. "Memory" means bytes
@@ -599,7 +584,7 @@ Nothing deletes old rows: schedule `DELETE FROM fhir_validator_schema.validation
 interval '90 days'` (about 250 bytes a row). Summaries: `$APP usage summary --org acme --since 2026-11-01T00:00:00Z`
 (or `--key <name>`).
 
-### Serving fewer FHIR versions (4.2.0)
+### Serving fewer FHIR versions
 
 `FV_ENABLED_FHIR_VERSIONS=R4` (comma-separated: `STU3`, `R4`, `R4B`, `R5`) makes an instance load and serve only those
 versions:
@@ -611,7 +596,7 @@ versions:
 Unset, every version is served. Use the same value on every instance: a start whose versions differ from those stored
 by the previous start is refused unless `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true` is also set (remove it after the
 change). `GET /health` reports `fhirVersions`. See
-[docs/upgrade-4.2.md](docs/upgrade-4.2.md#serving-fewer-fhir-versions).
+[docs/operations.md](docs/operations.md#serving-fewer-fhir-versions).
 
 ### Database connection security
 
@@ -642,28 +627,28 @@ and [`.env.example`](.env.example). The most important ones:
 |------------------------------------------------------------------------------|-----------------------------------------------------------------|-------------------------------------------------------------------|
 | `FV_PG_HOST`, `FV_PG_PORT`, `FV_PG_DATABASE`, `FV_PG_USER`, `FV_PG_PASSWORD` | `localhost`, `5432`, `fhir_validator`, `postgres`, *(required)* | database                                                          |
 | `FV_ADMIN_API_KEY`                                                           | *(unset: admin operations refused)*                             | bootstrap administrator key                                       |
-| `FV_VALIDATOR_API_KEY`                                                       | *(unset: warning)*                                              | the trial organisation's shared VALIDATE key (4.1.0)              |
-| `FV_AUTH_ADMIN_CIDRS` / `FV_AUTH_TRUSTED_PROXIES`                            | *(unset)*                                                       | admin network allowlist / proxies whose headers count (4.1.0)     |
+| `FV_VALIDATOR_API_KEY`                                                       | *(unset: warning)*                                              | the trial organisation's shared VALIDATE key                      |
+| `FV_AUTH_ADMIN_CIDRS` / `FV_AUTH_TRUSTED_PROXIES`                            | *(unset)*                                                       | admin network allowlist / proxies whose headers count             |
 | `FV_AUTH_FORWARDED_HEADER`                                                   | `x-forwarded-for`                                               | the header the trusted proxies write (`forwarded` for RFC 7239)   |
-| `FV_ENABLED_FHIR_VERSIONS`                                                   | *(unset: all)*                                                  | FHIR versions this instance serves, e.g. `R4,R5` (4.2.0)          |
-| `FV_GLOBAL_DISABLED_ACL_SECURITY`                                            | `false`                                                         | `true`/`1`/`yes`: no endpoint needs a key (public mode, 4.2.0)    |
-| `FV_FHIR_VERSIONS_CHANGE_CONFIRMED`                                          | `false`                                                         | allow a start that changes the stored served versions (4.2.0)     |
-| `FV_ACL_MODE_CHANGE_CONFIRMED`                                               | `false`                                                         | allow a start that changes the stored access-control mode (4.2.0) |
-| `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db` (4.1.0)              |
-| `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching (4.1.0)                |
+| `FV_ENABLED_FHIR_VERSIONS`                                                   | *(unset: all)*                                                  | FHIR versions this instance serves, e.g. `R4,R5`                  |
+| `FV_GLOBAL_DISABLED_ACL_SECURITY`                                            | `false`                                                         | `true`/`1`/`yes`: no endpoint needs a key (public mode)           |
+| `FV_FHIR_VERSIONS_CHANGE_CONFIRMED`                                          | `false`                                                         | allow a start that changes the stored served versions             |
+| `FV_ACL_MODE_CHANGE_CONFIRMED`                                               | `false`                                                         | allow a start that changes the stored access-control mode         |
+| `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db`                      |
+| `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching                        |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
 | `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
-| `FV_TX_TIMEOUT_MS` / `FV_TX_REQUEST_BUDGET_MS`                               | 5000 / 10000                                                    | one terminology call / a request's total terminology time (4.0.0) |
-| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 5000 / 600000                                                   | code results cached per terminology context (4.0.0)               |
-| `FV_TX_REGISTRY_REFRESH_MS`                                                  | 21600000 (6 h)                                                  | how often the registry's server list is refreshed (4.0.0)         |
-| `FV_TX_MAX_CONNECTIONS_PER_SERVER`                                           | 10                                                              | pooled connections per terminology server (4.0.0)                 |
+| `FV_TX_TIMEOUT_MS` / `FV_TX_REQUEST_BUDGET_MS`                               | 5000 / 10000                                                    | one terminology call / a request's total terminology time         |
+| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 5000 / 600000                                                   | code results cached per terminology context                       |
+| `FV_TX_REGISTRY_REFRESH_MS`                                                  | 21600000 (6 h)                                                  | how often the registry's server list is refreshed                 |
+| `FV_TX_MAX_CONNECTIONS_PER_SERVER`                                           | 10                                                              | pooled connections per terminology server                         |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |
 | `FV_CORS_ALLOWED_ORIGINS`                                                    | *(none)*                                                        | browser origins allowed to call the API                           |
-| `FV_SYSTEM_ORG_NAME_SHORT`, `FV_SYSTEM_ORG_NAME_LONG`                        | `system`, `FHIR Validation Service`                             | the system organisation's names, applied at every start (3.1.0)   |
-| `FV_SYSTEM_ORG_EMAIL`, `_PHONE`, `_WEBSITE`, `_COUNTRY`, `_POST_CODE`        | *(unset)*                                                       | the system organisation's contact details (3.1.0)                 |
-| `FV_SYSTEM_ORG_ADDRESS_LINES`                                                | *(unset)*                                                       | address lines separated by `\|` (3.1.0)                           |
-| `FV_SYSTEM_ORG_CONTACT_PERSON_NAME`, `_MOBILE`, `_EMAIL`                     | *(unset)*                                                       | the system organisation's contact person (3.1.0)                  |
+| `FV_SYSTEM_ORG_NAME_SHORT`, `FV_SYSTEM_ORG_NAME_LONG`                        | `system`, `FHIR Validation Service`                             | the system organisation's names, applied at every start           |
+| `FV_SYSTEM_ORG_EMAIL`, `_PHONE`, `_WEBSITE`, `_COUNTRY`, `_POST_CODE`        | *(unset)*                                                       | the system organisation's contact details                         |
+| `FV_SYSTEM_ORG_ADDRESS_LINES`                                                | *(unset)*                                                       | address lines separated by `\|`                                   |
+| `FV_SYSTEM_ORG_CONTACT_PERSON_NAME`, `_MOBILE`, `_EMAIL`                     | *(unset)*                                                       | the system organisation's contact person                          |
 
 ## Development
 

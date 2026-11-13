@@ -79,7 +79,7 @@ public class OrganisationRepository {
                 .recover(err -> {
                     if (isShortNameTaken(err)) {
                         return Future.failedFuture(new nzi.fhir.validator.core.StartupException("An organisation named '"
-                                + nameShort + "' already exists with another id; rename it before starting 4.1.0 "
+                                + nameShort + "' already exists with another id; rename it before starting "
                                 + "(the well-known '" + nameShort + "' organisation has id " + id + ")"));
                     }
                     return Future.failedFuture(err);

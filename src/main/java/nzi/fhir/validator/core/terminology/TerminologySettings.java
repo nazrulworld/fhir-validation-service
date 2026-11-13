@@ -18,7 +18,7 @@ import java.util.Set;
  *               {@code ECOSYSTEM} (it then replaces the registry's default server), forbidden for {@code NONE}
  */
 public record TerminologySettings(TerminologyMode mode, String server) {
-    /** No terminology server: fully offline, as every context was before 4.0.0. */
+    /** No terminology server: fully offline (the default). */
     public static final TerminologySettings NONE = new TerminologySettings(TerminologyMode.NONE, null);
 
     /** At most 512 characters (data-model §1, the {@code tx_server} column). */
