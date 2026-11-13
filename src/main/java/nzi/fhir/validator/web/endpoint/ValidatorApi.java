@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The validator context endpoints, {@code /{version}/validator} (4.0.0; {@code /{version}/include-ig} before):
+ * The validator context endpoints, {@code /{version}/validator}:
  * {@code POST} includes an IG version (its validator context is pre-built and pinned on every instance), {@code PATCH}
  * changes an included context's sharing, owner or terminology setting, and {@code DELETE} excludes it. All are
  * administrative (ADMIN key).

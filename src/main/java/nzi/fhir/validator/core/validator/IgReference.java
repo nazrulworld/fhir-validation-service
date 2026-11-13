@@ -79,7 +79,7 @@ public record IgReference(String name, String version) {
      * The validator context for this reference and {@code fhirVersion}, as {@code caller} may use it (spec 005 research
      * R5, spec 007 FR-021 to FR-023). Only included contexts serve validation: a versionless reference becomes the
      * highest <em>included</em> version the caller may use; a stored, usable version that isn't included is refused
-     * with 400 (it would otherwise be built on demand, which 4.0.0 removed). An exact version the caller may not use is
+     * with 400 (nothing is built on demand). An exact version the caller may not use is
      * treated exactly like one that isn't stored, and the declared FHIR versions are checked before "not included"
      * (FR-024), so no 400 ever reveals a package the caller can't see. A package the view doesn't know (or doesn't let
      * the caller see) triggers one rate-limited catalog refresh before the request is rejected (spec 004 research R4),

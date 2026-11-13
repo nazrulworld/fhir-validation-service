@@ -2,7 +2,7 @@
 # Rolling restart under load (SC-008, FR-029): two validators behind the `cluster` load balancer, steady k6 load,
 # restart one instance at a time, and fail if 0.1% or more of the requests failed.
 # Usage: sh scripts/rolling-restart.sh   (from the repository root; needs docker compose and jq)
-#   Validates with FV_KEY, else FV_VALIDATOR_API_KEY or FV_ADMIN_API_KEY from .env (4.1.0: validation is key-only).
+#   Validates with FV_KEY, else FV_VALIDATOR_API_KEY or FV_ADMIN_API_KEY from .env (validation is key-only).
 #   Refuses to run when the running validator image and the version being built differ in major version.
 #   ROLLING_VUS (default 8, keep it at or below the admission limit), ROLLING_DURATION (default 150s, at least 2m)
 set -eu
@@ -52,23 +52,9 @@ if [ -n "$running" ] && [ -n "$target_version" ]; then
     echo "Rolling restart across major versions is not supported; stop every instance first" >&2
     exit 1
   fi
-  # 4.0 → 4.1 is a minor release, but migration V11 re-keys the system organisation while 4.0 instances still use the
-  # old id: every 4.0 instance must be stopped first (spec 008, docs/upgrade-4.1.md).
-  case "$running_version" in
-    4.0.*)
-      case "$target_version" in
-        4.0.*) ;;
-        4.*)
-          echo "ROLLING RESTART REFUSED: running $running_version, target $target_version." >&2
-          echo "The 4.1 upgrade needs every 4.0 instance stopped first; see docs/upgrade-4.1.md" >&2
-          exit 1
-          ;;
-      esac
-      ;;
-  esac
 fi
 
-# Since 4.1.0 every validation needs a key: FV_KEY, else the trial validator key from .env, else the admin key.
+# Every validation needs a key: FV_KEY, else the trial validator key from .env, else the admin key.
 env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
 KEY="${FV_KEY:-$(env_value FV_VALIDATOR_API_KEY)}"
 [ -n "$KEY" ] || KEY=$(env_value FV_ADMIN_API_KEY)

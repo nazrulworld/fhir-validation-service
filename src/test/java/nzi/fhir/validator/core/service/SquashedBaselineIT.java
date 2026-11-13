@@ -19,20 +19,22 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 4.3.0 squashed the original V1 to V9 into {@code V9__baseline_4_0.sql}. The originals are kept under
- * {@code db/legacy-migration} (test resources) to show that:
+ * 1.0.0 merges every earlier migration into {@code V15__baseline_1_0.sql}. The earlier migrations are kept in test
+ * resources under {@code db/legacy}, in the two histories a development-build database can have:
  * <ul>
- *   <li>the baseline builds the same schema and seed rows as the original chain, before and after V10 onwards;</li>
- *   <li>a database that ran the original chain (any 4.x) upgrades with its history unchanged and its data kept, and
- *       4.2 (the original V1 to V9) still validates against it, so rolling restarts and rollback keep working;</li>
- *   <li>V10 onwards are still validated strictly on such a database;</li>
- *   <li>a schema older than 4.0.0 is refused without retrying.</li>
+ *   <li>{@link #ORIGINAL}: the original V1 to V15;</li>
+ *   <li>{@link #SQUASHED_V9}: V9 as one baseline, then V10 to V15.</li>
  * </ul>
+ * The tests show that the baseline builds the same schema and seed rows as both; that a database with either history
+ * starts with its history unchanged and its data kept, and a build with that history still validates it; that a
+ * migration after the baseline is still validated strictly; and that a database stopped before V15 is refused.
  */
 class SquashedBaselineIT extends BaseTestContainer {
 
     private static final String S = "fhir_validator_schema";
-    private static final String LEGACY = "classpath:db/legacy-migration";
+    private static final String[] ORIGINAL = {"classpath:db/legacy/v1-v9-original", "classpath:db/legacy/v10-v15"};
+    private static final String[] SQUASHED_V9 = {"classpath:db/legacy/v9-baseline", "classpath:db/legacy/v10-v15"};
+    private static final String PROBE = "classpath:db/test-probe";
 
     private PgConnectOptions freshDatabase() throws SQLException {
         String name = "sq_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -49,9 +51,9 @@ class SquashedBaselineIT extends BaseTestContainer {
         return DriverManager.getConnection(DatabaseService.jdbcUrl(o), o.getUser(), o.getPassword());
     }
 
-    /** The original chain (what 4.0 to 4.2 ship), up to {@code target}. */
-    private static Flyway legacy(PgConnectOptions o, String target) {
-        return DatabaseService.flywayBuilder(o).locations(LEGACY).target(MigrationVersion.fromVersion(target)).load();
+    /** An earlier history, up to {@code target}. */
+    private static Flyway earlier(PgConnectOptions o, String[] history, String target) {
+        return DatabaseService.flywayBuilder(o).locations(history).target(MigrationVersion.fromVersion(target)).load();
     }
 
     private static List<String> rows(Connection c, String sql) throws SQLException {
@@ -77,7 +79,7 @@ class SquashedBaselineIT extends BaseTestContainer {
 
     /**
      * What a later migration or the service can observe: columns in order (not their attribute numbers, which count
-     * dropped columns), constraints, indexes, types, functions, triggers, and the seed rows.
+     * dropped columns), constraints, indexes, types, functions, triggers, the seed rows and every table's row count.
      */
     private static List<String> snapshot(PgConnectOptions o) throws SQLException {
         List<String> out = new ArrayList<>();
@@ -95,13 +97,17 @@ class SquashedBaselineIT extends BaseTestContainer {
                     + "WHERE n.nspname = '" + S + "' GROUP BY 1 ORDER BY 1"));
             out.addAll(rows(c, "SELECT p.proname, pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
                     + "WHERE n.nspname = '" + S + "' ORDER BY 1"));
-            out.addAll(rows(c, "SELECT event_object_table, trigger_name, event_manipulation, action_statement "
+            out.addAll(rows(c, "SELECT event_object_table, trigger_name, event_manipulation, action_timing, action_statement "
                     + "FROM information_schema.triggers WHERE trigger_schema = '" + S + "' ORDER BY 1, 2, 3"));
-            out.addAll(rows(c, "SELECT id, name_short, name_long, type, is_active FROM " + S + ".organisations ORDER BY id"));
+            out.addAll(rows(c, "SELECT id, name_short, name_long, type, is_active, address_lines FROM " + S
+                    + ".organisations ORDER BY id"));
             out.addAll(rows(c, "SELECT validator_id, fhir_version, included_ig_packages, is_active, revision FROM "
                     + S + ".fhir_validator_logs ORDER BY validator_id, fhir_version"));
             out.addAll(rows(c, "SELECT id, revision FROM " + S + ".fhir_package_catalog"));
-            out.addAll(rows(c, "SELECT name, role, owner, revoked_at IS NULL FROM " + S + ".api_keys ORDER BY name"));
+            for (String table : List.of("api_keys", "revoked_key_hashes", "fhir_implementation_guides", "fhir_validator_snapshots",
+                    "tx_registry_snapshot", "validation_usage", "service_settings")) {
+                out.addAll(rows(c, "SELECT '" + table + "', count(*) FROM " + S + "." + table));
+            }
         }
         return out;
     }
@@ -114,67 +120,92 @@ class SquashedBaselineIT extends BaseTestContainer {
     }
 
     @Test
-    void baselineBuildsTheSameSchemaAsTheOriginalChain() throws SQLException {
+    void baselineBuildsTheSameSchemaAsTheOriginalMigrations() throws SQLException {
         PgConnectOptions original = freshDatabase();
-        PgConnectOptions squashed = freshDatabase();
-        legacy(original, "9").migrate();
-        DatabaseService.flywayBuilder(squashed).target(MigrationVersion.fromVersion("9")).load().migrate();
-        assertEquals(snapshot(original), snapshot(squashed), "the 4.0.0 schema");
-
-        DatabaseService.migrateOnce(original);
-        DatabaseService.migrateOnce(squashed);
-        assertEquals(snapshot(original), snapshot(squashed), "the latest schema");
+        PgConnectOptions baseline = freshDatabase();
+        earlier(original, ORIGINAL, "15").migrate();
+        DatabaseService.migrateOnce(baseline);
+        assertEquals(List.of("15 | baseline 1 0"), history(baseline).stream().map(r -> r.substring(0, r.lastIndexOf(" | "))).toList(),
+                "a new database runs the baseline only");
+        assertEquals(snapshot(original), snapshot(baseline));
     }
 
     @Test
-    void a4xDatabaseUpgradesKeepingItsHistoryAndData() throws SQLException {
+    void baselineBuildsTheSameSchemaAsTheSquashedV9Migrations() throws SQLException {
+        PgConnectOptions squashed = freshDatabase();
+        PgConnectOptions baseline = freshDatabase();
+        earlier(squashed, SQUASHED_V9, "15").migrate();
+        DatabaseService.migrateOnce(baseline);
+        assertEquals(snapshot(squashed), snapshot(baseline));
+    }
+
+    @Test
+    void aDatabaseWithTheOriginalHistoryStartsKeepingItsHistoryAndData() throws SQLException {
+        startsKeepingHistoryAndData(ORIGINAL);
+    }
+
+    @Test
+    void aDatabaseWithTheSquashedV9HistoryStartsKeepingItsHistoryAndData() throws SQLException {
+        startsKeepingHistoryAndData(SQUASHED_V9);
+    }
+
+    private void startsKeepingHistoryAndData(String[] history) throws SQLException {
         PgConnectOptions db = freshDatabase();
-        legacy(db, "9").migrate();
+        earlier(db, history, "15").migrate();
         execute(db, "INSERT INTO " + S + ".organisations (name_short, name_long, type) VALUES ('acme', 'Acme', 'COMMERCIAL')");
-        execute(db, "INSERT INTO " + S + ".api_keys (name, key_hash, role) VALUES ('ops', '\\x05', 'ADMIN')");
+        execute(db, "INSERT INTO " + S + ".api_keys (name, key_hash, role, owner) SELECT 'ops', '\\x05', 'ADMIN', id FROM "
+                + S + ".organisations WHERE name_short = 'acme'");
         execute(db, "INSERT INTO " + S + ".fhir_implementation_guides (ig_package_id, ig_package_version, ig_package_meta, "
                 + "content_raw, source) VALUES ('example.pkg', '1.0.0', '{}', '\\x00', 'UPLOAD')");
-        List<String> retired = history(db);
+        List<String> before = history(db);
 
         DatabaseService.migrateOnce(db);
+        DatabaseService.migrateOnce(db);
 
-        List<String> after = history(db);
-        assertEquals(retired, after.subList(0, retired.size()), "the original V1 to V9 rows are unchanged");
-        assertEquals(List.of("10", "11", "12", "13", "14", "15"),
-                after.subList(retired.size(), after.size()).stream().map(r -> r.split(" \\| ")[0]).toList());
+        assertEquals(before, history(db), "the history is unchanged");
         try (Connection c = jdbc(db)) {
-            assertEquals(List.of("acme"), rows(c, "SELECT name_short FROM " + S + ".organisations WHERE type = 'COMMERCIAL'"));
-            assertEquals(List.of("ops"), rows(c, "SELECT name FROM " + S + ".api_keys WHERE name = 'ops'"));
+            assertEquals(List.of("acme"), rows(c, "SELECT o.name_short FROM " + S + ".api_keys k JOIN " + S
+                    + ".organisations o ON o.id = k.owner WHERE k.name = 'ops'"));
             assertEquals(List.of("example.pkg"), rows(c, "SELECT ig_package_id FROM " + S + ".fhir_implementation_guides"));
         }
-
-        DatabaseService.migrateOnce(db);
-        assertEquals(after, history(db), "a second start changes nothing");
-
-        // 4.2 ships the original V1 to V9 and ignores later (future) versions: it still validates this database.
-        assertDoesNotThrow(() -> DatabaseService.flywayBuilder(db).locations(LEGACY).load().validate());
+        // A build that ships this history still validates the database (switching back keeps working).
+        assertDoesNotThrow(() -> DatabaseService.flywayBuilder(db).locations(history).load().validate());
     }
 
     @Test
-    void laterMigrationsAreStillValidatedStrictly() throws SQLException {
+    void migrationsAfterTheBaselineAreValidatedStrictly() throws SQLException {
         PgConnectOptions db = freshDatabase();
-        legacy(db, "9").migrate();
-        DatabaseService.migrateOnce(db);
-        execute(db, "UPDATE " + S + ".flyway_schema_history SET checksum = checksum + 1 WHERE version = '10'");
+        earlier(db, ORIGINAL, "15").migrate();
+        DatabaseService.migrateOnce(db, PROBE);
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("16"), rows(c, "SELECT max(version::int)::text FROM " + S + ".flyway_schema_history "
+                    + "WHERE version IS NOT NULL"), "V16 is applied on top of the earlier history");
+        }
+        execute(db, "UPDATE " + S + ".flyway_schema_history SET checksum = checksum + 1 WHERE version = '16'");
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> DatabaseService.migrateOnce(db));
-        assertTrue(e.getMessage().contains("10"), e.getMessage());
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> DatabaseService.migrateOnce(db, PROBE));
+        assertTrue(e.getMessage().contains("16"), e.getMessage());
     }
 
     @Test
-    void aSchemaOlderThan4IsRefused() throws SQLException {
+    void aNewDatabaseAppliesLaterMigrationsNormally() throws SQLException {
         PgConnectOptions db = freshDatabase();
-        legacy(db, "8").migrate();
+        DatabaseService.migrateOnce(db, PROBE);
+        try (Connection c = jdbc(db)) {
+            assertEquals(List.of("15", "16"), rows(c, "SELECT version FROM " + S + ".flyway_schema_history "
+                    + "WHERE version IS NOT NULL ORDER BY installed_rank"));
+        }
+    }
+
+    @Test
+    void aDatabaseStoppedBeforeTheBaselineIsRefused() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        earlier(db, ORIGINAL, "12").migrate();
 
         StartupException e = assertThrows(StartupException.class, () -> DatabaseService.migrateOnce(db));
-        assertTrue(e.getMessage().contains("4.2.0"), e.getMessage());
+        assertTrue(e.getMessage().contains("unsupported early build"), e.getMessage());
         try (Connection c = jdbc(db)) {
-            assertEquals(List.of("8"), rows(c, "SELECT max(version::int)::text FROM " + S + ".flyway_schema_history "
+            assertEquals(List.of("12"), rows(c, "SELECT max(version::int)::text FROM " + S + ".flyway_schema_history "
                     + "WHERE version IS NOT NULL"), "nothing was applied");
         }
     }

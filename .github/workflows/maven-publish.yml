@@ -34,9 +34,6 @@ jobs:
             target/fhir-validation-service-*.jar
             compose.yaml
             .env.example
-            docs/upgrade-4.1.md
-            docs/upgrade-4.2.md
-            docs/upgrade-4.3.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

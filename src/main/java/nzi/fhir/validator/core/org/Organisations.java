@@ -10,7 +10,7 @@ import java.util.UUID;
 public final class Organisations {
     /**
      * The id of the system organisation, fixed so migrations, column defaults and code need no lookup. Defined in
-     * {@link Constant} (spec 008: {@code …-100000000001} since 4.1.0, migration V11).
+     * {@link Constant} (spec 008: {@code …-100000000001}, migration V11).
      */
     public static final UUID SYSTEM_ID = Constant.SYSTEM_ORG_UUID;
 

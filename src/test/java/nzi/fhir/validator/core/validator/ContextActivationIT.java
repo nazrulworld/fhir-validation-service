@@ -367,7 +367,7 @@ class ContextActivationIT extends BaseTestContainer {
                             assertEquals("FHIR version change refused: the stored served versions are R4,R5, this instance is "
                                     + "configured R5 (FV_ENABLED_FHIR_VERSIONS). To change them, set "
                                     + "FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true on the instances being changed (see "
-                                    + "docs/upgrade-4.2.md)", ar.cause().getMessage());
+                                    + "docs/operations.md)", ar.cause().getMessage());
                         });
                         return rows(a.bootstrap().services().pool());
                     });

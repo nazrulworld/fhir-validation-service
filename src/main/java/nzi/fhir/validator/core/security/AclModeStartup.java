@@ -131,7 +131,7 @@ public final class AclModeStartup {
             if (!confirmed) {
                 throw new StartupException("access control mode change refused: stored mode is " + stored.value()
                         + ", this instance is configured " + mode.value() + ". To switch, set FV_ACL_MODE_CHANGE_CONFIRMED=true "
-                        + "on the instances being switched (see docs/upgrade-4.2.md)");
+                        + "on the instances being switched (see docs/operations.md)");
             }
             afterCommit.add(() -> logger.warn("Access control mode changes from {} to {} (FV_ACL_MODE_CHANGE_CONFIRMED)",
                     stored.value(), mode.value()));

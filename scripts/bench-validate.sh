@@ -8,7 +8,7 @@
 #   IG           default hl7.fhir.dk.core#3.4.0 (store and include it first)
 #   REQUESTS     default 2000
 #   CONCURRENCY  default 8
-#   FV_KEY       (env, required since 4.1.0) a VALIDATE or ADMIN key; validation is key-only
+#   FV_KEY       (env, required) a VALIDATE or ADMIN key; validation is key-only
 # Needs one of: hey (preferred) or ab (ApacheBench). Run it against the previous release and this branch on the same
 # machine and attach both outputs to the PR.
 set -eu
@@ -17,7 +17,7 @@ BASE=${1:-http://127.0.0.1:8880}
 IG=${2:-hl7.fhir.dk.core#3.4.0}
 N=${3:-2000}
 C=${4:-8}
-KEY=${FV_KEY:?set FV_KEY to a VALIDATE or ADMIN key (validation needs a key since 4.1.0)}
+KEY=${FV_KEY:?set FV_KEY to a VALIDATE or ADMIN key (validation needs a key)}
 IG_QUERY=$(printf '%s' "$IG" | sed 's/#/%23/')
 BODY=$(mktemp)
 trap 'rm -f "$BODY"' EXIT

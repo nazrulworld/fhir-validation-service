@@ -114,7 +114,7 @@ public final class ConfigLoader {
     );
 
     /** Why the on-demand variables are ignored (spec 007 FR-025: on-demand contexts were removed). */
-    private static final String ON_DEMAND_REMOVED = "validation contexts are no longer built on demand (4.0.0); "
+    private static final String ON_DEMAND_REMOVED = "validation contexts are no longer built on demand; "
             + "include IGs with POST /{version}/validator";
 
     /**
@@ -128,7 +128,7 @@ public final class ConfigLoader {
         m.put("FV_IG_MAX_ON_DEMAND", ON_DEMAND_REMOVED);
         m.put("FV_IG_BUILD_WAIT_MS", ON_DEMAND_REMOVED);
         // Spec 008 FR-009.
-        m.put("FV_AUTH_ANONYMOUS_VALIDATE", "removed in 4.1.0, validation always requires a VALIDATE or ADMIN key");
+        m.put("FV_AUTH_ANONYMOUS_VALIDATE", "removed, validation always requires a VALIDATE or ADMIN key");
         return java.util.Collections.unmodifiableMap(m);
     }
 

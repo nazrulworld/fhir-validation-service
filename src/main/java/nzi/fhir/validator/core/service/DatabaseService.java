@@ -78,17 +78,19 @@ public final class DatabaseService {
     }
 
     /**
-     * The last retired migration version: 4.3.0 squashed the original V1 to V9 into {@code V9__baseline_4_0.sql}.
+     * The last retired migration version: the migrations of development builds (V1 to V15) are merged into
+     * {@code V15__baseline_1_0.sql}, which builds the same schema. New migrations start at V16.
      */
-    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("9");
+    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("15");
 
     /**
-     * One migration attempt (4.3.0, squashed baseline). A new database runs the baseline. A database that ran the original
-     * V1 to V9 keeps its history unchanged (so 4.2 still starts on it): only versions up to {@link #LAST_RETIRED} are
-     * validated leniently, and V10 onwards are validated as usual. A schema older than 4.0.0 is refused.
+     * One migration attempt. A new database runs the baseline. A database that ran the earlier migrations keeps its
+     * history unchanged: only versions up to {@link #LAST_RETIRED} are validated leniently, and later ones are
+     * validated as usual. A schema that stops before {@link #LAST_RETIRED} is from an unsupported early build and is
+     * refused. {@code extraLocations} adds migration locations (tests only; production passes none).
      */
-    static void migrateOnce(PgConnectOptions options) {
-        Flyway plain = flyway(options);
+    static void migrateOnce(PgConnectOptions options, String... extraLocations) {
+        Flyway plain = withLocations(flywayBuilder(options), extraLocations).load();
         boolean retiredHistory = false;
         MigrationVersion maxApplied = null;
         for (MigrationInfo info : plain.info().applied()) {
@@ -108,11 +110,10 @@ public final class DatabaseService {
             return;
         }
         if (maxApplied.compareTo(LAST_RETIRED) < 0) {
-            throw new StartupException("Database schema is from a release before 4.0.0 (migration " + maxApplied
-                    + "); this release cannot upgrade it. Upgrade with 4.2.0 first (FV_TAG=4.2.0), then start this release"
-                    + " (docs/upgrade-4.3.md)");
+            throw new StartupException("Database schema is from an unsupported early build (migration " + maxApplied
+                    + "); it cannot be upgraded. Start from an empty database (docs/operations.md)");
         }
-        Flyway lenient = flywayBuilder(options)
+        Flyway lenient = withLocations(flywayBuilder(options), extraLocations)
                 .ignoreMigrationPatterns("*:missing", "*:pending", "*:future")
                 .validateOnMigrate(false)
                 .load();
@@ -124,8 +125,19 @@ public final class DatabaseService {
         if (!errors.isEmpty()) {
             throw new IllegalStateException("Migration validation failed: " + String.join("; ", errors));
         }
-        logger.info("Database keeps the original V1-V{} history; retired versions validated leniently", LAST_RETIRED);
+        logger.info("Database keeps its pre-1.0.0 migration history (up to V{}); those versions are validated leniently",
+                LAST_RETIRED);
         lenient.migrate();
+    }
+
+    private static FluentConfiguration withLocations(FluentConfiguration config, String... extraLocations) {
+        if (extraLocations.length == 0) {
+            return config;
+        }
+        String[] all = new String[extraLocations.length + 1];
+        all[0] = "classpath:db/migration";
+        System.arraycopy(extraLocations, 0, all, 1, extraLocations.length);
+        return config.locations(all);
     }
 
     private static String rootMessage(Throwable t) {

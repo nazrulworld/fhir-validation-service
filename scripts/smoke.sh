@@ -16,7 +16,7 @@ fail() {
 
 [ -f .env ] || fail ".env missing (cp .env.example .env and set PG_PASSWORD)"
 
-# Since 4.1.0 every validation needs a VALIDATE or ADMIN key: FV_KEY, else the trial validator key from .env, else the
+# Every validation needs a VALIDATE or ADMIN key: FV_KEY, else the trial validator key from .env, else the
 # admin key.
 env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
 KEY="${FV_KEY:-$(env_value FV_VALIDATOR_API_KEY)}"
@@ -34,7 +34,7 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health/readiness")" = "
   sleep 2
 done
 
-echo "==> validation without a key is refused (4.1.0: key-only)"
+echo "==> validation without a key is refused (key-only)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/fhir+json' \
   --data-binary "@$FIXTURE" "$BASE/R4/validate")
 [ "$code" = "401" ] || fail "validate without a key returned HTTP $code, expected 401"

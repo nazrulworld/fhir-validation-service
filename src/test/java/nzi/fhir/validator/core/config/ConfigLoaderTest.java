@@ -126,7 +126,7 @@ class ConfigLoaderTest {
             assertNull(cfg.json().getJsonObject("auth").getValue("anonymousValidate"));
             java.util.List<String> warnings = logs.from(ConfigLoader.class.getName()).stream()
                     .filter(e -> e.level() == org.apache.logging.log4j.Level.WARN).map(e -> e.message()).distinct().toList();
-            assertEquals(java.util.List.of("FV_AUTH_ANONYMOUS_VALIDATE is deprecated and ignored: removed in 4.1.0, "
+            assertEquals(java.util.List.of("FV_AUTH_ANONYMOUS_VALIDATE is deprecated and ignored: removed, "
                     + "validation always requires a VALIDATE or ADMIN key"), warnings);
         }
     }

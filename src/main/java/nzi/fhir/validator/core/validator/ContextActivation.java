@@ -117,7 +117,7 @@ public final class ContextActivation {
                             return Future.failedFuture(new StartupException("FHIR version change refused: the stored served "
                                     + "versions are " + previous.get() + ", this instance is configured " + value + " ("
                                     + ServedVersions.VARIABLE + "). To change them, set FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true "
-                                    + "on the instances being changed (see docs/upgrade-4.2.md)"));
+                                    + "on the instances being changed (see docs/operations.md)"));
                         }
                         afterCommit.add(() -> logger.warn("Served FHIR versions change from {} to {} "
                                 + "(FV_FHIR_VERSIONS_CHANGE_CONFIRMED)", previous.get(), value));

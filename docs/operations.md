@@ -1,35 +1,12 @@
-# Upgrading to 4.2.0
+# Operations
 
-4.2.0 adds two operator switches (spec 009). It is a **minor release without breaking changes**: with the new
-settings unset, the service behaves exactly as 4.1.0.
-
-- `FV_ENABLED_FHIR_VERSIONS` restricts the FHIR versions an instance serves.
-- `FV_GLOBAL_DISABLED_ACL_SECURITY` turns API-key access control off for a whole deployment.
-
-## Steps
-
-1. **Back up the database.**
-2. **Roll out 4.2.0.** A rolling upgrade is fine. Migrations V14 and V15 run automatically and only add things:
-   - V14 adds an active flag (and an inactive reason) to every validator context, and marks every existing context
-     active;
-   - V15 adds a `service_settings` table, which starts empty.
-
-   4.1 instances ignore both.
-3. Only **after every instance runs 4.2**, set the new settings if you want them:
-   - Turn on `FV_ENABLED_FHIR_VERSIONS` only then: a 4.1 instance ignores the active flag and would still build every
-     context.
-   - Turn on `FV_GLOBAL_DISABLED_ACL_SECURITY` only then: a 4.1 instance has no mode guard. It reinstalls the configured
-     keys on every start, which would undo the random keys and make the configured key values valid again.
-
-Rollback: stop 4.2.0 and start 4.1.0 against the same database. The added column and table are ignored by 4.1. If
-versions were disabled, the contexts marked inactive are built again by 4.1. If access control was disabled, set
-`FV_ADMIN_API_KEY` and `FV_VALIDATOR_API_KEY` so 4.1 installs known keys again.
+Procedures and behaviour details for running the service. Settings are listed in the README.
 
 ## Serving fewer FHIR versions
 
 `FV_ENABLED_FHIR_VERSIONS` takes a comma-separated list of `STU3`, `R4`, `R4B` and `R5`. Spaces are trimmed, case is
-ignored and duplicates are ignored. Unset or empty, every version is served, as before. Any other name (including
-`R6`) stops the start with a configuration error naming it.
+ignored and duplicates are ignored. Unset or empty, every version is served. Any other name (including `R6`) stops the
+start with a configuration error naming it.
 
 What changes for the versions that are not listed:
 
@@ -51,8 +28,8 @@ Uploading or registering IG packages is not restricted.
 
 Every instance records its served versions in `service_settings.fhir_versions`. **An instance whose served versions
 differ from the stored ones refuses to start** (exit 1, nothing changed) unless `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true`
-is also set, so one instance with a stale setting can't switch contexts off for the whole fleet. The first start after
-the upgrade stores the set without needing the confirmation.
+is also set, so one instance with a stale setting can't switch contexts off for the whole fleet. The first start on a
+database with no stored set stores it without needing the confirmation.
 
 **Restricting (or changing) versions in a fleet:**
 1. Set `FV_ENABLED_FHIR_VERSIONS` to the same value, and `FV_FHIR_VERSIONS_CHANGE_CONFIRMED=true`, on every instance.
@@ -75,12 +52,12 @@ In public mode:
     organisation), so they see shareable content only;
   - administrative operations run as the `system administrator` key (`00000000-0000-0000-0000-200000000001`, system
     organisation).
-- Ownership works as before: anything created is owned by the system organisation.
-- Access rules work as before: private content of other organisations stays private (404).
+- Ownership is unchanged: anything created is owned by the system organisation.
+- Access rules are unchanged: private content of other organisations stays private (404).
 - Usage records are charged to the trial validator and the trial organisation.
 - Packages and validator contexts are always stored as **shareable**: `shareable: false` on include, register,
-  upload or PATCH is ignored, with a warning in the response's `warnings`. Making private content shareable works as
-  before; content that is already private stays private until it is changed. The command line is not affected.
+  upload or PATCH is ignored, with a warning in the response's `warnings`. Making private content shareable still
+  works; content that is already private stays private until it is changed. The command line is not affected.
 - `FV_AUTH_ADMIN_CIDRS` **still applies**: administrative operations from other networks get 403.
 - Both fixed keys get new random values (256 bits) at every start. These values are never logged or shown.
 - A fixed key you revoke stays revoked across restarts (logged at WARN): revoking `trial validator`
@@ -91,8 +68,8 @@ In public mode:
 
 Every instance records its mode in `service_settings.acl_security`. **An instance whose mode differs from the stored
 one refuses to start** (exit 1, nothing changed) unless `FV_ACL_MODE_CHANGE_CONFIRMED=true` is also set. This stops a
-single misconfigured instance from replacing the keys the whole fleet uses. A fresh or just-upgraded database has no
-stored mode, so its first start needs no confirmation.
+single misconfigured instance from replacing the keys the whole fleet uses. A database with no stored mode needs no
+confirmation on its first start.
 
 **Switching off:**
 1. On every instance, set `FV_GLOBAL_DISABLED_ACL_SECURITY=true` and `FV_ACL_MODE_CHANGE_CONFIRMED=true`.
@@ -114,4 +91,44 @@ restored admin key. No manual database change is needed in either direction.
 After switching back:
 - A key variable left unset keeps its unknown random value, so that key can't be used until the variable is set. A
   WARN names it.
-- A value that was revoked before is never installed again (4.1 rule). An ERROR names it.
+- A value that was revoked before is never installed again (see [Seeded keys](#seeded-keys)). An ERROR names it.
+
+## Seeded keys
+
+`system administrator` and `trial validator` are installed from configuration at every start, with an expiry of
+2099-12-30T23:59:59Z. They are rotated by changing `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` and restarting.
+Seeded keys are revoked like any other key, with `fv-admin key revoke --name "trial validator"`. A revoked seeded
+key's value is never installed again (it is remembered in `revoked_key_hashes`): an instance still configured with a
+leaked, revoked value logs an ERROR and leaves the stored key alone, also after the key was rotated. Deploy a new value
+to replace it. Instances configured with different non-revoked values still overwrite each other's key, so change the
+value on all instances together. An instance started without the variable leaves the stored key as it is.
+
+## If startup fails
+
+The service stops (exit 1) instead of running half-configured when:
+
+- **another organisation is already called `trial`**: `An organisation named 'trial' already exists with another id;
+  rename it before starting`. Rename it (`fv-admin org update --name-short trial --rename <other>`) and start again.
+- **a seeded key conflicts**: `Cannot install the 'system administrator' key: another key (revoked keys count too)
+  already uses its name (api_keys_name_key)` or `... its value (api_keys_key_hash_key)`. Revoking doesn't help: revoked
+  keys still hold their name and value. For a name conflict, rename the other key in the database
+  (`UPDATE fhir_validator_schema.api_keys SET name = '<new name>' WHERE name = 'system administrator';`); for a value
+  conflict, configure a different value. Then restart.
+- **`FV_VALIDATOR_API_KEY` is malformed or equals `FV_ADMIN_API_KEY`**: a configuration error names the variable.
+- **the served FHIR versions or the access-control mode changed** without the matching confirmation setting (see
+  above).
+- **the database schema is from an unsupported early build**: it cannot be upgraded; start from an empty database.
+
+## Usage records on shutdown
+
+The `db` sink buffers records for up to `FV_USAGE_FLUSH_MS` (1 s by default). A graceful stop (SIGTERM) writes them
+before exiting; a hard kill (SIGKILL, `docker rm -f`, an OOM kill) loses at most that last interval.
+
+## Usage retention
+
+With `FV_USAGE_SINK=db`, every authorised validation adds one row (about 250 bytes) to
+`fhir_validator_schema.validation_usage`. Nothing deletes old rows. Schedule a cleanup, for example:
+
+```sql
+DELETE FROM fhir_validator_schema.validation_usage WHERE created_at < now() - interval '90 days';
+```

@@ -15,7 +15,7 @@ import java.util.Optional;
 
 /**
  * Bearer API-key authorisation (FR-012): administrative operations always need an ADMIN key; validation and the package
- * read operations need a VALIDATE or ADMIN key (spec 008: anonymous validation was removed in 4.1.0).
+ * read operations need a VALIDATE or ADMIN key (spec 008: there is no anonymous validation).
  * Key lookups are cached for {@code FV_AUTH_CACHE_TTL_MS}, so revocations take effect within that time. The cache
  * holds at most {@value #DEFAULT_MAX_CACHED_KEYS} entries (least recently used evicted first), so callers sending many
  * distinct tokens cannot grow it without bound (constitution Principle VI).
@@ -132,8 +132,8 @@ public class ApiKeyAuthHandler {
 
     /**
      * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
-     * method on an administrative path counts (POST, PATCH and DELETE {@code /{version}/validator}, named
-     * {@code /{version}/include-ig} before 4.0.0; POST upload/register; PATCH {@code /igs/{name}/{version}}), except
+     * method on an administrative path counts (POST, PATCH and DELETE {@code /{version}/validator};
+     * POST upload/register; PATCH {@code /igs/{name}/{version}}), except
      * {@code OPTIONS} (CORS preflight), so a new method on these paths can never fall through unauthenticated.
      */
     public static boolean isAdministrative(RoutingContext ctx) {

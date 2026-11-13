@@ -237,7 +237,7 @@ public final class ServiceRegistry {
         return validationService;
     }
 
-    /** The validator context endpoints, {@code /{version}/validator} (4.0.0). */
+    /** The validator context endpoints, {@code /{version}/validator}. */
     public ValidatorApi validatorApi() {
         return validatorApi;
     }
