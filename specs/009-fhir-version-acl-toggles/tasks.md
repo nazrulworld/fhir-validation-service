@@ -603,3 +603,29 @@ Each checkpoint leaves `./mvnw verify` green and the service releasable with the
 - [X] T058 Log the number of inactive validator contexts at every start, not only the contexts that changed: after `services.configSync().start()` in `main/Bootstrap.java`, log at INFO `<n> validator context(s) inactive (FHIR version not enabled)`, taking the count the configuration sync reports (`ConfigSync.setInactiveCountListener` / `HealthService.inactiveCount()`), and add the assertion to `test/core/validator/ContextActivationIT.java` (the restart with an unchanged setting) per FR-015 (partial)
 - [X] T059 Remove the unused `ServedVersions.of(SupportedFhirVersion...)` factory from `main/core/enums/ServedVersions.java` (no production or test caller), or cover it with a test if it is kept on purpose per plan: ServedVersions decision (unrequested)
 - [X] T060 Remove the unused `ContextActivation.Result.changed()` from `main/core/validator/ContextActivation.java` (no caller) per plan: startup reconcile decision (unrequested)
+
+---
+
+## Phase 11: Forced sharing in public mode (FR-034)
+
+**Goal**: while access control is disabled, every HTTP request that sets sharing stores shareable content, with a
+warning when `shareable: false` was asked for. Private → shareable keeps working.
+
+- [X] T061 [US4] Add the FR-034 cases to `test/web/AclDisabledIT.java` (they must fail first). With access control
+  disabled:
+  - `POST /R4/validator` with `shareable: false`: 200, `shareable: true`, and `warnings` contains the FR-034 text;
+  - `POST /igs/register` (stub registry) with `shareable: false`: `shareable: true` plus the warning;
+  - `POST /igs/upload` with form `shareable=false`: `shareable: true` plus the warning;
+  - a private context and a private package, created through the service layer as the system organisation:
+    PATCH `{"shareable": true}` makes them shareable with no warning, and PATCH `{"shareable": false}` keeps them
+    shareable with the warning.
+- [X] T062 [P] Create `main/web/endpoint/PublicModeSharing.java`: given the `AclMode`, it turns a requested
+  `shareable=false` into `true` in disabled mode and records the FR-034 warning (`FORCED_SHAREABLE_WARNING`); in
+  enabled mode it changes nothing. It covers a plain boolean, an `Optional<Boolean>` and an `AccessChange`, keeping
+  the owner, terminology and `invalid` parts. Add `test/web/endpoint/PublicModeSharingTest.java`.
+- [X] T063 [US4] Apply it in `main/web/endpoint/ValidatorApi.java` (include, PATCH) and `main/web/endpoint/IgPackageApi.java`
+  (register by name, by download URL, upload, PATCH), adding the warning to the response's `warnings`. Pass
+  `config.aclMode()` from `main/ServiceRegistry.java` and `main/web/HttpVerticle.java`.
+- [X] T064 [P] Contract and docs: add optional `warnings` to `IgAccessResponse` in `src/main/resources/openapi.yaml`.
+  Add a 4.2.0 sentence to the include, register, upload and both PATCH descriptions and to the `apiKey` scheme text.
+  Update `contracts/http-api.md` §6, `docs/upgrade-4.2.md`, README (public mode) and CHANGELOG.

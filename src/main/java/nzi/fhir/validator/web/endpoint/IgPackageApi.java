@@ -26,6 +26,15 @@ public class IgPackageApi {
     private final IgPackageService igPackageService;
     private final SafePackageFetcher fetcher;
 
+    /** Spec 009 FR-034: sharing forced while access control is disabled. */
+    private PublicModeSharing sharing = new PublicModeSharing(nzi.fhir.validator.core.security.AclMode.ENABLED);
+
+    public IgPackageApi(IgPackageService igPackageService, SafePackageFetcher fetcher,
+                        nzi.fhir.validator.core.security.AclMode aclMode) {
+        this(igPackageService, fetcher);
+        this.sharing = new PublicModeSharing(aclMode);
+    }
+
     public IgPackageApi(IgPackageService igPackageService, SafePackageFetcher fetcher) {
         this.igPackageService = igPackageService;
         this.fetcher = fetcher;
@@ -67,13 +76,13 @@ public class IgPackageApi {
                 .put("downloaded", downloaded)
                 .put("owner", access == null ? null : access.ownerShortName())
                 .put("shareable", access == null ? null : access.shareable())
-                .put("warnings", new io.vertx.core.json.JsonArray(java.util.List.copyOf(warnings)));
+                .put("warnings", new io.vertx.core.json.JsonArray(new java.util.ArrayList<>(warnings)));
     }
 
     /** {@code registered(...)} with the stored package's owner and sharing (spec 005 FR-020). */
-    private Future<JsonObject> registered(NpmPackage pkg, boolean downloaded) {
+    private Future<JsonObject> registered(NpmPackage pkg, boolean downloaded, java.util.List<String> warnings) {
         return igPackageService.access(pkg.name(), pkg.version())
-                .map(access -> registered(pkg, downloaded, java.util.List.of(), access.orElse(null)));
+                .map(access -> registered(pkg, downloaded, warnings, access.orElse(null)));
     }
 
     private static PackageOwnership ownership(RoutingContext ctx, boolean shareable) {
@@ -92,8 +101,12 @@ public class IgPackageApi {
         } catch (RuntimeException e) {
             body = null;
         }
+        java.util.List<String> forced = new java.util.ArrayList<>();
+        AccessChange change = sharing.apply(AccessChange.parse(body), forced);
         ErrorResponder.respond(ctx, igPackageService.changePackageAccess(ApiKeyAuthHandler.caller(ctx),
-                ctx.pathParam("name"), ctx.pathParam("version"), AccessChange.parse(body)));
+                ctx.pathParam("name"), ctx.pathParam("version"), change)
+                // Spec 009 FR-034: only when sharing was forced, so the response is unchanged otherwise.
+                .map(json -> ValidatorApi.withWarnings(json, forced)));
     }
 
     private void handleRegisterIg(RoutingContext ctx) {
@@ -109,13 +122,15 @@ public class IgPackageApi {
             return;
         }
         Object shareableValue = body.getValue("shareable", true);
-        if (!(shareableValue instanceof Boolean shareable)) {
+        if (!(shareableValue instanceof Boolean requestedShareable)) {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
             return;
         }
+        java.util.List<String> forced = new java.util.ArrayList<>();
+        boolean shareable = sharing.apply(requestedShareable, forced);
         String downloadUrl = body.getString("downloadUrl", "");
         if (!downloadUrl.isEmpty()) {
-            handleDownloadIg(ctx, downloadUrl, shareable);
+            handleDownloadIg(ctx, downloadUrl, shareable, forced);
             return;
         }
         String name = body.getString("name", "");
@@ -131,7 +146,8 @@ public class IgPackageApi {
         Future<JsonObject> result = igPackageService.register(ApiKeyAuthHandler.caller(ctx), name, version,
                         body.getBoolean("includeDependency", true), shareable)
                 // Spec 006 FR-010: the concrete version is `version`; `requestedVersion` echoes latest, exact or series.
-                .map(r -> registered(r.pkg(), r.downloaded(), r.warnings(), r.access()).put("requestedVersion", version));
+                .map(r -> ValidatorApi.withWarnings(registered(r.pkg(), r.downloaded(), r.warnings(), r.access()), forced)
+                        .put("requestedVersion", version));
         ErrorResponder.respond(ctx, result);
     }
 
@@ -146,22 +162,23 @@ public class IgPackageApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "shareable must be true or false"));
             return;
         }
+        java.util.List<String> forced = new java.util.ArrayList<>();
         PackageOwnership ownership;
         try {
-            ownership = ownership(ctx, shareable == null || Boolean.parseBoolean(shareable));
+            ownership = ownership(ctx, sharing.apply(shareable == null || Boolean.parseBoolean(shareable), forced));
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
             return;
         }
         Future<JsonObject> result = igPackageService.registerUploadedFile(upload.uploadedFileName(), ownership)
-                .compose(pkg -> registered(pkg, false));
+                .compose(pkg -> registered(pkg, false, forced));
         ErrorResponder.respond(ctx, result);
     }
 
     /**
      * Downloads through {@link SafePackageFetcher}: only approved https sources, public addresses, capped size.
      */
-    private void handleDownloadIg(RoutingContext ctx, String downloadUrl, boolean shareable) {
+    private void handleDownloadIg(RoutingContext ctx, String downloadUrl, boolean shareable, java.util.List<String> forced) {
         PackageOwnership ownership;
         try {
             ownership = ownership(ctx, shareable);
@@ -171,7 +188,7 @@ public class IgPackageApi {
         }
         Future<JsonObject> result = fetcher.fetch(downloadUrl)
                 .compose(body -> igPackageService.registerIg(body.getBytes(), false, "URL", ownership))
-                .compose(pkg -> registered(pkg, true));
+                .compose(pkg -> registered(pkg, true, forced));
         ErrorResponder.respond(ctx, result);
     }
 }

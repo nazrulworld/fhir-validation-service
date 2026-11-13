@@ -35,6 +35,8 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
   - Requests run as fixed callers: validation and the package reads as `trial validator` (shareable content only),
     administrative operations as `system administrator`.
   - Ownership, access rules and usage accounting are unchanged, and `FV_AUTH_ADMIN_CIDRS` still applies.
+  - Packages and validator contexts are always stored as shareable: `shareable: false` on include, register, upload
+    or PATCH is ignored with a `warnings` entry (PATCH can still make private content shareable).
 - **`FV_ACL_MODE_CHANGE_CONFIRMED`**: a start whose access-control mode differs from the one stored by the previous
   start (V15 `service_settings.acl_security`) is refused unless it is set. Switching back to enforced access control
   re-installs `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` in one transaction ("API keys re-synchronised from

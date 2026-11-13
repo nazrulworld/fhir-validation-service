@@ -27,13 +27,32 @@ public class ValidatorApi {
     /** The versions this instance serves (spec 009). */
     private final nzi.fhir.validator.core.enums.ServedVersions served;
 
+    /** Spec 009 FR-034: sharing forced while access control is disabled. */
+    private final PublicModeSharing sharing;
+
     public ValidatorApi(IgPackageService igPackageService) {
-        this(igPackageService, nzi.fhir.validator.core.enums.ServedVersions.ALL);
+        this(igPackageService, nzi.fhir.validator.core.enums.ServedVersions.ALL,
+                nzi.fhir.validator.core.security.AclMode.ENABLED);
     }
 
-    public ValidatorApi(IgPackageService igPackageService, nzi.fhir.validator.core.enums.ServedVersions served) {
+    public ValidatorApi(IgPackageService igPackageService, nzi.fhir.validator.core.enums.ServedVersions served,
+                        nzi.fhir.validator.core.security.AclMode aclMode) {
         this.igPackageService = igPackageService;
         this.served = served;
+        this.sharing = new PublicModeSharing(aclMode);
+    }
+
+    /** Appends {@code warnings} to the response's {@code warnings} array (created when missing). */
+    static JsonObject withWarnings(JsonObject response, List<String> warnings) {
+        if (!warnings.isEmpty()) {
+            io.vertx.core.json.JsonArray all = response.getJsonArray("warnings");
+            if (all == null) {
+                all = new io.vertx.core.json.JsonArray();
+                response.put("warnings", all);
+            }
+            warnings.forEach(all::add);
+        }
+        return response;
     }
 
     /**
@@ -95,10 +114,12 @@ public class ValidatorApi {
             return;
         }
         String requestedVersion = body.getString("igPackageVersion", "latest");
+        List<String> forced = new java.util.ArrayList<>();
+        Optional<Boolean> sharingRequested = sharing.apply(Optional.ofNullable((Boolean) shareable), forced);
         // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
         ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
-                body.getString("igPackageId"), requestedVersion, Optional.ofNullable((Boolean) shareable), terminology)
-                .map(json -> json.put("requestedVersion", requestedVersion)));
+                body.getString("igPackageId"), requestedVersion, sharingRequested, terminology)
+                .map(json -> withWarnings(json.put("requestedVersion", requestedVersion), forced)));
     }
 
     /** {@code PATCH /{version}/validator?ig=name#version} (spec 005 FR-019, spec 007 FR-003, contracts §3-4). */
@@ -120,8 +141,10 @@ public class ValidatorApi {
         } catch (RuntimeException e) {
             body = null;
         }
+        List<String> forced = new java.util.ArrayList<>();
+        AccessChange change = sharing.apply(AccessChange.parse(body), forced);
         ErrorResponder.respond(ctx, igPackageService.changeSnapshotAccess(ApiKeyAuthHandler.caller(ctx), version,
-                values.get(0), AccessChange.parse(body)));
+                values.get(0), change).map(json -> withWarnings(json, forced)));
     }
 
     /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/validator?ig=name#version}. */

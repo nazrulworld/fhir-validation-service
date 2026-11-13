@@ -248,7 +248,9 @@ paths:
         tx-registry-unavailable otherwise). For an already included context `terminology` is ignored with a
         warning; change it with PATCH. Enabled FHIR versions (4.2.0): a FHIR version that is supported but not
         enabled on this deployment (FV_ENABLED_FHIR_VERSIONS) is refused with 422 fhir-version-disabled; this also
-        applies when an inactive context for it is already stored.
+        applies when an inactive context for it is already stored. Public mode (4.2.0): while access control is
+        disabled (FV_GLOBAL_DISABLED_ACL_SECURITY), `shareable: false` is ignored and the context is stored as
+        shareable, with a warning in `warnings`.
       parameters:
         - name: version
           in: path
@@ -327,7 +329,9 @@ paths:
         key. 404 package-not-found when that version is not included, or when the caller's organisation doesn't own
         its context and isn't the system organisation (3.1.0). Enabled FHIR versions (4.2.0): also works for a
         context that is inactive because its FHIR version is not enabled (FV_ENABLED_FHIR_VERSIONS); the change is
-        stored, nothing is built, and it applies when the version is enabled again.
+        stored, nothing is built, and it applies when the version is enabled again. Public mode (4.2.0): while access
+        control is disabled, `shareable: false` is ignored (the context stays or becomes shareable) with a warning in
+        `warnings`; `shareable: true` works as before.
       parameters:
         - name: version
           in: path
@@ -425,7 +429,8 @@ paths:
       description: >-
         The stored package is owned by the caller's organisation (3.1.0). Uploading a name#version another
         organisation stored gives 409 conflict, unless the caller is the system organisation; a replacement keeps the
-        stored owner and sharing.
+        stored owner and sharing. Public mode (4.2.0): while access control is disabled (FV_GLOBAL_DISABLED_ACL_SECURITY),
+        `shareable=false` is ignored and the package is stored as shareable, with a warning in `warnings`.
       requestBody:
         required: true
         content:
@@ -487,7 +492,7 @@ paths:
         package-not-found when nothing is stored. `downloaded` says whether the archive was fetched in this call.
         Organisation ownership (3.1.0): every package newly stored by the call, downloaded dependencies included, is
         owned by the caller's organisation with `shareable` from the request (default true; the package licence is
-        not used). A version that is already stored keeps its owner and sharing, and is answered 404 when the caller
+        not used; in public mode, 4.2.0, `shareable: false` is ignored with a warning in `warnings`). A version that is already stored keeps its owner and sharing, and is answered 404 when the caller
         may not use it. A downloadUrl archive whose name#version another organisation stored gives 409 conflict.
         Version series (3.2.0): `1.2.x` / `1.x.x` resolve to the highest matching registry release, then behave
         exactly like a registration of that version (stored → returned without download; new → downloaded and
@@ -561,7 +566,9 @@ paths:
         system organisation may transfer ownership (`owner`) to another active organisation. Checks run in this
         order: 404 (not stored, or the caller is neither the owner nor the system organisation), 403 (a transfer by a
         caller that isn't the system organisation), 400 (body, unknown or inactive target organisation). The change
-        takes effect on every instance within the propagation window; no validator context is rebuilt.
+        takes effect on every instance within the propagation window; no validator context is rebuilt. Public mode
+        (4.2.0): while access control is disabled, `shareable: false` is ignored (the package stays or becomes
+        shareable) and the response carries a `warnings` entry; `shareable: true` works as before.
       parameters:
         - name: name
           in: path
@@ -705,7 +712,8 @@ components:
         header is ignored. Each request runs as a fixed caller: validation and the package reads as the
         `trial validator` key, administrative operations as the `system administrator` key. The admin network
         allowlist still applies. GET /health
-        reports `security.aclSecurity`.
+        reports `security.aclSecurity`. In this mode packages and validator contexts are always stored as shareable:
+        `shareable: false` is ignored with a warning.
 
   responses:
     Unauthorized:
@@ -1158,3 +1166,9 @@ components:
               type: string
             version:
               type: string
+            warnings:
+              type: array
+              items:
+                type: string
+              description: >-
+                (4.2.0) Present when the request's `shareable: false` was ignored because access control is disabled.

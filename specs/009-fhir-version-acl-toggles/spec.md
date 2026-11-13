@@ -41,6 +41,13 @@ change. Turning off a version with the new setting is an operator choice. The se
 
 ## Clarifications
 
+### Session 2026-11-13 (forced sharing in public mode)
+
+- Q: While access control is off, what happens when a request asks for private (non-shareable) content? → A: It is
+  stored as shareable (FR-034): including a validator context, registering, downloading or uploading an IG package,
+  and PATCH of a context or a package. Changing private content to shareable still works. Everything in public mode
+  runs as one of two fixed callers, so private content would only be hidden from the very clients that use it.
+
 ### Session 2026-11-13 (code review of PR #72)
 
 - Q: Should a start with different served versions be refused like an access-control mode change? → A: Yes (FR-033):
@@ -192,6 +199,12 @@ with `Authorization: Bearer garbage`, add a validator context, and check the own
 8. **Given** access control is disabled and organisation A owns a private validator context, **When** a validation
    request names that context, **Then** it is answered 404 as for any caller that may not use it. A shareable context
    from A can be used.
+9. **Given** access control is disabled, **When** a validator context is included, or an IG package is registered,
+   downloaded or uploaded, with `shareable: false`, **Then** it is stored as shareable and the response's `warnings`
+   say that `shareable: false` was ignored (FR-034).
+10. **Given** access control is disabled and a private context or package exists (created before the switch, or by
+    the command line), **When** it is PATCHed with `shareable: true`, **Then** it becomes shareable; **When** it is
+    PATCHed with `shareable: false`, **Then** it is stored as shareable with the same warning (FR-034).
 
 ---
 
@@ -288,7 +301,8 @@ mode-change confirmation and both keys configured. Check that the keys work and 
 - **Access-control value not recognised** (e.g. `maybe`): treated as enabled (secure default). The log notes that the
   value was not recognised.
 - **Private content while access control is off**: private packages and contexts of other organisations stay
-  private (FR-031). To use them in public mode, their owner marks them shareable.
+  private (FR-031). To use them in public mode, their owner marks them shareable. New content can't be made private
+  over HTTP in this mode (FR-034); the administrative command line still can.
 - **Usage accounting while access control is off**: all validation usage is charged to the trial organisation. Usage
   of different real clients cannot be told apart in this mode. This is expected and documented.
 
@@ -395,6 +409,13 @@ mode-change confirmation and both keys configured. Check that the keys work and 
   With the confirmation, the instance logs a WARN naming both, reconciles (FR-010, FR-014) and stores the new set. No
   stored set yet needs no confirmation. The confirmation with unchanged versions logs a WARN asking for it to be
   removed. This mirrors FR-029, so one instance with a stale setting can't switch contexts off for the whole fleet.
+- **FR-034**: While access control is disabled, every HTTP request that sets the sharing of a validator context or an
+  IG package MUST store it as shareable: `POST /{version}/validator`, `POST /igs/register` (by name or download URL),
+  `POST /igs/upload`, `PATCH /{version}/validator` and `PATCH /igs/{name}/{version}`. A requested `shareable: false`
+  MUST be ignored, the rest of the request applies (e.g. a transfer), and the response MUST carry the warning
+  `shareable=false was ignored: access control is disabled (FV_GLOBAL_DISABLED_ACL_SECURITY), so packages and
+  validator contexts are always shareable`. `shareable: true` (private to shareable) works as before. Content that
+  is already private stays private until it is changed. The administrative command line is not affected.
 
 - **Enabled FHIR version set**: the FHIR versions an instance serves, taken from configuration at startup. Empty means
   all supported versions.

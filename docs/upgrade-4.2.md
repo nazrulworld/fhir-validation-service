@@ -78,6 +78,9 @@ In public mode:
 - Ownership works as before: anything created is owned by the system organisation.
 - Access rules work as before: private content of other organisations stays private (404).
 - Usage records are charged to the trial validator and the trial organisation.
+- Packages and validator contexts are always stored as **shareable**: `shareable: false` on include, register,
+  upload or PATCH is ignored, with a warning in the response's `warnings`. Making private content shareable works as
+  before; content that is already private stays private until it is changed. The command line is not affected.
 - `FV_AUTH_ADMIN_CIDRS` **still applies**: administrative operations from other networks get 403.
 - Both fixed keys get new random values (256 bits) at every start. These values are never logged or shown.
 - A fixed key you revoke stays revoked across restarts (logged at WARN): revoking `trial validator`

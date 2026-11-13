@@ -3,6 +3,7 @@ package nzi.fhir.validator.web;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
@@ -204,6 +205,97 @@ class AclDisabledIT extends BaseTestContainer {
                     assertEquals(new JsonObject().put("aclSecurity", "disabled"),
                             cf.<HttpResponse<Buffer>>resultAt(2).bodyAsJsonObject().getJsonObject("security"),
                             "the allowlist isn't disclosed on /health");
+                    ctx.completeNow();
+                })));
+    }
+
+    // ---- FR-034 (T061): sharing is forced in public mode ----
+
+    private static final String FORCED = "shareable=false was ignored: access control is disabled "
+            + "(FV_GLOBAL_DISABLED_ACL_SECURITY), so packages and validator contexts are always shareable";
+
+    private static void assertForced(HttpResponse<Buffer> r) {
+        assertEquals(200, r.statusCode(), r.bodyAsString());
+        JsonObject body = r.bodyAsJsonObject();
+        assertEquals(true, body.getBoolean("shareable"), r.bodyAsString());
+        assertTrue(body.getJsonArray("warnings").contains(FORCED), r.bodyAsString());
+    }
+
+    private HttpRequest<Buffer> patch(String path) {
+        return app.client().patch(app.port(), "localhost", path).timeout(60_000);
+    }
+
+    /** US4-9: include, register and upload with shareable=false store shareable content, with the warning. */
+    @Test
+    void newContentIsAlwaysShareable(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, null)
+                .compose(a -> TestPackages.storePackage(a.bootstrap().services(), TestPackages.profilePackage("acl.inc", "1.0.0")))
+                .compose(v -> post("/R4/validator").sendJsonObject(new JsonObject().put("igPackageId", "acl.inc").put("shareable", false)))
+                .compose(included -> {
+                    ctx.verify(() -> assertForced(included));
+                    return post("/igs/register").sendJsonObject(new JsonObject().put("name", "acl.reg").put("version", "1.0.0")
+                            .put("shareable", false));
+                })
+                .compose(registered -> {
+                    ctx.verify(() -> assertForced(registered));
+                    return post("/igs/upload").sendMultipartForm(io.vertx.ext.web.multipart.MultipartForm.create()
+                            .attribute("shareable", "false")
+                            .binaryFileUpload("file", "acl.up.tgz", Buffer.buffer(TestPackages.profilePackage("acl.up", "1.0.0")),
+                                    "application/gzip"));
+                })
+                .compose(uploaded -> {
+                    ctx.verify(() -> assertForced(uploaded));
+                    return column("SELECT ig_package_id || '|' || is_shareable FROM fhir_validator_schema.fhir_implementation_guides "
+                            + "WHERE ig_package_id IN ('acl.reg', 'acl.up') ORDER BY 1");
+                })
+                .compose(packages -> {
+                    ctx.verify(() -> assertEquals(List.of("acl.reg|true", "acl.up|true"), packages));
+                    return column("SELECT is_shareable::text FROM fhir_validator_schema.fhir_validator_snapshots "
+                            + "WHERE ig_package = 'acl.inc#1.0.0'");
+                })
+                .onComplete(ctx.succeeding(context -> ctx.verify(() -> {
+                    assertEquals(List.of("true"), context);
+                    ctx.completeNow();
+                })));
+    }
+
+    /** US4-10: private content (made outside HTTP) can be made shareable, but never private again over HTTP. */
+    @Test
+    void patchCanShareButNeverMakePrivate(Vertx vertx, VertxTestContext ctx) {
+        String context = "/R4/validator?ig=acl.priv%231.0.0";
+        String pkg = "/igs/acl.priv/1.0.0";
+        start(vertx, null)
+                .compose(a -> {
+                    var services = a.bootstrap().services();
+                    return TestPackages.storePackage(services, TestPackages.profilePackage("acl.priv", "1.0.0"))
+                            .compose(v -> services.igPackageService().include(Caller.system("system"), SupportedFhirVersion.R4,
+                                    "acl.priv", "1.0.0", Optional.of(false)))
+                            .compose(v -> TestPackages.setPackageAccess(services.pool(), "acl.priv#1.0.0", Constant.SYSTEM_ORG_UUID, false));
+                })
+                .compose(v -> Future.all(patch(context).sendJsonObject(new JsonObject().put("shareable", true)),
+                        patch(pkg).sendJsonObject(new JsonObject().put("shareable", true))))
+                .compose(shared -> {
+                    ctx.verify(() -> {
+                        for (HttpResponse<Buffer> r : shared.<HttpResponse<Buffer>>list()) {
+                            assertEquals(200, r.statusCode(), r.bodyAsString());
+                            assertEquals(true, r.bodyAsJsonObject().getBoolean("shareable"));
+                            JsonArray warnings = r.bodyAsJsonObject().getJsonArray("warnings", new JsonArray());
+                            assertFalse(warnings.contains(FORCED), "nothing was forced: " + r.bodyAsString());
+                        }
+                    });
+                    return Future.all(patch(context).sendJsonObject(new JsonObject().put("shareable", false)),
+                            patch(pkg).sendJsonObject(new JsonObject().put("shareable", false)));
+                })
+                .compose(privateAgain -> {
+                    ctx.verify(() -> privateAgain.<HttpResponse<Buffer>>list().forEach(AclDisabledIT::assertForced));
+                    return Future.all(column("SELECT is_shareable::text FROM fhir_validator_schema.fhir_validator_snapshots "
+                                    + "WHERE ig_package = 'acl.priv#1.0.0'"),
+                            column("SELECT is_shareable::text FROM fhir_validator_schema.fhir_implementation_guides "
+                                    + "WHERE ig_package_id = 'acl.priv'"));
+                })
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    assertEquals(List.of("true"), cf.<List<String>>resultAt(0));
+                    assertEquals(List.of("true"), cf.<List<String>>resultAt(1));
                     ctx.completeNow();
                 })));
     }

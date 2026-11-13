@@ -543,6 +543,8 @@ stored key as it is.
 - Ownership works as before: new content is owned by the system organisation.
 - Access rules work as before: private content of other organisations stays private (404).
 - Usage is charged to the trial organisation.
+- Packages and validator contexts are always stored as shareable: `shareable: false` is ignored with a warning in
+  the response (PATCH can still make private content shareable).
 - `FV_AUTH_ADMIN_CIDRS` still applies to administrative operations.
 - Both fixed keys get unknown random values at every start, and `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` are
   ignored. Switching back re-installs them from the environment.

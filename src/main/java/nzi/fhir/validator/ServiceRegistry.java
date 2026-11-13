@@ -88,7 +88,7 @@ public final class ServiceRegistry {
         this.auth.configureAcl(config.aclMode(), new nzi.fhir.validator.core.security.FixedCallers(apiKeys,
                 config.authCacheTtlMs()));
         this.validationApi = new ValidationApi(validationService, config.servedVersions());
-        this.validatorApi = new ValidatorApi(igPackageService, config.servedVersions());
+        this.validatorApi = new ValidatorApi(igPackageService, config.servedVersions(), config.aclMode());
     }
 
     public static ServiceRegistry create(Vertx vertx, ApplicationConfig config, Pool pool, Executors executors,

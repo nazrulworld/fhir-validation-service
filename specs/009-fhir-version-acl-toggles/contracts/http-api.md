@@ -138,3 +138,5 @@ is an operator setting, documented in the description and in README.
 | Validation naming another org's private context | 404 for the trial key | 404 (FR-031) |
 | Any keyed path before the startup ACL step commits | 503 `not-ready`, `Retry-After: 5` | 503 `not-ready`, `Retry-After: 5` (research R10) |
 | Fixed caller's organisation deactivated | 403 | 403 |
+| Include, register, upload or PATCH with `shareable: false` | stored private | stored shareable, `warnings` names the override (FR-034) |
+| PATCH with `shareable: true` on private content | shareable | shareable |
