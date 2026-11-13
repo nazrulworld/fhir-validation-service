@@ -385,6 +385,78 @@ class ContextActivationIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * FR-033 (T069): a start refused for its served versions changes nothing at all, also the access-control state
+     * (stored mode, fixed keys), and never opens the request gate.
+     */
+    @Test
+    void aRefusedVersionChangeLeavesTheAccessControlStateAndGateUntouched(Vertx vertx, VertxTestContext ctx) {
+        refusedVersionChangeChangesNothing(vertx, ctx, false);
+    }
+
+    /** As above, in disabled mode, where every start would otherwise re-randomise the fixed keys and open public access. */
+    @Test
+    void aRefusedVersionChangeInDisabledModeKeepsTheKeysAndServesNothing(Vertx vertx, VertxTestContext ctx) {
+        refusedVersionChangeChangesNothing(vertx, ctx, true);
+    }
+
+    private static final String ACL_STATE = "SELECT (SELECT value || '|' || updated_at::text FROM "
+            + "fhir_validator_schema.service_settings WHERE name = 'acl_security') || '|' || (SELECT string_agg(encode(key_hash, "
+            + "'hex'), ',' ORDER BY id) FROM fhir_validator_schema.api_keys WHERE id IN ('"
+            + nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID + "', '"
+            + nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID + "'))";
+
+    private static Future<String> aclState(Pool pool) {
+        return pool.query(ACL_STATE).execute().map(rs -> rs.iterator().next().getString(0));
+    }
+
+    private static JsonObject config(String enabledVersions, boolean aclDisabled) {
+        JsonObject config = config(enabledVersions);
+        if (aclDisabled) {
+            config.getJsonObject("auth").put("globalDisabledAclSecurity", true);
+        }
+        return config;
+    }
+
+    private void refusedVersionChangeChangesNothing(Vertx vertx, VertxTestContext ctx, boolean aclDisabled) {
+        String[] before = new String[1];
+        AppHarness[] refused = new AppHarness[1];
+        AppHarness.start(vertx, config("R4,R5", aclDisabled))
+                .compose(a -> {
+                    apps.add(a);
+                    return a.awaitReady(120_000).compose(v -> aclState(a.bootstrap().services().pool()))
+                            .compose(s -> {
+                                before[0] = s;
+                                return stop(a);
+                            });
+                })
+                .compose(v -> AppHarness.start(vertx, config("R5", aclDisabled)))
+                .compose(a -> {
+                    apps.add(a);
+                    refused[0] = a;
+                    return a.bootstrap().warmUp().transform(ar -> {
+                        ctx.verify(() -> {
+                            assertTrue(ar.failed(), "the start is refused");
+                            assertInstanceOf(StartupException.class, ar.cause());
+                            assertTrue(ar.cause().getMessage().startsWith("FHIR version change refused"),
+                                    ar.cause().getMessage());
+                        });
+                        return aclState(a.bootstrap().services().pool());
+                    });
+                })
+                .compose(after -> {
+                    ctx.verify(() -> assertEquals(before[0], after,
+                            "the stored access-control mode and both fixed keys are unchanged"));
+                    // The gate stays closed: a keyed request never runs (in disabled mode it would run without a key).
+                    return AppHarness.asAdmin(refused[0].client().post(refused[0].port(), "localhost", "/R5/validator"))
+                            .sendJsonObject(new JsonObject().put("igPackageId", "act.r5"));
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertProblem(r, 503, "not-ready");
+                    ctx.completeNow();
+                })));
+    }
+
     /** FR-033: the confirmation left set while the served versions are unchanged is warned about. */
     @Test
     void confirmationWithUnchangedVersionsIsWarnedAbout(Vertx vertx, VertxTestContext ctx) {

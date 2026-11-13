@@ -638,3 +638,9 @@ warning when `shareable: false` was asked for. Private → shareable keeps worki
 - [X] T066 Fold the two-argument `IgPackageApi(IgPackageService, SafePackageFetcher)` constructor into the three-argument one in `main/web/endpoint/IgPackageApi.java` and make `sharing` final (only the three-argument constructor is called) per FR-034 (unrequested)
 - [X] T067 Remove the unused two-argument `ContextActivation.reconcile(Pool, ServedVersions)` from `main/core/validator/ContextActivation.java` (Bootstrap and the tests call the three-argument form) per FR-033 (unrequested)
 - [X] T068 Remove the now-unused one-argument `ProblemException.unsupportedVersion(String)` from `main/web/ProblemException.java` (every caller passes the served or supported set, FR-005) per FR-005 (unrequested)
+
+---
+
+## Phase 13: Convergence
+
+- [X] T069 Make a start refused by the served-versions guard change nothing and serve no keyed request: in `main/Bootstrap.java` warm-up, `AclModeStartup.run` commits (stores the ACL mode, re-randomises or re-installs the fixed keys, applies a confirmed mode switch) and calls `auth.openGate()` before `ContextActivation.reconcile` runs the FR-033 guard, so an instance then refused for its served versions has already changed keys and the stored mode and, in disabled mode, has served public ADMIN calls. Run the FR-033 check before the ACL step commits and opens the gate (for example a locked read of `service_settings.fhir_versions` ahead of `AclModeStartup`, or open the gate only after reconcile succeeds), keeping the deactivate/reactivate step all-or-nothing; extend `test/core/validator/ContextActivationIT.java#anUnconfirmedChangeOfTheServedVersionsIsRefused` (and a disabled-mode variant) to assert the stored `acl_security` row and both fixed-key hashes are unchanged and that a keyed request gets 503 `not-ready` per FR-033, plan: 503 gate decision (partial)

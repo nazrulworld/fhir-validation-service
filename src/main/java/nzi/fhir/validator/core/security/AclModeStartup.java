@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 /**
@@ -62,6 +63,17 @@ public final class AclModeStartup {
      * with {@link StartupException} (the process exits 1) and nothing changed.
      */
     public static Future<AclMode> run(Pool pool, ApiKeyRepository apiKeys, ApplicationConfig config, ApiKeyAuthHandler auth) {
+        return run(pool, apiKeys, config, auth, (tx, afterCommit) -> Future.succeededFuture());
+    }
+
+    /**
+     * Runs the step with {@code sameTransaction} as its last part, in the same transaction (spec 009 T069): startup
+     * passes the served-versions reconciliation, so a start refused by either guard (FR-029, FR-033) changes no key, no
+     * stored setting and no context, and the gate opens only after both have committed. {@code sameTransaction} adds
+     * its log lines to the list it is given; they run after the commit.
+     */
+    public static Future<AclMode> run(Pool pool, ApiKeyRepository apiKeys, ApplicationConfig config, ApiKeyAuthHandler auth,
+                                      BiFunction<SqlClient, List<Runnable>, Future<?>> sameTransaction) {
         AclMode mode = config.aclMode();
         List<Runnable> afterCommit = new ArrayList<>();
         return pool.withTransaction(tx -> previousMode(tx, mode)
@@ -72,7 +84,8 @@ public final class AclModeStartup {
                                     : installConfiguredKeys(tx, apiKeys, config,
                                     previous.filter(p -> p == AclMode.DISABLED).isPresent(), afterCommit);
                             return keys.compose(v -> ServiceSettingsRepository.upsert(tx, ServiceSettingsRepository.ACL_SECURITY,
-                                    mode.value(), ServiceSettingsRepository.instanceName()));
+                                            mode.value(), ServiceSettingsRepository.instanceName()))
+                                    .compose(v -> sameTransaction.apply(tx, afterCommit));
                         }))
                 .onSuccess(v -> {
                     afterCommit.forEach(Runnable::run);

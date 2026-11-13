@@ -73,13 +73,28 @@ public final class ContextActivation {
      * fails (nothing changed, FR-011)
      */
     public static Future<Result> reconcile(Pool pool, ServedVersions served, boolean confirmed) {
-        String[] names = served.asList().stream().map(Enum::name).toArray(String[]::new);
         List<Runnable> afterCommit = new ArrayList<>();
-        return pool.withTransaction(tx -> guard(tx, served, confirmed, afterCommit).compose(v -> run(tx, names)))
-                .recover(err -> Future.failedFuture(err instanceof StartupException ? err : new StartupException(
-                        "validator context activation could not be stored: " + err.getMessage(), err)))
-                .onSuccess(r -> afterCommit.forEach(Runnable::run))
-                .onSuccess(ContextActivation::log);
+        return pool.withTransaction(tx -> reconcile(tx, served, confirmed, afterCommit))
+                .recover(ContextActivation::asStartupFailure)
+                .onSuccess(r -> afterCommit.forEach(Runnable::run));
+    }
+
+    /**
+     * The same reconciliation inside the caller's transaction {@code tx} (T069): startup runs it in the access-control
+     * step's transaction, so a start refused by either guard (FR-029, FR-033) changes nothing at all. Its log lines are
+     * added to {@code afterCommit}, for the caller to run once the transaction has committed.
+     */
+    public static Future<Result> reconcile(SqlClient tx, ServedVersions served, boolean confirmed, List<Runnable> afterCommit) {
+        String[] names = served.asList().stream().map(Enum::name).toArray(String[]::new);
+        return guard(tx, served, confirmed, afterCommit)
+                .compose(v -> run(tx, names))
+                .onSuccess(r -> afterCommit.add(() -> log(r)))
+                .recover(ContextActivation::asStartupFailure);
+    }
+
+    private static <T> Future<T> asStartupFailure(Throwable err) {
+        return Future.failedFuture(err instanceof StartupException ? err : new StartupException(
+                "validator context activation could not be stored: " + err.getMessage(), err));
     }
 
     /** The served set as stored: version names joined with commas in declaration order ({@code R4,R5}). */

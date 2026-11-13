@@ -176,13 +176,16 @@ public final class Bootstrap {
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
                             .compose(v -> services.organisations().ensureWellKnown())
                             .compose(v -> installSystemOrganisation(services))
-                            // Spec 009 (research R11): the access-control mode, the fixed callers' keys and the gate.
+                            // Spec 009 (research R11): the access-control mode, the fixed callers' keys and the gate, and
+                            // (FR-010 to FR-014) stored contexts following FV_ENABLED_FHIR_VERSIONS before any is built.
+                            // One transaction (T069): a start refused by either guard (FR-029, FR-033) changes nothing,
+                            // and the gate opens only after both have committed.
                             .compose(v -> nzi.fhir.validator.core.security.AclModeStartup.run(services.pool(),
-                                    services.apiKeys(), services.config(), services.auth()))
-                            // Spec 009 FR-010 to FR-014: stored contexts follow FV_ENABLED_FHIR_VERSIONS before any is built.
-                            .compose(v -> nzi.fhir.validator.core.validator.ContextActivation.reconcile(services.pool(),
-                                    services.config().servedVersions(), services.config().fhirVersionsChangeConfirmed())
-                                    .mapEmpty())
+                                    services.apiKeys(), services.config(), services.auth(),
+                                    (tx, afterCommit) -> nzi.fhir.validator.core.validator.ContextActivation.reconcile(tx,
+                                            services.config().servedVersions(),
+                                            services.config().fhirVersionsChangeConfirmed(), afterCommit)))
+                            .<Void>mapEmpty()
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             // Spec 009 FR-015: the total, counted by the sync's start, at every start (not only changes).
