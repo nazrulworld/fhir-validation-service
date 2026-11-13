@@ -30,11 +30,6 @@ public class ValidatorApi {
     /** Spec 009 FR-034: sharing forced while access control is disabled. */
     private final PublicModeSharing sharing;
 
-    public ValidatorApi(IgPackageService igPackageService) {
-        this(igPackageService, nzi.fhir.validator.core.enums.ServedVersions.ALL,
-                nzi.fhir.validator.core.security.AclMode.ENABLED);
-    }
-
     public ValidatorApi(IgPackageService igPackageService, nzi.fhir.validator.core.enums.ServedVersions served,
                         nzi.fhir.validator.core.security.AclMode aclMode) {
         this.igPackageService = igPackageService;

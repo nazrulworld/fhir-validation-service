@@ -629,3 +629,12 @@ warning when `shareable: false` was asked for. Private → shareable keeps worki
 - [X] T064 [P] Contract and docs: add optional `warnings` to `IgAccessResponse` in `src/main/resources/openapi.yaml`.
   Add a 4.2.0 sentence to the include, register, upload and both PATCH descriptions and to the `apiKey` scheme text.
   Update `contracts/http-api.md` §6, `docs/upgrade-4.2.md`, README (public mode) and CHANGELOG.
+
+---
+
+## Phase 12: Convergence
+
+- [X] T065 Remove the unused one-argument `ValidatorApi(IgPackageService)` constructor from `main/web/endpoint/ValidatorApi.java` (no caller in production or tests; `ServiceRegistry` uses the three-argument one) per plan: ValidatorApi touch-point (unrequested)
+- [X] T066 Fold the two-argument `IgPackageApi(IgPackageService, SafePackageFetcher)` constructor into the three-argument one in `main/web/endpoint/IgPackageApi.java` and make `sharing` final (only the three-argument constructor is called) per FR-034 (unrequested)
+- [X] T067 Remove the unused two-argument `ContextActivation.reconcile(Pool, ServedVersions)` from `main/core/validator/ContextActivation.java` (Bootstrap and the tests call the three-argument form) per FR-033 (unrequested)
+- [X] T068 Remove the now-unused one-argument `ProblemException.unsupportedVersion(String)` from `main/web/ProblemException.java` (every caller passes the served or supported set, FR-005) per FR-005 (unrequested)

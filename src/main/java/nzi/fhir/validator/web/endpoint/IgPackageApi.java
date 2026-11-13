@@ -27,17 +27,13 @@ public class IgPackageApi {
     private final SafePackageFetcher fetcher;
 
     /** Spec 009 FR-034: sharing forced while access control is disabled. */
-    private PublicModeSharing sharing = new PublicModeSharing(nzi.fhir.validator.core.security.AclMode.ENABLED);
+    private final PublicModeSharing sharing;
 
     public IgPackageApi(IgPackageService igPackageService, SafePackageFetcher fetcher,
                         nzi.fhir.validator.core.security.AclMode aclMode) {
-        this(igPackageService, fetcher);
-        this.sharing = new PublicModeSharing(aclMode);
-    }
-
-    public IgPackageApi(IgPackageService igPackageService, SafePackageFetcher fetcher) {
         this.igPackageService = igPackageService;
         this.fetcher = fetcher;
+        this.sharing = new PublicModeSharing(aclMode);
     }
 
     /**

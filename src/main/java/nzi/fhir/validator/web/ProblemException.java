@@ -27,10 +27,6 @@ public class ProblemException extends RuntimeException {
         return new ProblemException(503, "not-ready", detail).withHeader("Retry-After", "5");
     }
 
-    public static ProblemException unsupportedVersion(String version) {
-        return unsupportedVersion(version, nzi.fhir.validator.core.enums.ServedVersions.ALL);
-    }
-
     /** Spec 009 FR-005: the same 400 for an unknown version and one this deployment doesn't serve; lists the served. */
     public static ProblemException unsupportedVersion(String version, nzi.fhir.validator.core.enums.ServedVersions served) {
         return new ProblemException(400, "unsupported-fhir-version",

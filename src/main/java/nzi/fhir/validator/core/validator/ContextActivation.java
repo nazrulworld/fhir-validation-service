@@ -61,21 +61,16 @@ public final class ContextActivation {
     }
 
     /**
-     * Reconciles in one transaction, then logs: one WARN per deactivated context and a WARN count, one INFO per
-     * reactivated context and an INFO count (FR-012); nothing when nothing changed.
+     * Reconciles stored contexts with {@code served} in one transaction, after the served-set guard (FR-033): the
+     * transaction first locks the {@value ServiceSettingsRepository#FHIR_VERSIONS} setting. A start whose served set
+     * differs from the one stored by the previous start is refused (nothing changes) unless {@code confirmed}
+     * ({@code FV_FHIR_VERSIONS_CHANGE_CONFIRMED}), so one instance with a stale setting can't switch contexts off for the
+     * whole fleet. No stored set (a fresh or just-upgraded database) needs no confirmation. Afterwards it logs one WARN
+     * per deactivated context and a WARN count, one INFO per reactivated context and an INFO count (FR-012); nothing
+     * when nothing changed.
      *
-     * @return what changed; fails with {@link StartupException} when the transaction fails (nothing changed, FR-011)
-     */
-    public static Future<Result> reconcile(Pool pool, ServedVersions served) {
-        return reconcile(pool, served, false);
-    }
-
-    /**
-     * As {@link #reconcile(Pool, ServedVersions)}, after the served-set guard (FR-033): the transaction first locks the
-     * {@value ServiceSettingsRepository#FHIR_VERSIONS} setting. A start whose served set differs from the one stored
-     * by the previous start is refused (nothing changes) unless {@code confirmed} ({@code FV_FHIR_VERSIONS_CHANGE_CONFIRMED}),
-     * so one instance with a stale setting can't switch contexts off for the whole fleet. No stored set (a fresh or
-     * just-upgraded database) needs no confirmation.
+     * @return what changed; fails with {@link StartupException} when the guard refuses the start or the transaction
+     * fails (nothing changed, FR-011)
      */
     public static Future<Result> reconcile(Pool pool, ServedVersions served, boolean confirmed) {
         String[] names = served.asList().stream().map(Enum::name).toArray(String[]::new);
