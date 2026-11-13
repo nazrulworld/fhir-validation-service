@@ -81,6 +81,14 @@ public class IgPackageService {
     }
 
     /**
+     * This instance applies the latest configuration of {@code version}. A version it doesn't serve has nothing to
+     * apply (spec 009 FR-032: a change of an inactive context is stored, never built), so the change answers on commit.
+     */
+    private Future<Void> applyLocal(SupportedFhirVersion version) {
+        return servedVersions.contains(version) ? applyLocally.apply(version) : Future.succeededFuture();
+    }
+
+    /**
      * @param admitBuild given the expanded size of a new resolved package set, fails (413 {@code package-too-large})
      *                   if this instance could not build a validator from it; checked before the include is
      *                   committed, so a set that would exhaust the heap never reaches the configuration
@@ -99,6 +107,17 @@ public class IgPackageService {
     }
 
     /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
+    /** The FHIR versions this instance serves (spec 009); {@link nzi.fhir.validator.core.enums.ServedVersions#ALL} by default. */
+    private volatile nzi.fhir.validator.core.enums.ServedVersions servedVersions = nzi.fhir.validator.core.enums.ServedVersions.ALL;
+
+    public void setServedVersions(nzi.fhir.validator.core.enums.ServedVersions served) {
+        this.servedVersions = served;
+    }
+
+    public nzi.fhir.validator.core.enums.ServedVersions servedVersions() {
+        return servedVersions;
+    }
+
     public void setTxCacheSize(int txCacheSize) {
         this.txCacheSize = txCacheSize;
     }
@@ -151,6 +170,11 @@ public class IgPackageService {
     public Future<JsonObject> include(Caller caller, SupportedFhirVersion fhirVersion, String name, String requestedVersion,
                                       Optional<Boolean> shareable,
                                       Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology) {
+        // Spec 009 FR-008 (research R4, defence in depth): a version this deployment doesn't serve is refused before
+        // anything is read or written, also for callers that don't come through the HTTP API.
+        if (!servedVersions.contains(fhirVersion)) {
+            return Future.failedFuture(ProblemException.fhirVersionDisabled(fhirVersion, servedVersions));
+        }
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
         }
@@ -240,7 +264,7 @@ public class IgPackageService {
                                         contextAccess, txSettings));
                     });
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             // The cause goes to the log (with the request id); clients get curated text (Principle IV).
@@ -318,7 +342,7 @@ public class IgPackageService {
                                     .put("excluded", key)
                                     .put("included", new JsonArray(remaining)));
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             logger.warn("Excluded IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
@@ -417,7 +441,7 @@ public class IgPackageService {
                                             .put("terminology", after.terminologyOf(key).toJson())
                                             .put("revision", revision)));
                 }))
-                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                .compose(result -> LocalApplyWait.await(vertx, applyLocal(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
                             logger.warn("Access change of IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);

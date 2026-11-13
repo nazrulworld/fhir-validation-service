@@ -65,6 +65,8 @@ public class ConfigSync {
     private volatile PackageCatalogView reconciled = PackageCatalogView.EMPTY;
     /** Access of the included contexts, per version (spec 005): read without a lock on the validation hot path. */
     private final Map<SupportedFhirVersion, PinnedAccess> pinnedAccess = new java.util.concurrent.ConcurrentHashMap<>();
+    /** The versions this instance serves (spec 009): notifications and polls for any other version are ignored. */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
     private PgSubscriber subscriber;
     private long pollTimer = -1;
     private volatile boolean notificationsEnabled = true;
@@ -79,6 +81,17 @@ public class ConfigSync {
      */
     public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, ValidatorRegistry registry,
                       PackageCatalog catalog, PackageCache packageCache, long pollIntervalMs) {
+        this(vertx, pool, connectOptions, registry, catalog, packageCache, pollIntervalMs,
+                nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    /**
+     * @param served the FHIR versions this instance serves (spec 009): only these are synced
+     */
+    public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, ValidatorRegistry registry,
+                      PackageCatalog catalog, PackageCache packageCache, long pollIntervalMs,
+                      nzi.fhir.validator.core.enums.ServedVersions served) {
+        this.served = served;
         this.vertx = vertx;
         this.pool = pool;
         this.connectOptions = connectOptions;
@@ -86,7 +99,7 @@ public class ConfigSync {
         this.catalog = catalog;
         this.packageCache = packageCache;
         this.pollIntervalMs = pollIntervalMs;
-        SupportedFhirVersion.enabled().forEach(v -> states.put(v, new Serial()));
+        served.asList().forEach(v -> states.put(v, new Serial()));
         registry.setCatalog(catalog::current);
     }
 
@@ -143,6 +156,10 @@ public class ConfigSync {
                                                    PackageCatalogView view, PinnedAccess access) {
         Map<String, ResolvedContext> contexts = new LinkedHashMap<>();
         for (String key : included) {
+            if (row != null && row.inactive().containsKey(key)) {
+                // Spec 009 FR-006: an inactive context is never built or used (its version isn't served).
+                continue;
+            }
             ResolvedContext ctx = ResolvedContext.forKey(key, view, access);
             contexts.put(key, row == null ? ctx : ctx.withTerminology(row.terminologyOf(key)));
         }
@@ -162,18 +179,28 @@ public class ConfigSync {
         }
         try {
             JsonObject message = new JsonObject(payload);
+            // Every other kind (IG, IG_EXCLUDE, IG_ACCESS, IG_TERMINOLOGY and, spec 009, IG_ACTIVATION) re-reads the
+            // version's row.
             if (ConfigRevisionRepository.KIND_PACKAGE.equals(message.getString("kind"))) {
                 syncCatalog();
                 return;
             }
             String version = message.getString("fhirVersion");
-            SupportedFhirVersion.parseEnabled(version).ifPresent(this::sync);
+            served.find(version).ifPresent(this::sync);
         } catch (Exception e) {
             logger.warn("Ignoring malformed configuration notification");
         }
     }
 
+    /** Spec 009 (research R15): run on every poll tick (recounts inactive contexts for the gauge). */
+    private volatile Runnable pollListener = () -> { };
+
+    public void setPollListener(Runnable listener) {
+        this.pollListener = listener == null ? () -> { } : listener;
+    }
+
     private void poll() {
+        pollListener.run();
         ConfigRevisionRepository.catalogRevision(pool).onSuccess(revision -> {
             if (revision > catalog.current().revision()) {
                 syncCatalog();

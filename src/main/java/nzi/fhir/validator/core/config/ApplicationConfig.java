@@ -111,6 +111,22 @@ public final class ApplicationConfig {
     /** The trial organisation's shared VALIDATE key ({@code FV_VALIDATOR_API_KEY}, spec 008), or {@code null}. */
     public String validatorKey() { return section("auth").getString("validatorKey"); }
     public long authCacheTtlMs() { return section("auth").getLong("cacheTtlMs"); }
+
+    /** Spec 009: whether API-key access control is enforced ({@code FV_GLOBAL_DISABLED_ACL_SECURITY}). */
+    public nzi.fhir.validator.core.security.AclMode aclMode() {
+        return Boolean.TRUE.equals(section("auth").getBoolean("globalDisabledAclSecurity"))
+                ? nzi.fhir.validator.core.security.AclMode.DISABLED : nzi.fhir.validator.core.security.AclMode.ENABLED;
+    }
+
+    /** Spec 009 FR-029: a start may change the stored access-control mode ({@code FV_ACL_MODE_CHANGE_CONFIRMED}). */
+    public boolean aclModeChangeConfirmed() {
+        return Boolean.TRUE.equals(section("auth").getBoolean("aclModeChangeConfirmed"));
+    }
+
+    /** Spec 009: the FHIR versions this instance serves ({@code FV_ENABLED_FHIR_VERSIONS}; unset = all supported). */
+    public nzi.fhir.validator.core.enums.ServedVersions servedVersions() {
+        return nzi.fhir.validator.core.enums.ServedVersions.parse(section("fhir").getString("enabledVersions"));
+    }
     /** Networks administrative operations may come from ({@code FV_AUTH_ADMIN_CIDRS}, spec 008); empty = any. */
     public nzi.fhir.validator.core.security.CidrList adminCidrs() {
         return nzi.fhir.validator.core.security.CidrList.parse(section("auth").getString("adminCidrs"));

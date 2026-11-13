@@ -117,9 +117,17 @@ public class ValidatorRegistry {
     private volatile java.util.function.BiPredicate<SnapshotKey, List<String>> isPublic = (key, packages) -> true;
 
     public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder) {
+        this(vertx, builder, nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    /**
+     * @param served the FHIR versions this instance serves (spec 009 FR-004): only these get a base context, so
+     *               readiness covers only them and nothing is loaded for the others
+     */
+    public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder, nzi.fhir.validator.core.enums.ServedVersions served) {
         this.vertx = vertx;
         this.builder = builder;
-        for (SupportedFhirVersion v : SupportedFhirVersion.enabled()) {
+        for (SupportedFhirVersion v : served.asList()) {
             versions.put(v, new VersionState());
             SnapshotKey base = SnapshotKey.base(v);
             pinned.put(base, new Slot(base, Kind.BASE));

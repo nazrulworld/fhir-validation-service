@@ -6,6 +6,48 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.2.0] - Unreleased
+
+Operator switches for the FHIR versions an instance serves and for API access control (spec 009). A **minor release
+without breaking changes**: with the new settings unset, behaviour is unchanged. Migrations V14 and V15 are additive,
+so a rolling upgrade from 4.1 is fine; turn the switches on only after every instance runs 4.2. See
+[docs/upgrade-4.2.md](docs/upgrade-4.2.md).
+
+### Added
+
+- **`FV_ENABLED_FHIR_VERSIONS`** (e.g. `R4,R5`; unset = all):
+  - only the listed versions' core specifications are loaded, and readiness waits only for them;
+  - other versions get 400 `unsupported-fhir-version`, whose message now lists the served versions;
+  - an unknown name, including `R6`, stops the start naming it.
+- **422 `fhir-version-disabled`** on `POST /{version}/validator` for a supported version that isn't served. Nothing is
+  stored.
+- **Inactive validator contexts** (V14 adds `is_active` and `inactive_reason`):
+  - at startup, contexts of versions that aren't served are marked inactive in one transaction and are not built
+    (logged at WARN with a count);
+  - they become active again when their version is listed again;
+  - other instances follow through the configuration notification;
+  - `DELETE` and `PATCH /{version}/validator` (and `fv-admin snapshot share|transfer`) still work on them.
+- **`FV_GLOBAL_DISABLED_ACL_SECURITY`** (`true`/`1`/`yes`): public mode.
+  - No endpoint needs a key, and the `Authorization` header is ignored.
+  - Requests run as fixed callers: validation as `trial validator`, everything else as `system administrator`.
+  - Ownership, access rules and usage accounting are unchanged, and `FV_AUTH_ADMIN_CIDRS` still applies.
+- **`FV_ACL_MODE_CHANGE_CONFIRMED`**: a start whose access-control mode differs from the one stored by the previous
+  start (V15 `service_settings.acl_security`) is refused unless it is set. Switching back to enforced access control
+  re-installs `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` in one transaction ("API keys re-synchronised from
+  environment"), with no manual database change.
+- `GET /health`: `fhirVersions` (served versions, and inactive contexts with a count and the first 100) and
+  `security` (`aclSecurity`, `adminNetworkRestricted`).
+- Metrics: `fv_acl_security_disabled`, `fv_validator_contexts_inactive`.
+
+### Security
+
+- Public mode is opt-in, logged at WARN at every start, and reported in `/health` and `/metrics`.
+- While it is on, both fixed-caller keys get new 256-bit random values (`SecureRandom`) at every start. These values
+  are never logged, returned or stored readably, so no key value known while the service was open still works
+  afterwards.
+- A keyed request to a public-mode instance is answered 503 until the instance's startup access-control step has
+  committed, so an instance whose mode change is refused never serves public requests.
+
 ## [4.1.0] - 2026-11-11
 
 API key hardening, key-only validation, usage accounting and well-known organisations (spec 008). A **minor release

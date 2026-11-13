@@ -43,8 +43,16 @@ public class ValidationApi {
     private final FhirValidationService validationService;
     private volatile nzi.fhir.validator.core.usage.UsageWriter usage = nzi.fhir.validator.core.usage.NoopUsageWriter.INSTANCE;
 
+    /** The versions this instance serves (spec 009 FR-005); others get the existing 400. */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
+
     public ValidationApi(FhirValidationService validationService) {
+        this(validationService, nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    public ValidationApi(FhirValidationService validationService, nzi.fhir.validator.core.enums.ServedVersions served) {
         this.validationService = validationService;
+        this.served = served;
     }
 
     /** Where usage records go (spec 008 FR-014); the default keeps nothing but metrics are still measured. */
@@ -138,9 +146,8 @@ public class ValidationApi {
                 .failureHandler(this::handleValidateFailure);
     }
 
-    private static SupportedFhirVersion version(RoutingContext ctx) {
-        String param = ctx.pathParam("version");
-        return SupportedFhirVersion.parseEnabled(param).orElseThrow(() -> ProblemException.unsupportedVersion(param));
+    private SupportedFhirVersion version(RoutingContext ctx) {
+        return VersionParams.served(ctx.pathParam("version"), served);
     }
 
     private void handleDoValidation(RoutingContext ctx) {

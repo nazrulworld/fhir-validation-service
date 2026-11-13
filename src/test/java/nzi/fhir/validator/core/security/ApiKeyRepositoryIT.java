@@ -117,4 +117,60 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    // ---- Spec 009 (T010) ----
+
+    /** {@code findById} returns an active key with its organisation, and empty when revoked or unknown. */
+    @Test
+    void findByIdResolvesTheFixedCallerKey(VertxTestContext ctx) {
+        install(KEY)
+                .compose(v -> Future.all(repo.findById(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID),
+                        repo.findById(java.util.UUID.randomUUID())))
+                .compose(cf -> {
+                    java.util.Optional<ApiKeyRepository.KeyInfo> found = cf.resultAt(0);
+                    java.util.Optional<ApiKeyRepository.KeyInfo> unknown = cf.resultAt(1);
+                    ctx.verify(() -> {
+                        assertTrue(found.isPresent());
+                        ApiKeyRepository.KeyInfo info = found.get();
+                        assertEquals(Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, info.name());
+                        assertEquals(ApiKeyRepository.Role.VALIDATE, info.role());
+                        assertEquals(Constant.TRIAL_ORG_UUID, info.ownerId());
+                        assertTrue(info.ownerActive());
+                        assertTrue(unknown.isEmpty());
+                    });
+                    return repo.revokeNamed(Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME);
+                })
+                .compose(org -> repo.findById(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID))
+                .onComplete(ctx.succeeding(revoked -> ctx.verify(() -> {
+                    assertTrue(revoked.isEmpty(), "a revoked key is not active");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** The transaction-aware upsert changes nothing when the transaction rolls back, and replaces the hash on commit. */
+    @Test
+    void upsertInsideATransactionFollowsItsOutcome(VertxTestContext ctx) {
+        install(KEY)
+                .compose(v -> pool.withTransaction(tx -> repo.upsertWellKnown(tx, Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                                Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, ROTATED, ApiKeyRepository.Role.VALIDATE,
+                                Constant.TRIAL_ORG_UUID, Constant.SYS_ORG_API_KEY_EXPIRES_AT)
+                        .compose(installed -> Future.<Void>failedFuture("roll back")))
+                        .recover(err -> Future.succeededFuture()))
+                .compose(v -> Future.all(repo.findActive(KEY), repo.findActive(ROTATED)))
+                .compose(cf -> {
+                    ctx.verify(() -> {
+                        assertTrue(((java.util.Optional<?>) cf.resultAt(0)).isPresent(), "rolled back: the old value still works");
+                        assertTrue(((java.util.Optional<?>) cf.resultAt(1)).isEmpty());
+                    });
+                    return pool.withTransaction(tx -> repo.upsertWellKnown(tx, Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                            Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, ROTATED, ApiKeyRepository.Role.VALIDATE,
+                            Constant.TRIAL_ORG_UUID, Constant.SYS_ORG_API_KEY_EXPIRES_AT));
+                })
+                .compose(installed -> Future.all(repo.findActive(KEY), repo.findActive(ROTATED)))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    assertTrue(((java.util.Optional<?>) cf.resultAt(0)).isEmpty(), "committed: the old value no longer works");
+                    assertTrue(((java.util.Optional<?>) cf.resultAt(1)).isPresent());
+                    ctx.completeNow();
+                })));
+    }
 }

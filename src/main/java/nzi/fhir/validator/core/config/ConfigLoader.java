@@ -25,7 +25,8 @@ import java.util.Map;
 public final class ConfigLoader {
     private static final Logger logger = LogManager.getLogger(ConfigLoader.class);
 
-    private enum Kind { INT, LONG, BOOL, STRING }
+    /** FLAG (spec 009): true for {@code true}, {@code 1} or {@code yes} in any case; anything else is false. */
+    private enum Kind { INT, LONG, BOOL, FLAG, STRING }
 
     private record Entry(String env, String alias, String path, Kind kind, long min, long max) {
         Entry(String env, String path, Kind kind, long min, long max) {
@@ -76,6 +77,11 @@ public final class ConfigLoader {
             new Entry("FV_AUTH_TRUSTED_PROXIES", "auth.trustedProxies", Kind.STRING, NO_MIN, NO_MAX),
             // The one header the trusted proxies write: x-forwarded-for (default) or forwarded.
             new Entry("FV_AUTH_FORWARDED_HEADER", "auth.forwardedHeader", Kind.STRING, NO_MIN, NO_MAX),
+            // Spec 009: access control can be turned off for the whole deployment; a change of mode must be confirmed.
+            new Entry("FV_GLOBAL_DISABLED_ACL_SECURITY", "auth.globalDisabledAclSecurity", Kind.FLAG, NO_MIN, NO_MAX),
+            new Entry("FV_ACL_MODE_CHANGE_CONFIRMED", "auth.aclModeChangeConfirmed", Kind.FLAG, NO_MIN, NO_MAX),
+            // Spec 009: the FHIR versions this instance serves (comma-separated; unset = all supported).
+            new Entry("FV_ENABLED_FHIR_VERSIONS", "fhir.enabledVersions", Kind.STRING, NO_MIN, NO_MAX),
             // Spec 008 (FR-014, FR-016): usage accounting.
             new Entry("FV_USAGE_SINK", "usage.sink", Kind.STRING, NO_MIN, NO_MAX),
             new Entry("FV_USAGE_QUEUE_SIZE", "usage.queueSize", Kind.INT, 100, 1_000_000),
@@ -214,6 +220,7 @@ public final class ConfigLoader {
             logger.warn("auth.anonymousValidate (configuration file) is deprecated and ignored: {}",
                     DEPRECATED.get("FV_AUTH_ANONYMOUS_VALIDATE"));
         }
+        normaliseFlags(merged);
         applyComputedDefaults(merged);
         validate(merged);
         return new ApplicationConfig(merged);
@@ -250,10 +257,40 @@ public final class ConfigLoader {
                     }
                     yield Boolean.parseBoolean(v);
                 }
+                case FLAG -> flag(name, v);
                 case STRING -> raw;
             };
         } catch (NumberFormatException e) {
             throw new IllegalStateException("Invalid " + name + ": '" + raw + "' is not a valid " + kind.name().toLowerCase());
+        }
+    }
+
+    /**
+     * Spec 009 (FR-016, research R8): {@code true}, {@code 1} and {@code yes} (any case) mean true; empty or anything
+     * else means false, and an unrecognised non-empty value is logged so a typo doesn't silently keep the default.
+     * The value of a flag is not a secret, so it is echoed.
+     */
+    static boolean flag(String name, String raw) {
+        String v = raw == null ? "" : raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (v.equals("true") || v.equals("1") || v.equals("yes")) {
+            return true;
+        }
+        if (!v.isEmpty() && !v.equals("false") && !v.equals("0") && !v.equals("no")) {
+            logger.warn("{}='{}' is not recognised (true, 1 or yes); treated as false", name, raw.trim());
+        }
+        return false;
+    }
+
+    /** A FLAG may come from a file as a JSON boolean or a string: store it as a boolean (once, so it warns once). */
+    private static void normaliseFlags(JsonObject merged) {
+        for (Entry e : ENTRIES) {
+            if (e.kind() != Kind.FLAG) {
+                continue;
+            }
+            Object v = get(merged, e.path());
+            if (v != null && !(v instanceof Boolean)) {
+                set(merged, e.path(), flag(e.env(), String.valueOf(v)));
+            }
         }
     }
 
@@ -310,8 +347,12 @@ public final class ConfigLoader {
         if (!SSL_MODES.contains(ssl)) {
             throw new IllegalStateException("Invalid FV_PG_SSL_MODE: '" + ssl + "' (allowed: " + SSL_MODES + ")");
         }
+        // Spec 009 FR-003: a name that isn't a served FHIR version stops the start, naming it.
+        nzi.fhir.validator.core.enums.ServedVersions.parse(section(c, "fhir").getString("enabledVersions"));
+        // Spec 009 FR-022, research R13: while access control is disabled the key values are ignored, so not checked.
+        boolean aclDisabled = Boolean.TRUE.equals(section(c, "auth").getBoolean("globalDisabledAclSecurity"));
         String key = section(c, "auth").getString("bootstrapAdminKey");
-        if (key != null && !key.isEmpty() && !nzi.fhir.validator.core.security.ApiKeyRepository.isWellFormed(key)) {
+        if (!aclDisabled && key != null && !key.isEmpty() && !nzi.fhir.validator.core.security.ApiKeyRepository.isWellFormed(key)) {
             throw new IllegalStateException("Invalid FV_ADMIN_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
         }
         for (String[] cidrs : new String[][]{{"FV_AUTH_ADMIN_CIDRS", "adminCidrs"}, {"FV_AUTH_TRUSTED_PROXIES", "trustedProxies"}}) {
@@ -336,7 +377,7 @@ public final class ConfigLoader {
                     + ") must not exceed FV_USAGE_QUEUE_SIZE (" + usage.getInteger("queueSize", 10_000) + ")");
         }
         String validatorKey = section(c, "auth").getString("validatorKey");
-        if (validatorKey != null && !validatorKey.isEmpty()) {
+        if (!aclDisabled && validatorKey != null && !validatorKey.isEmpty()) {
             if (!nzi.fhir.validator.core.security.ApiKeyRepository.isWellFormed(validatorKey)) {
                 throw new IllegalStateException("Invalid FV_VALIDATOR_API_KEY: must be 32-128 characters of [A-Za-z0-9_-]");
             }

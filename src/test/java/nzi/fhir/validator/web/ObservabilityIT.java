@@ -90,7 +90,9 @@ class ObservabilityIT extends BaseTestContainer {
                             "fv_package_cache_misses_total \\d",
                             // Spec 008 FR-020: work resources by version and outcome, measured whatever the usage sink.
                             "fv_validation_cpu_seconds_count\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0",
-                            "fv_validation_allocated_bytes_count\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0")) {
+                            "fv_validation_allocated_bytes_count\\{outcome=\"valid\",version=\"R4\",?\\} 3\\.0",
+                            // Spec 009 (research R15).
+                            "fv_acl_security_disabled 0\\.0", "fv_validator_contexts_inactive 0\\.0")) {
                         assertTrue(java.util.regex.Pattern.compile(metric).matcher(body).find(), "missing " + metric);
                     }
                     assertFalse(body.contains("loinc") || body.contains("snomed"), "no client codes or systems in labels");

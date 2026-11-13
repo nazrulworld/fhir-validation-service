@@ -246,7 +246,9 @@ paths:
         (https://ecosystem.hl7.org/tx-reg) for this FHIR version (400 tx-server-not-registered otherwise), or, while
         the service has never obtained the registry's list, be on the built-in fallback list (503
         tx-registry-unavailable otherwise). For an already included context `terminology` is ignored with a
-        warning; change it with PATCH.
+        warning; change it with PATCH. Enabled FHIR versions (4.2.0): a FHIR version that is supported but not
+        enabled on this deployment (FV_ENABLED_FHIR_VERSIONS) is refused with 422 fhir-version-disabled; this also
+        applies when an inactive context for it is already stored.
       parameters:
         - name: version
           in: path
@@ -299,6 +301,8 @@ paths:
           $ref: '#/components/responses/PackageNotFound'
         '413':
           $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/FhirVersionDisabled'
         '424':
           description: >-
             dependency-not-found: a dependency of the IG package is not available to the caller (3.1.0); the
@@ -321,7 +325,9 @@ paths:
         Validation requests naming it are refused with 400 invalid-request until it is included again (4.0.0). Its
         terminology setting is deleted with the context. Administrative: requires an ADMIN
         key. 404 package-not-found when that version is not included, or when the caller's organisation doesn't own
-        its context and isn't the system organisation (3.1.0).
+        its context and isn't the system organisation (3.1.0). Enabled FHIR versions (4.2.0): also works for a
+        context that is inactive because its FHIR version is not enabled (FV_ENABLED_FHIR_VERSIONS); the change is
+        stored, nothing is built, and it applies when the version is enabled again.
       parameters:
         - name: version
           in: path
@@ -368,7 +374,9 @@ paths:
         400 tx-server-not-registered and 503 tx-registry-unavailable for the terminology server. Access changes take
         effect on every instance within the propagation window without a rebuild. A terminology change (4.0.0)
         rebuilds the context on every instance; the old context serves until the new one is ready. Setting the same
-        terminology again changes nothing.
+        terminology again changes nothing. Enabled FHIR versions (4.2.0): also works for a context that is inactive
+        because its FHIR version is not enabled (FV_ENABLED_FHIR_VERSIONS); the change is stored, nothing is built,
+        and it applies when the version is enabled again.
       parameters:
         - name: version
           in: path
@@ -692,7 +700,11 @@ components:
         ADMIN key and, when the operator configures an admin network allowlist (FV_AUTH_ADMIN_CIDRS), must come from an
         allowed network. Every key belongs to an organisation; a key of a deactivated organisation gets 403. Keys may
         expire; an expired key gets 401. Enforced by the service before contract validation (see
-        specs/008-api-key-hardening/contracts/http-api.md).
+        specs/008-api-key-hardening/contracts/http-api.md). (4.2.0) An operator can turn access control off for a
+        whole deployment (FV_GLOBAL_DISABLED_ACL_SECURITY). Then no operation needs a key and the Authorization
+        header is ignored. Each request runs as a fixed caller: validation as the `trial validator` key, every other
+        keyed operation as the `system administrator` key. The admin network allowlist still applies. GET /health
+        reports `security.aclSecurity`.
 
   responses:
     Unauthorized:
@@ -722,6 +734,18 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    FhirVersionDisabled:
+      description: >-
+        fhir-version-disabled (4.2.0): the FHIR version is supported by this release but not enabled on this
+        deployment (FV_ENABLED_FHIR_VERSIONS). Nothing is stored or built.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: fhir-version-disabled
+            status: 422
+            detail: "IG validator contexts for R5 can't be added: this service serves R4 only (FV_ENABLED_FHIR_VERSIONS)"
     Forbidden:
       description: >-
         forbidden: the API key's role doesn't allow this operation, the key's organisation is deactivated,
@@ -736,7 +760,9 @@ components:
     FhirVersion:
       type: string
       pattern: '^([Ss][Tt][Uu]3|[Rr]4[Bb]?|[Rr]5)$'
-      description: Supported FHIR versions (STU3, R4, R4B, R5), case-insensitive
+      description: >-
+        STU3, R4, R4B or R5 (case-insensitive). A deployment may serve fewer (FV_ENABLED_FHIR_VERSIONS, 4.2.0);
+        GET /health lists the served versions.
 
     ReadinessResponse:
       type: object
@@ -861,6 +887,47 @@ components:
                     type: integer
                   reason:
                     type: string
+        fhirVersions:
+          type: object
+          description: (4.2.0) FHIR versions this instance serves, and stored validator contexts that are inactive.
+          properties:
+            served:
+              type: array
+              items:
+                $ref: '#/components/schemas/FhirVersion'
+            inactiveContexts:
+              type: object
+              properties:
+                count:
+                  type: integer
+                items:
+                  type: array
+                  maxItems: 100
+                  description: First 100 inactive contexts, ordered by FHIR version then package.
+                  items:
+                    type: object
+                    properties:
+                      fhirVersion:
+                        type: string
+                      igPackage:
+                        type: string
+                        description: name#version
+                      owner:
+                        type: string
+                        description: The owning organisation's short name
+                      reason:
+                        type: string
+                        enum: [fhir-version-disabled]
+        security:
+          type: object
+          description: (4.2.0) Access control state.
+          properties:
+            aclSecurity:
+              type: string
+              enum: [enabled, disabled]
+            adminNetworkRestricted:
+              type: boolean
+              description: Whether administrative operations are limited to FV_AUTH_ADMIN_CIDRS.
 
     ValidationMessage:
       type: object

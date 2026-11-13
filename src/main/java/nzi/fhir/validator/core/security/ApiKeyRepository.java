@@ -97,24 +97,38 @@ public class ApiKeyRepository {
         }
     }
 
+    /** An active key and its organisation: not revoked and (spec 008 FR-006) not expired. */
+    private static final String SELECT_ACTIVE = "SELECT k.id, k.role, k.owner, o.name_short, o.is_active, k.name, k.expires_at FROM "
+            + TABLE + " k JOIN " + ORGANISATIONS + " o ON o.id = k.owner WHERE k.revoked_at IS NULL "
+            + "AND (k.expires_at IS NULL OR k.expires_at > now()) ";
+
     public Future<Optional<KeyInfo>> findActive(String key) {
         if (!isWellFormed(key)) {
             return Future.succeededFuture(Optional.empty());
         }
-        return pool.preparedQuery("SELECT k.id, k.role, k.owner, o.name_short, o.is_active, k.name, k.expires_at FROM " + TABLE + " k "
-                        + "JOIN " + ORGANISATIONS + " o ON o.id = k.owner WHERE k.key_hash = $1 AND k.revoked_at IS NULL "
-                        // Spec 008 FR-006: an expired key is not active.
-                        + "AND (k.expires_at IS NULL OR k.expires_at > now())")
+        return pool.preparedQuery(SELECT_ACTIVE + "AND k.key_hash = $1")
                 .execute(Tuple.of(Buffer.buffer(hash(key))))
-                .map(rows -> {
-                    if (rows.size() == 0) {
-                        return Optional.empty();
-                    }
-                    io.vertx.sqlclient.Row r = rows.iterator().next();
-                    java.time.OffsetDateTime expires = r.getOffsetDateTime(6);
-                    return Optional.of(new KeyInfo(r.getUUID(0), r.getString(5), Role.valueOf(r.getString(1)), r.getUUID(2),
-                            r.getString(3), r.getBoolean(4), expires == null ? null : expires.toInstant()));
-                });
+                .map(ApiKeyRepository::firstKeyInfo);
+    }
+
+    /**
+     * The active key {@code id} (spec 009, research R9: the fixed callers, resolved without their unknown value); empty
+     * when it doesn't exist, is revoked or has expired.
+     */
+    public Future<Optional<KeyInfo>> findById(UUID id) {
+        return pool.preparedQuery(SELECT_ACTIVE + "AND k.id = $1")
+                .execute(Tuple.of(id))
+                .map(ApiKeyRepository::firstKeyInfo);
+    }
+
+    private static Optional<KeyInfo> firstKeyInfo(io.vertx.sqlclient.RowSet<io.vertx.sqlclient.Row> rows) {
+        if (rows.size() == 0) {
+            return Optional.empty();
+        }
+        io.vertx.sqlclient.Row r = rows.iterator().next();
+        java.time.OffsetDateTime expires = r.getOffsetDateTime(6);
+        return Optional.of(new KeyInfo(r.getUUID(0), r.getString(5), Role.valueOf(r.getString(1)), r.getUUID(2),
+                r.getString(3), r.getBoolean(4), expires == null ? null : expires.toInstant()));
     }
 
     /** Whether {@code name} is reserved for a key installed from configuration (spec 008). */
@@ -131,6 +145,22 @@ public class ApiKeyRepository {
      * value is already used by another key (the message names the conflict, never the key)
      */
     public Future<Boolean> upsertWellKnown(UUID id, String name, String key, Role role, UUID owner, java.time.Instant expiresAt) {
+        return upsertWellKnown(pool, true, id, name, key, role, owner, expiresAt);
+    }
+
+    /**
+     * As {@link #upsertWellKnown(UUID, String, String, Role, UUID, java.time.Instant)}, on {@code client} (spec 009: inside
+     * the startup access-control transaction, so both keys and the stored mode change together). Concurrent starters
+     * serialise on that transaction's settings lock, so no unique-violation retry is needed (or possible: a failed
+     * statement aborts the transaction).
+     */
+    public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
+                                           UUID owner, java.time.Instant expiresAt) {
+        return upsertWellKnown(client, false, id, name, key, role, owner, expiresAt);
+    }
+
+    private Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, boolean retry, UUID id, String name, String key,
+                                            Role role, UUID owner, java.time.Instant expiresAt) {
         if (!isWellFormed(key)) {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
@@ -147,11 +177,11 @@ public class ApiKeyRepository {
                 + "role = EXCLUDED.role, owner = EXCLUDED.owner, expires_at = EXCLUDED.expires_at, "
                 + "revoked_at = CASE WHEN k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
                 + "key_hash = EXCLUDED.key_hash";
-        return pool.preparedQuery(sql).execute(params)
+        return client.preparedQuery(sql).execute(params)
                 // Instances starting at once on a database without the row: a concurrent insert can surface as a unique
                 // violation on name or key_hash instead of the DO UPDATE path. The row exists now, so one retry updates.
-                .recover(err -> nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)
-                        ? pool.preparedQuery(sql).execute(params) : Future.failedFuture(err))
+                .recover(err -> retry && nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)
+                        ? client.preparedQuery(sql).execute(params) : Future.failedFuture(err))
                 .map(rows -> rows.rowCount() > 0)
                 .recover(err -> {
                     if (nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)) {

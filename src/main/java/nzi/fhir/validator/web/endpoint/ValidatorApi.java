@@ -24,9 +24,16 @@ import java.util.Optional;
  */
 public class ValidatorApi {
     private final IgPackageService igPackageService;
+    /** The versions this instance serves (spec 009). */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
 
     public ValidatorApi(IgPackageService igPackageService) {
+        this(igPackageService, nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    public ValidatorApi(IgPackageService igPackageService, nzi.fhir.validator.core.enums.ServedVersions served) {
         this.igPackageService = igPackageService;
+        this.served = served;
     }
 
     /**
@@ -46,9 +53,9 @@ public class ValidatorApi {
                 .handler(this::handleChangeValidatorAccess);
     }
 
-    private static SupportedFhirVersion version(RoutingContext ctx) {
-        String param = ctx.pathParam("version");
-        return SupportedFhirVersion.parseEnabled(param).orElseThrow(() -> ProblemException.unsupportedVersion(param));
+    /** Changing or removing a stored context: any supported version, also one not served (spec 009 FR-032). */
+    private SupportedFhirVersion version(RoutingContext ctx) {
+        return VersionParams.supported(ctx.pathParam("version"), served);
     }
 
     /** {@code POST /{version}/validator}: includes an IG version (spec 004 FR-019, spec 006, spec 007 FR-003). */
@@ -56,7 +63,8 @@ public class ValidatorApi {
         SupportedFhirVersion version;
         JsonObject body;
         try {
-            version = version(ctx);
+            // Spec 009 FR-008: checked before the body, so a refused request touches nothing.
+            version = VersionParams.servedForInclude(ctx.pathParam("version"), served);
             body = ctx.body().asJsonObject();
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);

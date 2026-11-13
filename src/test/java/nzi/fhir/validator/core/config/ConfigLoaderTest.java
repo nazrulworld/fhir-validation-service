@@ -335,4 +335,85 @@ class ConfigLoaderTest {
             assertTrue(e.getMessage().startsWith("Invalid " + bad[0]), e.getMessage());
         }
     }
+
+    // ---- Spec 009 (T008) ----
+
+    private static java.util.List<String> warnings(nzi.fhir.validator.testsupport.LogCapture logs) {
+        return logs.from(ConfigLoader.class.getName()).stream()
+                .filter(e -> e.level() == org.apache.logging.log4j.Level.WARN).map(e -> e.message()).distinct().toList();
+    }
+
+    @Test
+    void enabledFhirVersionsFromEnvAndFile(@TempDir Path dir) throws IOException {
+        assertTrue(ConfigLoader.load(env("FV_PG_PASSWORD", "pw")).servedVersions().isAll(), "unset = all (FR-002)");
+        assertEquals(nzi.fhir.validator.core.enums.ServedVersions.parse("R4,R5"),
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_ENABLED_FHIR_VERSIONS", " r5, R4 ,R4")).servedVersions());
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("fhir", new JsonObject().put("enabledVersions", "R4B")).encode());
+        assertEquals(java.util.List.of(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4B),
+                ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString())).servedVersions().asList());
+    }
+
+    @Test
+    void badEnabledFhirVersionFailsLoad() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_ENABLED_FHIR_VERSIONS", "R4,X1")));
+        assertTrue(e.getMessage().contains("'X1'") && e.getMessage().contains("STU3, R4, R4B, R5"), e.getMessage());
+        e = assertThrows(IllegalStateException.class,
+                () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_ENABLED_FHIR_VERSIONS", "R6")));
+        assertTrue(e.getMessage().contains("known but not served"), e.getMessage());
+    }
+
+    @Test
+    void aclFlagsAcceptTrueOneYesInAnyCase() {
+        ApplicationConfig unset = ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
+        assertEquals(nzi.fhir.validator.core.security.AclMode.ENABLED, unset.aclMode(), "default: enforced (FR-016)");
+        assertFalse(unset.aclModeChangeConfirmed());
+        for (String on : new String[]{"true", "1", "yes", "YES ", " True"}) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                    "FV_GLOBAL_DISABLED_ACL_SECURITY", on, "FV_ACL_MODE_CHANGE_CONFIRMED", on));
+            assertEquals(nzi.fhir.validator.core.security.AclMode.DISABLED, cfg.aclMode(), on);
+            assertTrue(cfg.aclModeChangeConfirmed(), on);
+        }
+        for (String off : new String[]{"false", "0", "no", ""}) {
+            assertEquals(nzi.fhir.validator.core.security.AclMode.ENABLED, ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                    "FV_GLOBAL_DISABLED_ACL_SECURITY", off)).aclMode(), off);
+        }
+    }
+
+    @Test
+    void unrecognisedFlagValueMeansEnforcedWithAWarning() {
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_GLOBAL_DISABLED_ACL_SECURITY", "maybe"));
+            assertEquals(nzi.fhir.validator.core.security.AclMode.ENABLED, cfg.aclMode());
+            assertEquals(java.util.List.of("FV_GLOBAL_DISABLED_ACL_SECURITY='maybe' is not recognised (true, 1 or yes); "
+                    + "treated as false"), warnings(logs));
+        }
+        try (nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start()) {
+            ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_GLOBAL_DISABLED_ACL_SECURITY", "no"));
+            assertEquals(java.util.List.of(), warnings(logs), "a recognised false value is silent");
+        }
+    }
+
+    @Test
+    void aclFlagInAConfigFileAcceptsBooleanOrString(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("cfg.json");
+        Files.writeString(file, new JsonObject().put("auth", new JsonObject().put("globalDisabledAclSecurity", true)
+                .put("aclModeChangeConfirmed", "yes")).encode());
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_CONFIG_FILE", file.toString()));
+        assertEquals(nzi.fhir.validator.core.security.AclMode.DISABLED, cfg.aclMode());
+        assertTrue(cfg.aclModeChangeConfirmed());
+    }
+
+    @Test
+    void keyFormatIsNotCheckedWhileAccessControlIsDisabled() {
+        // Research R13: the values are ignored in disabled mode, so a malformed one doesn't stop the start.
+        ApplicationConfig cfg = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_GLOBAL_DISABLED_ACL_SECURITY", "true",
+                "FV_ADMIN_API_KEY", "short", "FV_VALIDATOR_API_KEY", "short"));
+        assertEquals(nzi.fhir.validator.core.security.AclMode.DISABLED, cfg.aclMode());
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                "FV_ADMIN_API_KEY", "short")), "enforced mode still checks it");
+        assertThrows(IllegalStateException.class, () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw",
+                "FV_VALIDATOR_API_KEY", "short")), "enforced mode still checks it");
+    }
 }

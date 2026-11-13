@@ -9,6 +9,10 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+> **Upgrading from 4.1?** 4.2.0 adds two opt-in switches, `FV_ENABLED_FHIR_VERSIONS` and
+> `FV_GLOBAL_DISABLED_ACL_SECURITY`, and nothing changes while they are unset. A rolling upgrade is fine; turn the
+> switches on only after every instance runs 4.2. See [docs/upgrade-4.2.md](docs/upgrade-4.2.md).
+>
 > **Upgrading from 4.0?** 4.1.0 requires a key for every validation (`FV_AUTH_ANONYMOUS_VALIDATE` is gone), re-keys
 > the system organisation (stop every 4.0 instance first) and adds usage accounting. Read
 > [docs/upgrade-4.1.md](docs/upgrade-4.1.md) before upgrading.
@@ -528,6 +532,26 @@ stored key as it is.
   can't be parsed, the client is unknown: administrative calls are refused and nothing is recorded as its address. The same address is used for the
   allowlist, `lastUsedIp` and usage records.
 
+#### Public mode: access control disabled (4.2.0)
+
+> **Security warning.** `FV_GLOBAL_DISABLED_ACL_SECURITY=true` (or `1` / `yes`) makes every endpoint answer without a
+> key. Use it only on a closed network, behind a gateway that authenticates callers, or on a developer machine.
+
+- The `Authorization` header is ignored.
+- Validation runs as the `trial validator` key (trial organisation); every other keyed operation runs as the
+  `system administrator` key (system organisation).
+- Ownership works as before: new content is owned by the system organisation.
+- Access rules work as before: private content of other organisations stays private (404).
+- Usage is charged to the trial organisation.
+- `FV_AUTH_ADMIN_CIDRS` still applies to administrative operations.
+- Both fixed keys get unknown random values at every start, and `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` are
+  ignored. Switching back re-installs them from the environment.
+- A start whose mode differs from the mode stored by the last start is refused unless `FV_ACL_MODE_CHANGE_CONFIRMED`
+  is set, so one misconfigured instance can't replace the fleet's keys. Remove the confirmation after the switch.
+- `GET /health` reports `security.aclSecurity`.
+
+The procedure is in [docs/upgrade-4.2.md](docs/upgrade-4.2.md#turning-access-control-off-public-mode).
+
 #### Who may use what
 
 - **IG packages** stored by register, upload or URL download belong to the caller's organisation, dependencies
@@ -581,6 +605,18 @@ Nothing deletes old rows: schedule `DELETE FROM fhir_validator_schema.validation
 interval '90 days'` (about 250 bytes a row). Summaries: `$APP usage summary --org acme --since 2026-11-01T00:00:00Z`
 (or `--key <name>`).
 
+### Serving fewer FHIR versions (4.2.0)
+
+`FV_ENABLED_FHIR_VERSIONS=R4` (comma-separated: `STU3`, `R4`, `R4B`, `R5`) makes an instance load and serve only those
+versions:
+- The other versions get 400 `unsupported-fhir-version`.
+- Adding a validator context for one of them is refused with 422 `fhir-version-disabled`.
+- Their stored contexts are marked inactive at startup (logged at WARN). They become active again when the version is
+  listed again. Inactive contexts can still be changed or excluded.
+
+Unset, every version is served. Use the same value on every instance. `GET /health` reports `fhirVersions`. See
+[docs/upgrade-4.2.md](docs/upgrade-4.2.md#serving-fewer-fhir-versions).
+
 ### Database connection security
 
 `FV_PG_SSL_MODE` defaults to `prefer`, which falls back to an unencrypted connection when the server offers no TLS. The
@@ -594,7 +630,7 @@ bundled compose database runs on a private compose network. When the database is
 | `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
 | `GET /health/readiness` | 200 when the database is reachable, every core and included-IG validator is usable, and the instance is not draining      |
 | `GET /health`           | detailed report                                                                                                          |
-| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_cpu_seconds`, `fv_validation_allocated_bytes`, `fv_usage_*`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, ...) |
+| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_cpu_seconds`, `fv_validation_allocated_bytes`, `fv_usage_*`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, `fv_acl_security_disabled`, `fv_validator_contexts_inactive`, ...) |
 
 On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
 `FV_SHUTDOWN_GRACE_MS`), then exits.
@@ -613,6 +649,9 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_VALIDATOR_API_KEY`                                                       | *(unset: warning)*                                              | the trial organisation's shared VALIDATE key (4.1.0)              |
 | `FV_AUTH_ADMIN_CIDRS` / `FV_AUTH_TRUSTED_PROXIES`                            | *(unset)*                                                       | admin network allowlist / proxies whose headers count (4.1.0)     |
 | `FV_AUTH_FORWARDED_HEADER`                                                   | `x-forwarded-for`                                               | the header the trusted proxies write (`forwarded` for RFC 7239)   |
+| `FV_ENABLED_FHIR_VERSIONS`                                                   | *(unset: all)*                                                  | FHIR versions this instance serves, e.g. `R4,R5` (4.2.0)          |
+| `FV_GLOBAL_DISABLED_ACL_SECURITY`                                            | `false`                                                         | `true`/`1`/`yes`: no endpoint needs a key (public mode, 4.2.0)    |
+| `FV_ACL_MODE_CHANGE_CONFIRMED`                                               | `false`                                                         | allow a start that changes the stored access-control mode (4.2.0) |
 | `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db` (4.1.0)              |
 | `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching (4.1.0)                |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
