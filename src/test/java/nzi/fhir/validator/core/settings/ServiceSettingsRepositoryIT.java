@@ -62,7 +62,7 @@ class ServiceSettingsRepositoryIT extends BaseTestContainer {
                             });
                             return null;
                         }))
-                .compose(v -> ServiceSettingsRepository.get(pool, ACL_SECURITY))
+                .compose(v -> pool.withTransaction(tx -> ServiceSettingsRepository.lockForUpdate(tx, ACL_SECURITY)))
                 .onComplete(ctx.succeeding(value -> ctx.verify(() -> {
                     assertEquals(Optional.of("enabled"), value);
                     ctx.completeNow();
@@ -74,7 +74,7 @@ class ServiceSettingsRepositoryIT extends BaseTestContainer {
         pool.withTransaction(tx -> ServiceSettingsRepository.insertIfAbsent(tx, ACL_SECURITY, "enabled"))
                 .compose(first -> pool.withTransaction(tx -> ServiceSettingsRepository.insertIfAbsent(tx, ACL_SECURITY, "disabled"))
                         .map(second -> new boolean[]{first, second}))
-                .compose(results -> ServiceSettingsRepository.get(pool, ACL_SECURITY).map(v -> {
+                .compose(results -> pool.withTransaction(tx -> ServiceSettingsRepository.lockForUpdate(tx, ACL_SECURITY)).map(v -> {
                     ctx.verify(() -> {
                         assertTrue(results[0]);
                         assertFalse(results[1], "a second insert changes nothing");

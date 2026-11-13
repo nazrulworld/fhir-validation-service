@@ -36,8 +36,8 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
   start (V15 `service_settings.acl_security`) is refused unless it is set. Switching back to enforced access control
   re-installs `FV_ADMIN_API_KEY` / `FV_VALIDATOR_API_KEY` in one transaction ("API keys re-synchronised from
   environment"), with no manual database change.
-- `GET /health`: `fhirVersions` (served versions, and inactive contexts with a count and the first 100) and
-  `security` (`aclSecurity`, `adminNetworkRestricted`).
+- `GET /health`: `fhirVersions` (served versions; inactive contexts: a count, how many are private, and the first 100
+  shareable ones; private contexts are never named) and `security.aclSecurity`.
 - Metrics: `fv_acl_security_disabled`, `fv_validator_contexts_inactive`.
 
 ### Security
@@ -46,8 +46,9 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
 - While it is on, both fixed-caller keys get new 256-bit random values (`SecureRandom`) at every start. These values
   are never logged, returned or stored readably, so no key value known while the service was open still works
   afterwards.
-- A keyed request to a public-mode instance is answered 503 until the instance's startup access-control step has
-  committed, so an instance whose mode change is refused never serves public requests.
+- A keyed request is answered 503 (in both modes) until the instance's startup access-control step has
+  committed. An instance whose mode change is refused never serves public requests, and after a switch back the
+  restored keys are never refused (and the refusal cached) against the previous run's random ones.
 
 ## [4.1.0] - 2026-11-11
 

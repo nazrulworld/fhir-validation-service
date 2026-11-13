@@ -159,26 +159,15 @@ public class ApiKeyRepository {
      * owner and expiry are overwritten, so restarting is idempotent and a changed value rotates the key in place. A
      * value that was ever revoked is refused (V13).
      *
+     * Runs on {@code client}, inside the startup access-control transaction (spec 009), so both keys and the stored
+     * mode change together. Concurrent starters serialise on that transaction's settings-row lock, so two installs of
+     * the same key never race.
+     *
      * @return whether the key was installed ({@code false}: the value was revoked before; nothing changed); fails with {@link nzi.fhir.validator.core.StartupException} when the key is malformed, or when its name or
      * value is already used by another key (the message names the conflict, never the key)
      */
-    public Future<Boolean> upsertWellKnown(UUID id, String name, String key, Role role, UUID owner, java.time.Instant expiresAt) {
-        return upsertWellKnown(pool, true, id, name, key, role, owner, expiresAt);
-    }
-
-    /**
-     * As {@link #upsertWellKnown(UUID, String, String, Role, UUID, java.time.Instant)}, on {@code client} (spec 009: inside
-     * the startup access-control transaction, so both keys and the stored mode change together). Concurrent starters
-     * serialise on that transaction's settings lock, so no unique-violation retry is needed (or possible: a failed
-     * statement aborts the transaction).
-     */
     public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
                                            UUID owner, java.time.Instant expiresAt) {
-        return upsertWellKnown(client, false, id, name, key, role, owner, expiresAt);
-    }
-
-    private Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, boolean retry, UUID id, String name, String key,
-                                            Role role, UUID owner, java.time.Instant expiresAt) {
         if (!isWellFormed(key)) {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
@@ -196,10 +185,6 @@ public class ApiKeyRepository {
                 + "revoked_at = CASE WHEN k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
                 + "key_hash = EXCLUDED.key_hash";
         return client.preparedQuery(sql).execute(params)
-                // Instances starting at once on a database without the row: a concurrent insert can surface as a unique
-                // violation on name or key_hash instead of the DO UPDATE path. The row exists now, so one retry updates.
-                .recover(err -> retry && nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)
-                        ? client.preparedQuery(sql).execute(params) : Future.failedFuture(err))
                 .map(rows -> rows.rowCount() > 0)
                 .recover(err -> {
                     if (nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)) {

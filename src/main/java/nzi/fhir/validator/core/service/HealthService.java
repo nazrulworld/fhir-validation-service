@@ -90,11 +90,15 @@ public class HealthService {
         this.servedVersions = served;
     }
 
-    /** Spec 009 FR-023, FR-030: reported under {@code security}. */
-    private volatile JsonObject security = new JsonObject().put("aclSecurity", "enabled").put("adminNetworkRestricted", false);
+    /** Spec 009 FR-023: reported under {@code security}. */
+    private volatile JsonObject security = new JsonObject().put("aclSecurity", "enabled");
 
-    public void setSecurity(nzi.fhir.validator.core.security.AclMode mode, boolean adminNetworkRestricted) {
-        this.security = new JsonObject().put("aclSecurity", mode.value()).put("adminNetworkRestricted", adminNetworkRestricted);
+    /**
+     * Only the mode: whether administrative operations are network-limited is not reported on this unauthenticated
+     * endpoint (code review of PR #72); the startup log says it.
+     */
+    public void setSecurity(nzi.fhir.validator.core.security.AclMode mode) {
+        this.security = new JsonObject().put("aclSecurity", mode.value());
     }
 
     /** Spec 009 (research R15): inactive contexts, as last counted; read by the {@code fv_validator_contexts_inactive} gauge. */
@@ -158,27 +162,41 @@ public class HealthService {
 
     /** Spec 009 FR-015: at most this many inactive contexts are listed (contracts/http-api.md §4). */
     static final int MAX_INACTIVE_LISTED = 100;
-    private static final String INACTIVE_CONTEXTS_QUERY = "SELECT s.fhir_version, s.ig_package, o.name_short, s.inactive_reason, "
-            + "count(*) OVER () FROM " + nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME
-            + ".fhir_validator_snapshots s JOIN " + nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME
-            + ".organisations o ON o.id = s.owner WHERE NOT s.is_active ORDER BY 1, 2 LIMIT " + MAX_INACTIVE_LISTED;
+    private static final String SCHEMA = nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
+    /**
+     * Inactive contexts, as one row even when there are none: the total, how many are private, and the first
+     * {@value #MAX_INACTIVE_LISTED} public ones. A context is public when it and its IG package are shareable, as for
+     * the readiness report (spec 005 research R12): {@code /health} is unauthenticated, so private contexts are only
+     * counted, never named (code review of PR #72).
+     */
+    private static final String INACTIVE_CONTEXTS_QUERY = "WITH x AS (SELECT s.fhir_version, s.ig_package, o.name_short, "
+            + "s.inactive_reason, (s.is_shareable AND coalesce(g.is_shareable, true)) AS public FROM " + SCHEMA
+            + ".fhir_validator_snapshots s JOIN " + SCHEMA + ".organisations o ON o.id = s.owner LEFT JOIN " + SCHEMA
+            + ".fhir_implementation_guides g ON g.ig_package_id = split_part(s.ig_package, '#', 1) "
+            + "AND g.ig_package_version = split_part(s.ig_package, '#', 2) WHERE NOT s.is_active) "
+            + "SELECT (SELECT count(*) FROM x), (SELECT count(*) FROM x WHERE NOT public), p.fhir_version, p.ig_package, "
+            + "p.name_short, p.inactive_reason FROM (SELECT 1) one LEFT JOIN LATERAL (SELECT * FROM x WHERE public "
+            + "ORDER BY fhir_version, ig_package LIMIT " + MAX_INACTIVE_LISTED + ") p ON true";
 
     /**
-     * Stored validator contexts that are inactive (spec 009 FR-015): {@code {count, items}}, or {@code null} when the
-     * query fails (the field is then left out; health never fails because of it).
+     * Stored validator contexts that are inactive (spec 009 FR-015): {@code {count, private, items}} (items: public ones
+     * only), or {@code null} when the query fails (the field is then left out; health never fails because of it).
      */
     public Future<JsonObject> inactiveContexts() {
         return pgPool.query(INACTIVE_CONTEXTS_QUERY).execute()
                 .map(rows -> {
                     JsonArray items = new JsonArray();
                     long count = 0;
+                    long privateCount = 0;
                     for (io.vertx.sqlclient.Row r : rows) {
-                        count = r.getLong(4);
-                        items.add(new JsonObject().put("fhirVersion", r.getString(0)).put("igPackage", r.getString(1))
-                                .put("owner", r.getString(2)).put("reason", r.getString(3)));
+                        count = r.getLong(0);
+                        privateCount = r.getLong(1);
+                        if (r.getString(3) != null) {
+                            items.add(new JsonObject().put("fhirVersion", r.getString(2)).put("igPackage", r.getString(3))
+                                    .put("owner", r.getString(4)).put("reason", r.getString(5)));
+                        }
                     }
-                    inactiveCount.set(count);
-                    return new JsonObject().put("count", count).put("items", items);
+                    return new JsonObject().put("count", count).put("private", privateCount).put("items", items);
                 })
                 .otherwise(err -> {
                     logger.debug("Inactive validator contexts could not be read: {}", err.getMessage());

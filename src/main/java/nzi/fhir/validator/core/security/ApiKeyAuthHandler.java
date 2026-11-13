@@ -48,10 +48,13 @@ public class ApiKeyAuthHandler {
     /** Spec 009 FR-018: the callers requests run as while access control is disabled. */
     private volatile FixedCallers fixedCallers;
     /**
-     * Spec 009 research R10: opened once the startup access-control step has committed. While closed, a disabled-mode
-     * instance answers keyed paths with 503, so an instance about to be refused never serves public requests.
+     * Spec 009 research R10: closed by {@link #configureAcl} and opened once the startup access-control step has
+     * committed; while closed, keyed paths answer 503 in both modes. In disabled mode an instance about to be refused
+     * never serves public requests; in enabled mode (code review of PR #72) a key isn't looked up, and a miss cached,
+     * while the stored keys may still be the previous disabled run's random ones. A handler that is never configured
+     * (tests) is open.
      */
-    private volatile boolean gateOpen;
+    private volatile boolean gateOpen = true;
 
     public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs) {
         this(repository, cacheTtlMs, CidrList.EMPTY);
@@ -88,10 +91,7 @@ public class ApiKeyAuthHandler {
     public void configureAcl(AclMode mode, FixedCallers fixed) {
         this.aclMode = mode;
         this.fixedCallers = fixed;
-    }
-
-    public AclMode aclMode() {
-        return aclMode;
+        this.gateOpen = false;
     }
 
     /** Spec 009 research R10: the startup access-control step has committed; keyed paths may be served. */
@@ -159,6 +159,10 @@ public class ApiKeyAuthHandler {
                             "Administrative operations are not allowed from this network"));
                     return;
                 }
+                if (!gateOpen) {
+                    ErrorResponder.fail(ctx, ProblemException.notReady("The service is still starting; retry shortly"));
+                    return;
+                }
                 if (aclMode == AclMode.DISABLED) {
                     runAsFixedCaller(ctx, paths.fixedRole());
                 } else {
@@ -177,10 +181,6 @@ public class ApiKeyAuthHandler {
      * usage and the key's last-used audit). A deactivated organisation is still refused (403).
      */
     private void runAsFixedCaller(RoutingContext ctx, Role role) {
-        if (!gateOpen) {
-            ErrorResponder.fail(ctx, ProblemException.notReady("The service is still starting; retry shortly"));
-            return;
-        }
         fixedCallers.resolve(role).onComplete(ar -> {
             if (ar.failed()) {
                 ErrorResponder.fail(ctx, schemaNotReady(ar.cause())

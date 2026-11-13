@@ -126,7 +126,8 @@ public class ConfigSync {
                     for (SupportedFhirVersion version : states.keySet()) {
                         ConfigRevisionRepository.ConfigRow row = rows.get(version);
                         long revision = row == null ? 0 : row.revision();
-                        List<String> included = row == null ? List.of() : row.included();
+                        // Spec 009 FR-006: only active contexts are built or used.
+                        List<String> included = row == null ? List.of() : row.active();
                         if (row != null) {
                             pinnedAccess.put(version, row.activeAccess());
                         }
@@ -157,10 +158,6 @@ public class ConfigSync {
                                                    PackageCatalogView view, PinnedAccess access) {
         Map<String, ResolvedContext> contexts = new LinkedHashMap<>();
         for (String key : included) {
-            if (row != null && row.inactive().containsKey(key)) {
-                // Spec 009 FR-006: an inactive context is never built or used (its version isn't served).
-                continue;
-            }
             ResolvedContext ctx = ResolvedContext.forKey(key, view, access);
             contexts.put(key, row == null ? ctx : ctx.withTerminology(row.terminologyOf(key)));
         }
@@ -229,6 +226,9 @@ public class ConfigSync {
      */
     public void sync(SupportedFhirVersion version) {
         Serial state = states.get(version);
+        if (state == null) {
+            return; // spec 009: a version this instance doesn't serve has nothing to apply
+        }
         synchronized (state) {
             if (state.backgroundQueued) {
                 return;
@@ -248,7 +248,9 @@ public class ConfigSync {
      * applying the very change it waits for.
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
-        return enqueue(states.get(version), () -> { }, () -> runSync(version));
+        Serial state = states.get(version);
+        // Spec 009: a version this instance doesn't serve has nothing to apply (its contexts are inactive here).
+        return state == null ? Future.succeededFuture() : enqueue(state, () -> { }, () -> runSync(version));
     }
 
     /**
@@ -302,12 +304,12 @@ public class ConfigSync {
                     if (previous != null && !previous.equals(row.activeAccess())) {
                         logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
-                    boolean unknown = row.included().stream().anyMatch(k -> !catalog.current().contains(k));
+                    boolean unknown = row.active().stream().anyMatch(k -> !catalog.current().contains(k));
                     Future<PackageCatalogView> view = unknown
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
                     return view.compose(v -> registry.applyPinned(version, row.revision(),
-                            resolveAll(row, row.included(), v, row.activeAccess())));
+                            resolveAll(row, row.active(), v, row.activeAccess())));
                 });
     }
 

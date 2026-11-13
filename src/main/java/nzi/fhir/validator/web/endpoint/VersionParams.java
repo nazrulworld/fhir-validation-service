@@ -33,7 +33,9 @@ final class VersionParams {
     }
 
     /** For changing or removing a stored context: any version this release supports, served or not (FR-032). */
-    static SupportedFhirVersion supported(String param, ServedVersions served) {
-        return SupportedFhirVersion.parseEnabled(param).orElseThrow(() -> ProblemException.unsupportedVersion(param, served));
+    static SupportedFhirVersion supported(String param) {
+        // These operations accept every supported version, so the message lists them all (code review of PR #72).
+        return SupportedFhirVersion.parseEnabled(param)
+                .orElseThrow(() -> ProblemException.unsupportedVersion(param, ServedVersions.ALL));
     }
 }

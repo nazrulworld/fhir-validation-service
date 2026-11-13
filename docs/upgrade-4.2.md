@@ -43,7 +43,8 @@ What changes for the versions that are not listed:
   (`PATCH`), through the API or `fv-admin snapshot share|transfer`. The change is stored and applies later.
 - When a version is listed again, its contexts become active again at the next start, with any changes made in the
   meantime. They are logged at INFO.
-- `GET /health` reports `fhirVersions.served` and `fhirVersions.inactiveContexts` (a count and the first 100). The
+- `GET /health` reports `fhirVersions.served` and `fhirVersions.inactiveContexts`: a count, how many are private, and
+  the first 100 shareable ones (private contexts are counted, never named, on this unauthenticated endpoint). The
   `fv_validator_contexts_inactive` gauge counts them too.
 
 Uploading or registering IG packages is not restricted.

@@ -36,7 +36,7 @@ Two independent operator switches ship together as **4.2.0**, a minor release wi
   - in disabled mode, installs 256-bit random values for both fixed keys;
   - in enabled mode, installs the configured values as 4.1 does, with the "re-synchronised" line after a disabled run;
   - stores the mode.
-- Keyed paths answer 503 in disabled mode until that step has committed, so an instance about to be refused never
+- Keyed paths answer 503 (in both modes) until that step has committed, so an instance about to be refused never
   serves public admin calls.
 - `/health` reports the served versions, inactive contexts and `security.aclSecurity`.
 

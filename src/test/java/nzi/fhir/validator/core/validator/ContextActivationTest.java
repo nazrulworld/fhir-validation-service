@@ -39,7 +39,7 @@ class ContextActivationTest {
         assertEquals(java.util.Set.of("a.ig#1.0.0", "b.ig#1.0.0"), row.access().asMap().keySet());
         assertEquals(java.util.Set.of("a.ig#1.0.0"), row.activeAccess().asMap().keySet());
         assertEquals(java.util.List.of("a.ig#1.0.0"), row.active());
-        assertEquals(java.util.Set.of("a.ig#1.0.0"), ConfigSync.resolveAll(row, included,
+        assertEquals(java.util.Set.of("a.ig#1.0.0"), ConfigSync.resolveAll(row, row.active(),
                 nzi.fhir.validator.core.npm.PackageCatalogView.EMPTY, row.activeAccess()).keySet());
     }
 }

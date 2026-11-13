@@ -901,10 +901,18 @@ components:
               properties:
                 count:
                   type: integer
+                  description: All inactive contexts.
+                private:
+                  type: integer
+                  description: >-
+                    Inactive contexts that are private (the context or its IG package isn't shareable). They are counted
+                    only, never named, on this unauthenticated endpoint.
                 items:
                   type: array
                   maxItems: 100
-                  description: First 100 inactive contexts, ordered by FHIR version then package.
+                  description: >-
+                    The first 100 shareable inactive contexts, ordered by FHIR version then package. Private ones are
+                    not listed.
                   items:
                     type: object
                     properties:
@@ -926,9 +934,6 @@ components:
             aclSecurity:
               type: string
               enum: [enabled, disabled]
-            adminNetworkRestricted:
-              type: boolean
-              description: Whether administrative operations are limited to FV_AUTH_ADMIN_CIDRS.
 
     ValidationMessage:
       type: object

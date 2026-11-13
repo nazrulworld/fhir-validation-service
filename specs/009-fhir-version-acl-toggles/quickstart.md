@@ -65,7 +65,7 @@ POST `/R4/validator` for the R4 IG → 200, and the row has `is_active = true`.
 ```bash
 FV_GLOBAL_DISABLED_ACL_SECURITY=yes FV_ACL_MODE_CHANGE_CONFIRMED=true java -jar … &
 # Log: "ACCESS CONTROL IS DISABLED …", "FV_ADMIN_API_KEY is ignored …" (no values)
-curl -s localhost:8080/health | jq '.security'                     # {"aclSecurity":"disabled","adminNetworkRestricted":false}
+curl -s localhost:8080/health | jq '.security'                     # {"aclSecurity":"disabled"}
 curl -s -X POST localhost:8080/R4/validator -H 'Authorization: Bearer garbage' \
   -H 'Content-Type: application/json' -d '{"igPackageId":"hl7.fhir.us.core"}' | jq '.owner'   # system organisation
 curl -s -X POST localhost:8080/R4/validate -H 'Content-Type: application/fhir+json' -d '{"resourceType":"Patient"}'  # 200

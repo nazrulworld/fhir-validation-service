@@ -158,6 +158,7 @@ class ContextActivationIT extends BaseTestContainer {
                             JsonObject inactive = cf.<HttpResponse<Buffer>>resultAt(1).bodyAsJsonObject()
                                     .getJsonObject("fhirVersions").getJsonObject("inactiveContexts");
                             assertEquals(1, inactive.getInteger("count"));
+                            assertEquals(0, inactive.getInteger("private"));
                             assertEquals(new JsonArray().add(new JsonObject().put("fhirVersion", "R4").put("igPackage", R4_PKG)
                                     .put("owner", "system").put("reason", "fhir-version-disabled")), inactive.getJsonArray("items"));
                             JsonObject readiness = cf.<HttpResponse<Buffer>>resultAt(2).bodyAsJsonObject();
@@ -308,6 +309,29 @@ class ContextActivationIT extends BaseTestContainer {
                         }))
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(List.of("R5|" + R5_PKG + "|true|"), r, "the inactive context is gone");
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Code review of PR #72: /health is unauthenticated, so a private inactive context is counted, never named. */
+    @Test
+    void privateInactiveContextsAreCountedButNotNamed(Vertx vertx, VertxTestContext ctx) {
+        String query = "?ig=" + java.net.URLEncoder.encode(R4_PKG, java.nio.charset.StandardCharsets.UTF_8);
+        start(vertx, "R4,R5")
+                .compose(a -> includeBoth(a)
+                        .compose(v -> admin(a, "PATCH", "/R4/validator" + query).sendJsonObject(new JsonObject().put("shareable", false)))
+                        .compose(r -> {
+                            ctx.verify(() -> assertEquals(200, r.statusCode(), r.bodyAsString()));
+                            return stop(a);
+                        }))
+                .compose(v -> start(vertx, "R5"))
+                .compose(a -> a.client().get(a.port(), "localhost", "/health").send())
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonObject inactive = r.bodyAsJsonObject().getJsonObject("fhirVersions").getJsonObject("inactiveContexts");
+                    assertEquals(1, inactive.getInteger("count"));
+                    assertEquals(1, inactive.getInteger("private"));
+                    assertEquals(new JsonArray(), inactive.getJsonArray("items"));
+                    assertFalse(r.bodyAsString().contains("act.r4"), "the private context is not named");
                     ctx.completeNow();
                 })));
     }

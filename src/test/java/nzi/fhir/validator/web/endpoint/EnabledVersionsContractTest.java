@@ -57,6 +57,7 @@ class EnabledVersionsContractTest {
         assertEquals(List.of("fhir-version-disabled"), reason.get("enum"));
         Map<String, Object> security = map(properties, "security", "properties");
         assertEquals(List.of("enabled", "disabled"), map(security, "aclSecurity").get("enum"));
-        assertEquals("boolean", map(security, "adminNetworkRestricted").get("type"));
+        assertFalse(security.containsKey("adminNetworkRestricted"), "code review: not reported on /health");
+        assertTrue(map(properties, "fhirVersions", "properties", "inactiveContexts", "properties").containsKey("private"));
     }
 }

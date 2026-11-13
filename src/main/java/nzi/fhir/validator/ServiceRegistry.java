@@ -142,7 +142,7 @@ public final class ServiceRegistry {
         healthService.setCatalogRevision(() -> catalog.current().revision());
         healthService.setTerminologyStatus(txRegistry::status);
         healthService.setServedVersions(served);
-        healthService.setSecurity(config.aclMode(), !config.adminCidrs().isEmpty());
+        healthService.setSecurity(config.aclMode());
         sync.setInactiveCountListener(healthService::setInactiveCount);
         igPackageService.setTxAllowlist(txRegistry);
         PackageCache packageCache = builder.cache();

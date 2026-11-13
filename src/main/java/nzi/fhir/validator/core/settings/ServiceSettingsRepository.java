@@ -42,11 +42,4 @@ public final class ServiceSettingsRepository {
                 .execute(Tuple.of(name, value, updatedBy))
                 .mapEmpty();
     }
-
-    /** The value of {@code name} without a lock; empty when there is no row. */
-    public static Future<Optional<String>> get(SqlClient client, String name) {
-        return client.preparedQuery("SELECT value FROM " + TABLE + " WHERE name = $1")
-                .execute(Tuple.of(name))
-                .map(rows -> rows.size() == 0 ? Optional.<String>empty() : Optional.of(rows.iterator().next().getString(0)));
-    }
 }

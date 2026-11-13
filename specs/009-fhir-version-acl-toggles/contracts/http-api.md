@@ -70,11 +70,12 @@ fhirVersions:
     inactiveContexts:
       type: object
       properties:
-        count: { type: integer }
+        count: { type: integer, description: All inactive contexts }
+        private: { type: integer, description: "Private ones (context or package not shareable): counted, never named" }
         items:
           type: array
           maxItems: 100
-          description: First 100 inactive contexts, ordered by FHIR version then package.
+          description: First 100 shareable inactive contexts, ordered by FHIR version then package.
           items:
             type: object
             properties:
@@ -89,10 +90,11 @@ security:
     aclSecurity:
       type: string
       enum: [enabled, disabled]
-    adminNetworkRestricted:
-      type: boolean
-      description: Whether administrative operations are limited to FV_AUTH_ADMIN_CIDRS.
 ```
+
+`/health` is unauthenticated, so (code review of PR #72) private inactive contexts are only counted, as the readiness
+report already does for private contexts, and whether administrative operations are network-limited is not reported
+(the startup log says it).
 
 Example with `FV_ENABLED_FHIR_VERSIONS=R5`, access control disabled and no allowlist:
 
@@ -103,10 +105,11 @@ Example with `FV_ENABLED_FHIR_VERSIONS=R5`, access control disabled and no allow
     "served": ["R5"],
     "inactiveContexts": {
       "count": 1,
+      "private": 0,
       "items": [{"fhirVersion": "R4", "igPackage": "hl7.fhir.us.core#6.1.0", "owner": "system", "reason": "fhir-version-disabled"}]
     }
   },
-  "security": {"aclSecurity": "disabled", "adminNetworkRestricted": false},
+  "security": {"aclSecurity": "disabled"},
   "postgres": {"status": "UP", "responseTime": 2},
   "readiness": {"status": "UP", "versions": {"R5": {"base": {"state": "READY"}, "contexts": []}}}
 }
@@ -133,5 +136,5 @@ is an operator setting, documented in the description and in README.
 | `POST /{v}/validate`, no header | 401 | 2xx as `trial validator`; usage charged to the trial org |
 | `GET /igs/{n}/{v}/dependencies`, no header | 401 | 2xx as `trial validator` (another org's private package: 404) |
 | Validation naming another org's private context | 404 for the trial key | 404 (FR-031) |
-| Any keyed path before the startup ACL step commits | as 4.1 | 503 `not-ready`, `Retry-After: 5` (research R10) |
+| Any keyed path before the startup ACL step commits | 503 `not-ready`, `Retry-After: 5` | 503 `not-ready`, `Retry-After: 5` (research R10) |
 | Fixed caller's organisation deactivated | 403 | 403 |

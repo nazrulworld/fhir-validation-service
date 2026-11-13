@@ -81,11 +81,11 @@ public class IgPackageService {
     }
 
     /**
-     * This instance applies the latest configuration of {@code version}. A version it doesn't serve has nothing to
-     * apply (spec 009 FR-032: a change of an inactive context is stored, never built), so the change answers on commit.
+     * This instance applies the latest configuration of {@code version}. For a version it doesn't serve the sync
+     * completes at once (spec 009 FR-032: a change of an inactive context is stored, never built).
      */
     private Future<Void> applyLocal(SupportedFhirVersion version) {
-        return servedVersions.contains(version) ? applyLocally.apply(version) : Future.succeededFuture();
+        return applyLocally.apply(version);
     }
 
     /**

@@ -371,19 +371,34 @@ class ApiKeyAuthHandlerTest {
         })));
     }
 
-    /** T040: in enabled mode the gate changes nothing (4.1 behaviour). */
+    /**
+     * Code review of PR #72: in enabled mode too, keyed paths answer 503 until the startup step has re-installed the
+     * keys, so no key is looked up (and a miss cached) against the previous disabled run's random hashes.
+     */
     @Test
-    void enabledModeIgnoresTheGate(Vertx vertx, VertxTestContext ctx) {
+    void enabledModeAnswers503UntilTheGateOpens(Vertx vertx, VertxTestContext ctx) {
         ApiKeyRepository repository = mock(ApiKeyRepository.class);
         when(repository.findActive(anyString())).thenReturn(Future.succeededFuture(Optional.empty()));
         ApiKeyAuthHandler auth = new ApiKeyAuthHandler(repository, 60_000, MAX_CACHED);
-        echoServer(vertx, auth)
-                .compose(server -> WebClient.create(vertx).post(server.actualPort(), "localhost", "/R4/validate")
-                        .putHeader("Authorization", "Bearer unknown-key-0123456789abcdefghijklmnop").send())
-                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
-                    assertEquals(401, r.statusCode(), "keys are checked; no 503 although the gate was never opened");
-                    ctx.completeNow();
-                })));
+        auth.configureAcl(AclMode.ENABLED, new FixedCallers(repository, 60_000));
+        String key = "Bearer unknown-key-0123456789abcdefghijklmnop";
+        echoServer(vertx, auth).compose(server -> {
+            WebClient c = WebClient.create(vertx);
+            return c.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", key).send()
+                    .compose(closed -> {
+                        ctx.verify(() -> {
+                            assertEquals(503, closed.statusCode(), closed.bodyAsString());
+                            assertEquals("5", closed.getHeader("Retry-After"));
+                            verifyNoInteractions(repository);
+                            assertEquals(0, auth.cachedKeys(), "nothing was cached while closed");
+                        });
+                        auth.openGate();
+                        return c.post(server.actualPort(), "localhost", "/R4/validate").putHeader("Authorization", key).send();
+                    });
+        }).onComplete(ctx.succeeding(open -> ctx.verify(() -> {
+            assertEquals(401, open.statusCode(), "open: keys are checked as in 4.1");
+            ctx.completeNow();
+        })));
     }
 
     /** T047, FR-030: the admin network allowlist still applies, before any caller is set. */

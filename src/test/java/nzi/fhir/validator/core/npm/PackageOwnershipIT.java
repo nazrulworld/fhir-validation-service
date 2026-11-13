@@ -204,9 +204,9 @@ class PackageOwnershipIT extends BaseTestContainer {
     void theBootstrapKeyStoresAsTheSystemOrganisation(VertxTestContext ctx) {
         String key = "bootstrap-key-0123456789abcdefghijklmnop";
         ApiKeyRepository keys = core.services().apiKeys();
-        keys.upsertWellKnown(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID,
+        core.services().pool().withTransaction(tx -> keys.upsertWellKnown(tx, nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID,
                         nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME, key, ApiKeyRepository.Role.ADMIN,
-                        nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
+                        nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT))
                 .compose(v -> keys.findActive(key))
                 .compose(info -> {
                     Caller bootstrap = info.orElseThrow().caller();

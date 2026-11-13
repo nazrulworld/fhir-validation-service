@@ -150,8 +150,8 @@ class AclDisabledIT extends BaseTestContainer {
                 .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
                     // US4-6, FR-023.
                     JsonObject health = cf.<HttpResponse<Buffer>>resultAt(0).bodyAsJsonObject();
-                    assertEquals(new JsonObject().put("aclSecurity", "disabled").put("adminNetworkRestricted", false),
-                            health.getJsonObject("security"));
+                    assertEquals(new JsonObject().put("aclSecurity", "disabled"), health.getJsonObject("security"),
+                            "only the mode: network limits aren't reported on this unauthenticated endpoint");
                     String metrics = cf.<HttpResponse<Buffer>>resultAt(1).bodyAsString();
                     assertTrue(metrics.contains("fv_acl_security_disabled 1.0"), "gauge exported");
                     assertTrue(metrics.contains("fv_validator_contexts_inactive 0.0"), "gauge exported");
@@ -201,8 +201,9 @@ class AclDisabledIT extends BaseTestContainer {
                     JsonObject problem = assertProblem(cf.resultAt(0), 403, "forbidden");
                     assertEquals("Administrative operations are not allowed from this network", problem.getString("detail"));
                     assertEquals(200, cf.<HttpResponse<Buffer>>resultAt(1).statusCode());
-                    assertTrue(cf.<HttpResponse<Buffer>>resultAt(2).bodyAsJsonObject().getJsonObject("security")
-                            .getBoolean("adminNetworkRestricted"));
+                    assertEquals(new JsonObject().put("aclSecurity", "disabled"),
+                            cf.<HttpResponse<Buffer>>resultAt(2).bodyAsJsonObject().getJsonObject("security"),
+                            "the allowlist isn't disclosed on /health");
                     ctx.completeNow();
                 })));
     }

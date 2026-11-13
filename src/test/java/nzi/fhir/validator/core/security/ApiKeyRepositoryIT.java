@@ -44,8 +44,13 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
     }
 
     private Future<Void> install(String key) {
-        return repo.upsertWellKnown(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID, Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, key,
-                ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID, Constant.SYS_ORG_API_KEY_EXPIRES_AT).mapEmpty();
+        return installed(key).mapEmpty();
+    }
+
+    private Future<Boolean> installed(String key) {
+        return pool.withTransaction(tx -> repo.upsertWellKnown(tx, Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
+                Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, key, ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID,
+                Constant.SYS_ORG_API_KEY_EXPIRES_AT));
     }
 
     /** A revoked seeded key stays revoked while the configured value is unchanged; a new value un-revokes it. */
@@ -67,21 +72,6 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
                 })));
     }
 
-    /** Instances starting at once on a database without the row all succeed (no fatal unique violation). */
-    @Test
-    void concurrentInstallsAllSucceed(VertxTestContext ctx) {
-        List<Future<Void>> installs = new ArrayList<>();
-        for (int i = 0; i < 12; i++) {
-            installs.add(install(KEY));
-        }
-        Future.all(installs)
-                .compose(cf -> pool.query("SELECT count(*) FROM fhir_validator_schema.api_keys").execute())
-                .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
-                    assertEquals(1, rows.iterator().next().getInteger(0));
-                    ctx.completeNow();
-                })));
-    }
-
     /**
      * Code review regression (V13): a revoked value is never installed again, also after the key was rotated, so an
      * instance still configured with a leaked value can't bring it back.
@@ -91,9 +81,7 @@ class ApiKeyRepositoryIT extends BaseTestContainer {
         install(KEY)
                 .compose(v -> repo.revokeNamed(Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME)) // KEY leaked: revoke it
                 .compose(org -> install(ROTATED)) // an instance with the new value
-                .compose(v -> repo.upsertWellKnown(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
-                        Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME, KEY, ApiKeyRepository.Role.VALIDATE, Constant.TRIAL_ORG_UUID,
-                        Constant.SYS_ORG_API_KEY_EXPIRES_AT)) // an instance still configured with the leaked value restarts
+                .compose(v -> installed(KEY)) // an instance still configured with the leaked value restarts
                 .compose(installed -> {
                     ctx.verify(() -> assertFalse(installed, "the leaked value is refused"));
                     return Future.all(repo.findActive(ROTATED), repo.findActive(KEY));

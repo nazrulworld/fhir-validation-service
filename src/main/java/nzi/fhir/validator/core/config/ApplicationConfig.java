@@ -15,9 +15,13 @@ public final class ApplicationConfig {
     public static final String DB_POSTGRES_SCHEMA_NAME = "fhir_validator_schema";
 
     private final JsonObject json;
+    /** Spec 009: parsed once (ConfigLoader has already validated the value). */
+    private final nzi.fhir.validator.core.enums.ServedVersions servedVersions;
 
     ApplicationConfig(JsonObject json) {
         this.json = json;
+        this.servedVersions = nzi.fhir.validator.core.enums.ServedVersions.parse(
+                json.getJsonObject("fhir", new JsonObject()).getString("enabledVersions"));
     }
 
     /**
@@ -125,7 +129,7 @@ public final class ApplicationConfig {
 
     /** Spec 009: the FHIR versions this instance serves ({@code FV_ENABLED_FHIR_VERSIONS}; unset = all supported). */
     public nzi.fhir.validator.core.enums.ServedVersions servedVersions() {
-        return nzi.fhir.validator.core.enums.ServedVersions.parse(section("fhir").getString("enabledVersions"));
+        return servedVersions;
     }
     /** Networks administrative operations may come from ({@code FV_AUTH_ADMIN_CIDRS}, spec 008); empty = any. */
     public nzi.fhir.validator.core.security.CidrList adminCidrs() {

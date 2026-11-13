@@ -55,7 +55,7 @@ public class ValidatorApi {
 
     /** Changing or removing a stored context: any supported version, also one not served (spec 009 FR-032). */
     private SupportedFhirVersion version(RoutingContext ctx) {
-        return VersionParams.supported(ctx.pathParam("version"), served);
+        return VersionParams.supported(ctx.pathParam("version"));
     }
 
     /** {@code POST /{version}/validator}: includes an IG version (spec 004 FR-019, spec 006, spec 007 FR-003). */

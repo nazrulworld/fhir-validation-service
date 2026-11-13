@@ -113,7 +113,9 @@ Each one gives the decision, the reason and the alternatives considered.
 - **Decision**: `/health` gains two top-level objects (contracts/http-api.md §3):
   - `fhirVersions`: `{served: [...], inactiveContexts: {count, items: [{fhirVersion, igPackage, owner, reason}]}}`,
     with `items` capped at 100;
-  - `security`: `{aclSecurity: "enabled"|"disabled", adminNetworkRestricted: bool}`.
+  - `security`: `{aclSecurity: "enabled"|"disabled"}`. Code review of PR #72: `/health` is unauthenticated, so
+    inactive contexts that are private are counted (`private`) but not listed, and whether admin operations are
+    network-limited is not reported (the startup log says it).
 
   `HealthService.checkHealth` reads the inactive contexts with one indexed query (partial index
   `WHERE NOT is_active`) in the same round trip pattern as the PostgreSQL ping. `/health/readiness` is unchanged: it
@@ -168,8 +170,11 @@ Each one gives the decision, the reason and the alternatives considered.
 ### R10. Gate requests in disabled mode until the mode step has committed
 
 - **Decision**: `ApiKeyAuthHandler` holds a volatile `ready` flag that the startup ACL step (R11) sets after it
-  commits. In **disabled** mode, every keyed path answers **503 `not-ready`** with `Retry-After: 5` until then. In
-  enabled mode, requests behave as in 4.1: the schema-not-ready 503 still applies.
+  commits. Until then every keyed path answers **503 `not-ready`** with `Retry-After: 5`, in **both** modes. In
+  disabled mode this keeps an instance about to be refused from serving public requests. In enabled mode (code review
+  of PR #72), a switch back from disabled would otherwise look keys up against the previous run's random hashes and
+  cache the 401 for up to `FV_AUTH_CACHE_TTL_MS`. Before 4.2, keyed requests already got 503 while migrations ran, so
+  the gate only extends that window to the end of the (short) access-control step.
 - **Rationale**: HTTP listens before warm-up (Principle VI). Without the gate, an instance that FR-029 is about to
   refuse would already serve public ADMIN calls against the shared database during the seconds before it exits.
 - **Alternatives**: starting HTTP after warm-up in disabled mode was rejected because liveness must answer at once.
