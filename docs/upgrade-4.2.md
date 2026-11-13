@@ -63,9 +63,10 @@ In public mode:
 
 - The `Authorization` header is ignored, whatever it holds.
 - Every request runs as one of two fixed callers:
-  - validation runs as the `trial validator` key (`00000000-0000-0000-0000-200000000002`, trial organisation);
-  - every other keyed operation, including the package reads, runs as the `system administrator` key
-    (`00000000-0000-0000-0000-200000000001`, system organisation).
+  - validation and the package reads run as the `trial validator` key (`00000000-0000-0000-0000-200000000002`, trial
+    organisation), so they see shareable content only;
+  - administrative operations run as the `system administrator` key (`00000000-0000-0000-0000-200000000001`, system
+    organisation).
 - Ownership works as before: anything created is owned by the system organisation.
 - Access rules work as before: private content of other organisations stays private (404).
 - Usage records are charged to the trial validator and the trial organisation.

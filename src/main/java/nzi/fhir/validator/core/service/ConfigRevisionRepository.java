@@ -76,6 +76,14 @@ public final class ConfigRevisionRepository {
             this(revision, included, access, Map.of());
         }
 
+        /**
+         * The access of the contexts validation may use (spec 009 FR-006): {@link #access()} without the inactive ones.
+         * {@link #access()} keeps them, because they can still be excluded, shared or transferred (FR-032).
+         */
+        public PinnedAccess activeAccess() {
+            return inactive.isEmpty() ? access : access.without(inactive.keySet());
+        }
+
         /** The included contexts that may be built and used (spec 009 FR-006): every included one that isn't inactive. */
         public List<String> active() {
             return inactive.isEmpty() ? included : included.stream().filter(k -> !inactive.containsKey(k)).toList();

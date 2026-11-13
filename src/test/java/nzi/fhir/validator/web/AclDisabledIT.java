@@ -172,10 +172,21 @@ class AclDisabledIT extends BaseTestContainer {
                             .compose(v -> services.igPackageService().include(Caller.system("system"), SupportedFhirVersion.R4,
                                     "acl.shared", "1.0.0", Optional.of(true)));
                 })
-                .compose(v -> Future.all(validate("?ig=acl.private%231.0.0", null), validate("?ig=acl.shared%231.0.0", null)))
+                .compose(v -> TestPackages.createOrganisation(app.bootstrap().services().pool(), "acme"))
+                .compose(acme -> TestPackages.storePackage(app.bootstrap().services(), TestPackages.profilePackage("acme.secret", "1.0.0"))
+                        .compose(v -> TestPackages.setPackageAccess(app.bootstrap().services().pool(), "acme.secret#1.0.0", acme, false)))
+                .compose(v -> Future.all(List.of(validate("?ig=acl.private%231.0.0", null), validate("?ig=acl.shared%231.0.0", null),
+                        app.client().get(app.port(), "localhost", "/igs/acme.secret/1.0.0/dependencies").send(),
+                        app.client().get(app.port(), "localhost", "/igs/acme.secret/1.0.0/conformance").send(),
+                        app.client().get(app.port(), "localhost", "/igs/acl.shared/1.0.0/dependencies").send())))
                 .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
                     assertProblem(cf.resultAt(0), 404, "package-not-found");
                     assertEquals(200, cf.<HttpResponse<Buffer>>resultAt(1).statusCode(), cf.<HttpResponse<Buffer>>resultAt(1).bodyAsString());
+                    // Code review: package reads run as the trial validator, so another organisation's private package
+                    // is not disclosed to anonymous callers (FR-031); a shareable one can be read.
+                    assertProblem(cf.resultAt(2), 404, "package-not-found");
+                    assertProblem(cf.resultAt(3), 404, "package-not-found");
+                    assertEquals(200, cf.<HttpResponse<Buffer>>resultAt(4).statusCode());
                     ctx.completeNow();
                 })));
     }

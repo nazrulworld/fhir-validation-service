@@ -160,7 +160,9 @@ public class ServiceMetrics {
                         "fhir_version", version.name(), "result", result).increment();
             }
         });
-        for (SupportedFhirVersion version : SupportedFhirVersion.enabled()) {
+        // Spec 009: per-version meters exist only for the served versions (the registry itself still covers every
+        // supported version, see TxRegistry#refreshNow).
+        for (SupportedFhirVersion version : served.asList()) {
             for (nzi.fhir.validator.core.terminology.TxServerAllowlist.Source source
                     : nzi.fhir.validator.core.terminology.TxServerAllowlist.Source.values()) {
                 Gauge.builder("fv.tx.allowlist.age", txRegistry, r -> r.current().list(version)

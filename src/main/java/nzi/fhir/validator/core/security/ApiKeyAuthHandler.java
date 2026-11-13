@@ -9,6 +9,7 @@ import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -107,11 +108,27 @@ public class ApiKeyAuthHandler {
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
             java.util.regex.Pattern.compile("^/(igs/(upload|register)|igs/[^/]+/[^/]+|[^/]+/validator)/?$");
-    /** Validation: VALIDATE or ADMIN with a key; the {@code trial validator} while access control is disabled. */
-    private static final java.util.regex.Pattern VALIDATE_ONLY_PATH = java.util.regex.Pattern.compile("^/[^/]+/validate/?$");
-    /** Package reads: VALIDATE or ADMIN with a key; the {@code system administrator} while access control is disabled. */
-    private static final java.util.regex.Pattern EITHER_ROLE_PATHS =
-            java.util.regex.Pattern.compile("^/igs/[^/]+/[^/]+/(dependencies|conformance)/?$");
+    /** Validation and the package reads: VALIDATE or ADMIN with a key. */
+    private static final java.util.regex.Pattern VALIDATE_PATHS =
+            java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
+
+    /**
+     * A class of keyed paths: the roles a key needs, and (spec 009 FR-018) the fixed caller the request runs as while
+     * access control is disabled. Administrative paths are also limited to the admin networks, in both modes.
+     */
+    private record KeyedPaths(java.util.function.Predicate<RoutingContext> matches, boolean administrative, Role fixedRole,
+                              Role... roles) {
+    }
+
+    /**
+     * Checked in order. Validation and the package reads run as the {@code trial validator} while access control is
+     * disabled: like any VALIDATE key, it sees shareable content and the trial organisation's own, never other
+     * organisations' private packages (FR-031).
+     */
+    private static final List<KeyedPaths> KEYED_PATHS = List.of(
+            new KeyedPaths(ApiKeyAuthHandler::isAdministrative, true, Role.ADMIN, Role.ADMIN),
+            new KeyedPaths(ctx -> VALIDATE_PATHS.matcher(ctx.normalizedPath()).matches(), false, Role.VALIDATE,
+                    Role.VALIDATE, Role.ADMIN));
 
     /**
      * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
@@ -131,35 +148,28 @@ public class ApiKeyAuthHandler {
      */
     public Handler<RoutingContext> rootHandler() {
         return ctx -> {
-            if (isAdministrative(ctx)) {
-                // Spec 008 FR-002: decided before the key is read, so it holds for every key and costs no lookup.
-                if (!adminCidrs.isEmpty() && !adminCidrs.contains(ClientAddress.of(ctx))) {
+            for (KeyedPaths paths : KEYED_PATHS) {
+                if (!paths.matches().test(ctx)) {
+                    continue;
+                }
+                // Spec 008 FR-002 (and spec 009 FR-030 in disabled mode): decided before the key is read, so it holds
+                // for every key and costs no lookup.
+                if (paths.administrative() && !adminCidrs.isEmpty() && !adminCidrs.contains(ClientAddress.of(ctx))) {
                     ErrorResponder.fail(ctx, new ProblemException(403, "forbidden",
                             "Administrative operations are not allowed from this network"));
                     return;
                 }
                 if (aclMode == AclMode.DISABLED) {
-                    runAsFixedCaller(ctx, Role.ADMIN);
+                    runAsFixedCaller(ctx, paths.fixedRole());
                 } else {
-                    authorise(ctx, Role.ADMIN);
+                    authorise(ctx, paths.roles());
                 }
-            } else if (VALIDATE_ONLY_PATH.matcher(ctx.normalizedPath()).matches()) {
-                if (aclMode == AclMode.DISABLED) {
-                    runAsFixedCaller(ctx, Role.VALIDATE);
-                } else {
-                    authorise(ctx, Role.VALIDATE, Role.ADMIN);
-                }
-            } else if (EITHER_ROLE_PATHS.matcher(ctx.normalizedPath()).matches()) {
-                if (aclMode == AclMode.DISABLED) {
-                    runAsFixedCaller(ctx, Role.ADMIN);
-                } else {
-                    authorise(ctx, Role.VALIDATE, Role.ADMIN);
-                }
-            } else {
-                ctx.next();
+                return;
             }
+            ctx.next();
         };
     }
+
 
     /**
      * Spec 009 FR-017, FR-018: access control is disabled, so the {@code Authorization} header is never read; the

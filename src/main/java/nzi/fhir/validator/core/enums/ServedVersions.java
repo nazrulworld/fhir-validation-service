@@ -16,14 +16,17 @@ public final class ServedVersions {
     public static final String VARIABLE = "FV_ENABLED_FHIR_VERSIONS";
 
     /** Every version this release serves: the default. */
-    public static final ServedVersions ALL = new ServedVersions(EnumSet.copyOf(SupportedFhirVersion.enabled()));
+    public static final ServedVersions ALL = new ServedVersions(EnumSet.copyOf(SupportedFhirVersion.enabled()), false);
 
     private final EnumSet<SupportedFhirVersion> versions;
     private final List<SupportedFhirVersion> ordered;
+    /** Whether the setting named at least one version (it may still name them all); for the startup log. */
+    private final boolean configured;
 
-    private ServedVersions(EnumSet<SupportedFhirVersion> versions) {
+    private ServedVersions(EnumSet<SupportedFhirVersion> versions, boolean configured) {
         this.versions = versions;
         this.ordered = List.copyOf(versions);
+        this.configured = configured;
     }
 
     /** Exactly {@code versions}, which must all be versions this release serves. */
@@ -35,7 +38,7 @@ public final class ServedVersions {
             }
             set.add(v);
         }
-        return set.isEmpty() || set.equals(ALL.versions) ? ALL : new ServedVersions(set);
+        return set.isEmpty() ? ALL : new ServedVersions(set, true);
     }
 
     /**
@@ -68,7 +71,12 @@ public final class ServedVersions {
             }
             set.add(v);
         }
-        return set.isEmpty() || set.equals(ALL.versions) ? ALL : new ServedVersions(set);
+        return set.isEmpty() ? ALL : new ServedVersions(set, true);
+    }
+
+    /** Whether {@code FV_ENABLED_FHIR_VERSIONS} named any version (otherwise every version is served by default). */
+    public boolean isConfigured() {
+        return configured;
     }
 
     public boolean contains(SupportedFhirVersion version) {

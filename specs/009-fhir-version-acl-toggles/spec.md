@@ -41,6 +41,12 @@ change. Turning off a version with the new setting is an operator choice. The se
 
 ## Clarifications
 
+### Session 2026-11-13 (code review of PR #72)
+
+- Q: Which fixed caller should the package reads run as while access control is off? → A: The `trial validator`
+  (FR-018, US4-5). As the `system administrator` they disclosed every organisation's private packages to anonymous
+  callers from any network, contrary to FR-031; the admin network allowlist doesn't cover them.
+
 ### Session 2026-11-12
 
 - Q: When a disabled FHIR version is enabled again, do the contexts it deactivated come back? → A: Yes, automatically
@@ -171,7 +177,8 @@ with `Authorization: Bearer garbage`, add a validator context, and check the own
 4. **Given** access control is disabled, **When** a validator context is added, **Then** it is owned by the system
    organisation (the ADMIN fixed caller's organisation).
 5. **Given** access control is disabled, **When** a package read (an IG package's dependencies or conformance
-   report) is called, **Then** it runs as the ADMIN fixed caller.
+   report) is called, **Then** it runs as the `trial validator`: a shareable package can be read, and another
+   organisation's private package answers 404.
 6. **Given** access control is disabled, **When** the instance starts, **Then** the log has a prominent warning that
    access control is disabled, that no endpoint needs a key, and whether administrative endpoints are limited to the
    admin network allowlist; the health report shows `security.aclSecurity: disabled`.
@@ -326,8 +333,9 @@ mode-change confirmation and both keys configured. Check that the keys work and 
 - **FR-017**: When access control is disabled, endpoints MUST NOT require authentication, and the `Authorization` header
   MUST NOT be read or checked. A request MUST never be refused because of that header's content.
 - **FR-018**: When access control is disabled, each request MUST run as a fixed caller: validation
-  (`POST /{version}/validate`) runs as the `trial validator` key (…200000000002). Every other keyed operation runs as
-  the `system administrator` key (…200000000001). That includes the package reads, which accept either role.
+  (`POST /{version}/validate`) and the package reads (`/igs/{name}/{version}/dependencies`, `/conformance`) run as the
+  `trial validator` key (…200000000002), so they see shareable content only (FR-031). Administrative operations run as
+  the `system administrator` key (…200000000001).
 - **FR-019**: Anything created while access control is disabled (package uploads, IG registrations, validator
   contexts) MUST be owned by the fixed caller's organisation, as if that key had made the request.
 - **FR-020**: Usage accounting on validation MUST work as in 4.1 and charge usage to the `trial validator` caller and

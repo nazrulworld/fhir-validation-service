@@ -702,8 +702,9 @@ components:
         expire; an expired key gets 401. Enforced by the service before contract validation (see
         specs/008-api-key-hardening/contracts/http-api.md). (4.2.0) An operator can turn access control off for a
         whole deployment (FV_GLOBAL_DISABLED_ACL_SECURITY). Then no operation needs a key and the Authorization
-        header is ignored. Each request runs as a fixed caller: validation as the `trial validator` key, every other
-        keyed operation as the `system administrator` key. The admin network allowlist still applies. GET /health
+        header is ignored. Each request runs as a fixed caller: validation and the package reads as the
+        `trial validator` key, administrative operations as the `system administrator` key. The admin network
+        allowlist still applies. GET /health
         reports `security.aclSecurity`.
 
   responses:

@@ -26,8 +26,8 @@ Two independent operator switches ship together as **4.2.0**, a minor release wi
 **B. `FV_GLOBAL_DISABLED_ACL_SECURITY`: public mode.**
 - `ApiKeyAuthHandler` keeps the admin CIDR check. In disabled mode it skips the `Authorization` header and sets
   `Caller` to a cached fixed caller:
-  - `system administrator` for admin paths and package reads;
-  - `trial validator` for `/validate`.
+  - `system administrator` for admin paths;
+  - `trial validator` for `/validate` and the package reads.
 
   Ownership, access checks and `UsageMeter` work unchanged.
 - A new startup step `AclModeStartup` replaces the two key-install steps. It runs as one transaction, locked on the
@@ -150,7 +150,7 @@ src/main/java/nzi/fhir/validator/
 ├── core/service/IgPackageService.java          # CHANGE: include() refuses unserved (422); exclude/changeSnapshotAccess
 │                                               #   skip LocalApplyWait for unserved versions
 ├── core/service/HealthService.java             # CHANGE: fhirVersions + security in checkHealth()
-├── core/security/ApiKeyAuthHandler.java        # CHANGE: AclMode, FixedCallers, path split (validate vs either-role),
+├── core/security/ApiKeyAuthHandler.java        # CHANGE: AclMode, FixedCallers, one keyed-path table (admin vs validate+reads),
 │                                               #   503 gate until ACL step commits; CIDR check first in both modes
 ├── core/security/FixedCallers.java             # NEW: loads/caches the two fixed KeyInfo by id
 ├── core/security/AclModeStartup.java           # NEW: settings row lock, FR-029 guard, random/env key install, store mode

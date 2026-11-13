@@ -144,11 +144,14 @@ Each one gives the decision, the reason and the alternatives considered.
      disabled mode, the caller is set to `fixed.admin()`; in enabled mode `authorise(ctx, ADMIN)` runs as today.
   2. **`/{version}/validate`**: disabled mode uses `fixed.validate()` (the trial validator, FR-018/FR-020).
   3. **Package reads** (`/igs/{n}/{v}/dependencies`, `/conformance`; these accept either role): disabled mode uses
-     `fixed.admin()`.
+     `fixed.validate()` too (code review of PR #72): as the system administrator they would disclose every
+     organisation's private packages to anonymous callers, and the admin allowlist doesn't cover them (FR-031).
   4. Everything else is open, as today.
 
-  In disabled mode the handler never calls `getHeader("Authorization")` (FR-017). `VALIDATE_PATHS` is split into
-  `VALIDATE_ONLY_PATH` (validate) and `EITHER_ROLE_PATHS` (package reads) so that each maps to one fixed caller.
+  In disabled mode the handler never calls `getHeader("Authorization")` (FR-017). The keyed paths are one table of
+  (matcher, administrative, fixed caller, roles), checked in order: administrative paths (ADMIN, fixed
+  `system administrator`, admin allowlist) and validation plus package reads (VALIDATE or ADMIN, fixed
+  `trial validator`).
   `ctx.put(CONTEXT_KEY, role)` and `ctx.put(CALLER_KEY, caller)` are set exactly as for a real key, so ownership
   (FR-019), access checks (FR-031: the trial validator sees shareable plus trial-owned contexts) and `UsageMeter`
   (FR-020, which reads `Caller.apiKeyId`) need no change. `repository.touch` is still called with the fixed key id, so

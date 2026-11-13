@@ -10,8 +10,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -21,7 +19,6 @@ import java.util.Optional;
  */
 final class KeyCommands {
     private static final Logger logger = LogManager.getLogger(KeyCommands.class);
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private KeyCommands() {
     }
@@ -35,11 +32,9 @@ final class KeyCommands {
         };
     }
 
-    /** 32 random bytes, base64url without padding: 43 characters of {@code [A-Za-z0-9_-]}. */
+    /** See {@link nzi.fhir.validator.core.security.ApiKeyRepository#generateKey()}. */
     static String generateKey() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        return nzi.fhir.validator.core.security.ApiKeyRepository.generateKey();
     }
 
     private static Future<Object> create(CliArgs.Command cmd, CliContext ctx) {

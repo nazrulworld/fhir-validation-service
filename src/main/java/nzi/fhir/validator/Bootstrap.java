@@ -171,20 +171,17 @@ public final class Bootstrap {
                 .map(id -> {
                     // Spec 009 FR-015 (contracts/operations.md §3).
                     nzi.fhir.validator.core.enums.ServedVersions served = config.servedVersions();
-                    logger().info("FHIR versions served: {} ({}{})", served.label(), served.isAll() ? "all; " : "",
-                            served.isAll() && config.json().getJsonObject("fhir", new io.vertx.core.json.JsonObject())
-                                    .getString("enabledVersions") == null
-                                    ? "FV_ENABLED_FHIR_VERSIONS not set" : "FV_ENABLED_FHIR_VERSIONS");
+                    logger().info("FHIR versions served: {} ({})", served.label(),
+                            served.isConfigured() ? "FV_ENABLED_FHIR_VERSIONS" : "all; FV_ENABLED_FHIR_VERSIONS not set");
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
                             .compose(v -> services.organisations().ensureWellKnown())
                             .compose(v -> installSystemOrganisation(services))
                             // Spec 009 (research R11): the access-control mode, the fixed callers' keys and the gate.
                             .compose(v -> nzi.fhir.validator.core.security.AclModeStartup.run(services.pool(),
-                                    services.apiKeys(), services.config(), services.secureRandom(), services.auth()))
+                                    services.apiKeys(), services.config(), services.auth()))
                             // Spec 009 FR-010 to FR-014: stored contexts follow FV_ENABLED_FHIR_VERSIONS before any is built.
                             .compose(v -> nzi.fhir.validator.core.validator.ContextActivation.reconcile(services.pool(),
-                                    services.config().servedVersions())
-                                    .onSuccess(r -> services.healthService().refreshInactiveCount()).mapEmpty())
+                                    services.config().servedVersions()).mapEmpty())
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))

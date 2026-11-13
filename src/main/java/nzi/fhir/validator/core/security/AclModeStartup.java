@@ -11,9 +11,7 @@ import nzi.fhir.validator.core.settings.ServiceSettingsRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,8 +35,6 @@ import java.util.function.Consumer;
 public final class AclModeStartup {
     private static final Logger logger = LogManager.getLogger(AclModeStartup.class);
     static final String RESYNC_MESSAGE = "API keys re-synchronised from environment";
-    /** Bytes of each random key: 256 bits, 43 characters of [A-Za-z0-9_-] (FR-021). */
-    private static final int RANDOM_KEY_BYTES = 32;
 
     /** Test hook (spec 009 T039): sees each generated value, so a test can prove it is never logged. */
     private static volatile Consumer<String> generatedValueListener = v -> { };
@@ -65,15 +61,14 @@ public final class AclModeStartup {
      * Runs the step. On success the mode is stored and {@code auth}'s gate is open; on a refused mode change it fails
      * with {@link StartupException} (the process exits 1) and nothing changed.
      */
-    public static Future<AclMode> run(Pool pool, ApiKeyRepository apiKeys, ApplicationConfig config, SecureRandom random,
-                                      ApiKeyAuthHandler auth) {
+    public static Future<AclMode> run(Pool pool, ApiKeyRepository apiKeys, ApplicationConfig config, ApiKeyAuthHandler auth) {
         AclMode mode = config.aclMode();
         List<Runnable> afterCommit = new ArrayList<>();
         return pool.withTransaction(tx -> previousMode(tx, mode)
                         .compose(previous -> {
                             guard(previous, mode, config.aclModeChangeConfirmed(), afterCommit);
                             Future<Void> keys = mode == AclMode.DISABLED
-                                    ? randomiseKeys(tx, apiKeys, config, random, afterCommit)
+                                    ? randomiseKeys(tx, apiKeys, config, afterCommit)
                                     : installConfiguredKeys(tx, apiKeys, config,
                                     previous.filter(p -> p == AclMode.DISABLED).isPresent(), afterCommit);
                             return keys.compose(v -> ServiceSettingsRepository.upsert(tx, ServiceSettingsRepository.ACL_SECURITY,
@@ -131,7 +126,7 @@ public final class AclModeStartup {
 
     /** FR-021, FR-022: both fixed keys get fresh random values; configured values are ignored, and never printed. */
     private static Future<Void> randomiseKeys(SqlClient tx, ApiKeyRepository apiKeys, ApplicationConfig config,
-                                              SecureRandom random, List<Runnable> afterCommit) {
+                                              List<Runnable> afterCommit) {
         Future<Void> chain = Future.succeededFuture();
         for (FixedKey key : FIXED_KEYS) {
             String configured = configured(config, key);
@@ -139,7 +134,7 @@ public final class AclModeStartup {
                 afterCommit.add(() -> logger.info("{} is ignored: access control is disabled", key.variable()));
             }
             chain = chain.compose(v -> {
-                String value = randomKey(random);
+                String value = randomKey();
                 return apiKeys.upsertWellKnown(tx, key.id(), key.name(), value, key.role(), key.owner(),
                         Constant.SYS_ORG_API_KEY_EXPIRES_AT).mapEmpty();
             });
@@ -196,11 +191,9 @@ public final class AclModeStartup {
         return value == null || value.isBlank() ? null : value;
     }
 
-    /** 32 bytes from a CSPRNG, base64url without padding: 43 characters of [A-Za-z0-9_-] (FR-021). */
-    static String randomKey(SecureRandom random) {
-        byte[] bytes = new byte[RANDOM_KEY_BYTES];
-        random.nextBytes(bytes);
-        String value = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    /** A 256-bit random value from the shared key generator (FR-021); the test hook sees it. */
+    static String randomKey() {
+        String value = ApiKeyRepository.generateKey();
         generatedValueListener.accept(value);
         return value;
     }

@@ -131,7 +131,12 @@ public final class TxRegistry implements TxServerAllowlistSource {
         client.close();
     }
 
-    /** Fetches every enabled version once, one after another; completes when all have been tried. */
+    /**
+     * Fetches every enabled version once, one after another; completes when all have been tried. Deliberately every
+     * version this release supports, not only the ones an instance serves ({@code FV_ENABLED_FHIR_VERSIONS}, spec 009
+     * research R6): an administrator may change the terminology server of a context that is inactive because its
+     * version isn't served (FR-032), and that change is checked against this version's allowlist.
+     */
     public Future<Void> refreshNow() {
         Future<Void> chain = Future.succeededFuture();
         for (SupportedFhirVersion v : SupportedFhirVersion.enabled()) {

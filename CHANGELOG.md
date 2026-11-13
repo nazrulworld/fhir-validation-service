@@ -29,7 +29,8 @@ so a rolling upgrade from 4.1 is fine; turn the switches on only after every ins
   - `DELETE` and `PATCH /{version}/validator` (and `fv-admin snapshot share|transfer`) still work on them.
 - **`FV_GLOBAL_DISABLED_ACL_SECURITY`** (`true`/`1`/`yes`): public mode.
   - No endpoint needs a key, and the `Authorization` header is ignored.
-  - Requests run as fixed callers: validation as `trial validator`, everything else as `system administrator`.
+  - Requests run as fixed callers: validation and the package reads as `trial validator` (shareable content only),
+    administrative operations as `system administrator`.
   - Ownership, access rules and usage accounting are unchanged, and `FV_AUTH_ADMIN_CIDRS` still applies.
 - **`FV_ACL_MODE_CHANGE_CONFIRMED`**: a start whose access-control mode differs from the one stored by the previous
   start (V15 `service_settings.acl_security`) is refused unless it is set. Switching back to enforced access control

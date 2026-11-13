@@ -121,15 +121,16 @@ public class ConfigSync {
         Future<Void> initial = catalog.refresh()
                 .compose(view -> ConfigRevisionRepository.current(pool).compose(rows -> {
                     reconciled = view;
+                    reportInactive(rows);
                     List<Future<Void>> builds = new ArrayList<>();
                     for (SupportedFhirVersion version : states.keySet()) {
                         ConfigRevisionRepository.ConfigRow row = rows.get(version);
                         long revision = row == null ? 0 : row.revision();
                         List<String> included = row == null ? List.of() : row.included();
                         if (row != null) {
-                            pinnedAccess.put(version, row.access());
+                            pinnedAccess.put(version, row.activeAccess());
                         }
-                        PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.access();
+                        PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.activeAccess();
                         builds.add(registry.applyPinned(version, revision, resolveAll(row, included, view, access))
                                 .recover(err -> Future.succeededFuture()));
                     }
@@ -192,21 +193,27 @@ public class ConfigSync {
         }
     }
 
-    /** Spec 009 (research R15): run on every poll tick (recounts inactive contexts for the gauge). */
-    private volatile Runnable pollListener = () -> { };
+    /**
+     * Spec 009 (research R15): told the number of inactive contexts, counted from the configuration rows this sync
+     * already reads at start and on every poll (no query of its own).
+     */
+    private volatile java.util.function.LongConsumer inactiveCountListener = n -> { };
 
-    public void setPollListener(Runnable listener) {
-        this.pollListener = listener == null ? () -> { } : listener;
+    public void setInactiveCountListener(java.util.function.LongConsumer listener) {
+        this.inactiveCountListener = listener == null ? n -> { } : listener;
+    }
+
+    private void reportInactive(Map<SupportedFhirVersion, ConfigRevisionRepository.ConfigRow> rows) {
+        inactiveCountListener.accept(rows.values().stream().mapToLong(r -> r.inactive().size()).sum());
     }
 
     private void poll() {
-        pollListener.run();
         ConfigRevisionRepository.catalogRevision(pool).onSuccess(revision -> {
             if (revision > catalog.current().revision()) {
                 syncCatalog();
             }
         });
-        ConfigRevisionRepository.current(pool).onSuccess(rows -> rows.forEach((version, row) -> {
+        ConfigRevisionRepository.current(pool).onSuccess(this::reportInactive).onSuccess(rows -> rows.forEach((version, row) -> {
             if (states.containsKey(version)) {
                 registry.noteSeen(version, row.revision());
                 if (row.revision() > registry.appliedRevision(version)) {
@@ -291,8 +298,8 @@ public class ConfigSync {
                         return Future.succeededFuture();
                     }
                     // Access first: it takes effect at once, also while a changed context is still being built.
-                    PinnedAccess previous = pinnedAccess.put(version, row.access());
-                    if (previous != null && !previous.equals(row.access())) {
+                    PinnedAccess previous = pinnedAccess.put(version, row.activeAccess());
+                    if (previous != null && !previous.equals(row.activeAccess())) {
                         logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
                     boolean unknown = row.included().stream().anyMatch(k -> !catalog.current().contains(k));
@@ -300,7 +307,7 @@ public class ConfigSync {
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
                     return view.compose(v -> registry.applyPinned(version, row.revision(),
-                            resolveAll(row, row.included(), v, row.access())));
+                            resolveAll(row, row.included(), v, row.activeAccess())));
                 });
     }
 

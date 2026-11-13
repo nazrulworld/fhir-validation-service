@@ -538,8 +538,8 @@ stored key as it is.
 > key. Use it only on a closed network, behind a gateway that authenticates callers, or on a developer machine.
 
 - The `Authorization` header is ignored.
-- Validation runs as the `trial validator` key (trial organisation); every other keyed operation runs as the
-  `system administrator` key (system organisation).
+- Validation and the package reads run as the `trial validator` key (trial organisation, shareable content only);
+  administrative operations run as the `system administrator` key (system organisation).
 - Ownership works as before: new content is owned by the system organisation.
 - Access rules work as before: private content of other organisations stays private (404).
 - Usage is charged to the trial organisation.

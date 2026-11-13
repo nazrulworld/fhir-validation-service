@@ -247,9 +247,17 @@ class ContextActivationIT extends BaseTestContainer {
                     return start(vertx, "R5").map(b -> a);
                 })
                 .compose(a -> Await.until(vertx, 30_000, "the R4 context is dropped on the instance still serving R4",
-                        () -> Future.succeededFuture(!a.bootstrap().services().validatorRegistry().details()
-                                .getJsonObject("R4").encode().contains(R4_PKG))))
-                .onComplete(ctx.succeedingThenComplete());
+                                () -> Future.succeededFuture(!a.bootstrap().services().validatorRegistry().details()
+                                        .getJsonObject("R4").encode().contains(R4_PKG)))
+                        // A dropped (inactive) context is refused like one that isn't included (400), never 503.
+                        .compose(v -> AppHarness.asValidator(a.client().post(a.port(), "localhost", "/R4/validate?ig="
+                                        + java.net.URLEncoder.encode(R4_PKG, java.nio.charset.StandardCharsets.UTF_8)))
+                                .putHeader("Content-Type", "application/fhir+json")
+                                .sendBuffer(Buffer.buffer("{\"resourceType\":\"Patient\"}"))))
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(400, r.statusCode(), r.bodyAsString());
+                    ctx.completeNow();
+                })));
     }
 
     /** T030, FR-032, US3-6: an inactive context can be changed and removed; adding one for its version is 422. */

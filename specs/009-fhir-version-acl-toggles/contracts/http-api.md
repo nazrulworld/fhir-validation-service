@@ -118,7 +118,7 @@ Example with `FV_ENABLED_FHIR_VERSIONS=R5`, access control disabled and no allow
 
 > (4.2.0) An operator can turn access control off for a whole deployment (FV_GLOBAL_DISABLED_ACL_SECURITY). Then no
 > operation needs a key and the Authorization header is ignored. Each request runs as a fixed caller: validation as
-> the `trial validator` key, every other keyed operation as the `system administrator` key. The admin network
+> the `trial validator` key (also the package reads), administrative operations as the `system administrator` key. The admin network
 > allowlist still applies. GET /health reports `security.aclSecurity`.
 
 The `security` declarations on operations stay as they are. They describe the default deployment. The disabled mode
@@ -131,7 +131,7 @@ is an operator setting, documented in the description and in README.
 | ADMIN path, no header | 401 | 2xx as `system administrator` (or 403 when outside `FV_AUTH_ADMIN_CIDRS`) |
 | ADMIN path, `Bearer garbage` | 401 | 2xx; header not read |
 | `POST /{v}/validate`, no header | 401 | 2xx as `trial validator`; usage charged to the trial org |
-| `GET /igs/{n}/{v}/dependencies`, no header | 401 | 2xx as `system administrator` |
+| `GET /igs/{n}/{v}/dependencies`, no header | 401 | 2xx as `trial validator` (another org's private package: 404) |
 | Validation naming another org's private context | 404 for the trial key | 404 (FR-031) |
 | Any keyed path before the startup ACL step commits | as 4.1 | 503 `not-ready`, `Retry-After: 5` (research R10) |
 | Fixed caller's organisation deactivated | 403 | 403 |

@@ -47,6 +47,13 @@ public final class PinnedAccess {
         return access;
     }
 
+    /** A copy without {@code igKeys} (spec 009: inactive contexts are not offered to validation). */
+    public PinnedAccess without(Collection<String> igKeys) {
+        Map<String, Access> copy = new HashMap<>(access);
+        igKeys.forEach(copy::remove);
+        return new PinnedAccess(copy);
+    }
+
     /** A copy with the access of {@code igKey} replaced (tests). */
     public PinnedAccess with(String igKey, Access a) {
         Map<String, Access> copy = new HashMap<>(access);

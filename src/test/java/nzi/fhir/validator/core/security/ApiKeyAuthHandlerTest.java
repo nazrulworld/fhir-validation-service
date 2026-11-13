@@ -306,7 +306,9 @@ class ApiKeyAuthHandlerTest {
         }).onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
             List<String> bodies = cf.<HttpResponse<Buffer>>list().stream().map(HttpResponse::bodyAsString).toList();
             String admin = "system administrator|system|ADMIN|ADMIN";
-            assertEquals(List.of(admin, admin, "trial validator|trial|VALIDATE|VALIDATE", admin, admin, "anonymous"), bodies);
+            String trial = "trial validator|trial|VALIDATE|VALIDATE";
+            // Package reads run as the trial validator too (code review): never with the system organisation's view.
+            assertEquals(List.of(admin, admin, trial, trial, trial, "anonymous"), bodies);
             org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).findActive(anyString());
             org.mockito.Mockito.verify(repository, org.mockito.Mockito.atLeastOnce()).touch(
                     org.mockito.ArgumentMatchers.eq(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID),
@@ -425,5 +427,18 @@ class ApiKeyAuthHandlerTest {
                     assertTrue(b.bodyAsString().contains("fixed caller key is revoked"), b.bodyAsString());
                     ctx.completeNow();
                 })));
+    }
+
+    /** Code review regression: a revoked fixed key is cached like a found one, so refusals cost no query each. */
+    @Test
+    void aRevokedFixedKeyIsLookedUpOncePerTtl(VertxTestContext ctx) {
+        ApiKeyRepository repository = fixedRepository(Optional.empty());
+        FixedCallers fixed = new FixedCallers(repository, 60_000);
+        fixed.admin().transform(first -> fixed.admin()).transform(second -> fixed.admin())
+                .onComplete(ar -> ctx.verify(() -> {
+                    assertTrue(ar.failed());
+                    org.mockito.Mockito.verify(repository, times(1)).findById(nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID);
+                    ctx.completeNow();
+                }));
     }
 }

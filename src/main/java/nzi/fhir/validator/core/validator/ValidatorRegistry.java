@@ -99,6 +99,8 @@ public class ValidatorRegistry {
     private final Object lock = new Object();
     private final Vertx vertx;
     private final SnapshotBuilder builder;
+    /** The versions this instance serves (spec 009); others are answered with the served list (FR-005). */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
     /**
      * Base and pinned slots. Concurrent so validation can read them without the registry lock (SC-007); the map and
      * the slots' fields are still only written under the lock.
@@ -127,6 +129,7 @@ public class ValidatorRegistry {
     public ValidatorRegistry(Vertx vertx, SnapshotBuilder builder, nzi.fhir.validator.core.enums.ServedVersions served) {
         this.vertx = vertx;
         this.builder = builder;
+        this.served = served;
         for (SupportedFhirVersion v : served.asList()) {
             versions.put(v, new VersionState());
             SnapshotKey base = SnapshotKey.base(v);
@@ -154,7 +157,7 @@ public class ValidatorRegistry {
     private VersionState versionState(SupportedFhirVersion version) {
         VersionState state = versions.get(version);
         if (state == null) {
-            throw ProblemException.unsupportedVersion(version.name());
+            throw ProblemException.unsupportedVersion(version.name(), served);
         }
         return state;
     }

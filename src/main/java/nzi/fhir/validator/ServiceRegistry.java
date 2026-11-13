@@ -57,8 +57,6 @@ public final class ServiceRegistry {
     private TxRegistry txRegistry;
     private TerminologyServices txServices;
     private final ApiKeyAuthHandler auth;
-    /** Spec 009 FR-021: the CSPRNG for the fixed callers' random keys in disabled mode. */
-    private final java.security.SecureRandom secureRandom = new java.security.SecureRandom();
     private final SafePackageFetcher fetcher;
     private final AdmissionController adminAdmission;
     private SnapshotBuilder snapshotBuilder;
@@ -89,8 +87,6 @@ public final class ServiceRegistry {
         // Spec 009: with access control disabled, requests run as the fixed callers (FR-018).
         this.auth.configureAcl(config.aclMode(), new nzi.fhir.validator.core.security.FixedCallers(apiKeys,
                 config.authCacheTtlMs()));
-        // Spec 009 FR-021: seeded now, so generating the random keys in warm-up never waits for entropy.
-        this.secureRandom.nextBytes(new byte[1]);
         this.validationApi = new ValidationApi(validationService, config.servedVersions());
         this.validatorApi = new ValidatorApi(igPackageService, config.servedVersions());
     }
@@ -147,7 +143,7 @@ public final class ServiceRegistry {
         healthService.setTerminologyStatus(txRegistry::status);
         healthService.setServedVersions(served);
         healthService.setSecurity(config.aclMode(), !config.adminCidrs().isEmpty());
-        sync.setPollListener(healthService::refreshInactiveCount);
+        sync.setInactiveCountListener(healthService::setInactiveCount);
         igPackageService.setTxAllowlist(txRegistry);
         PackageCache packageCache = builder.cache();
         FhirValidationService validationService = new FhirValidationService(registry, executors,
@@ -257,10 +253,6 @@ public final class ServiceRegistry {
     /** Organisations (spec 005). */
     public OrganisationRepository organisations() {
         return organisations;
-    }
-
-    public java.security.SecureRandom secureRandom() {
-        return secureRandom;
     }
 
     public ApiKeyAuthHandler auth() {

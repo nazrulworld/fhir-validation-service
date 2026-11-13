@@ -85,6 +85,24 @@ public class ApiKeyRepository {
         this.pool = pool;
     }
 
+    /** The CSPRNG for every generated key; seeded when the class loads, so generating never waits on an event loop. */
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
+    static {
+        RANDOM.nextBytes(new byte[1]);
+    }
+
+    /**
+     * A new key value: 32 random bytes (256 bits) from a CSPRNG, base64url without padding, 43 characters of
+     * {@code [A-Za-z0-9_-]}, so always {@link #isWellFormed well-formed}. Used by {@code fv-admin key create} and, spec 009
+     * FR-021, for the fixed callers' unknown keys while access control is disabled.
+     */
+    public static String generateKey() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
     public static boolean isWellFormed(String key) {
         return key != null && KEY_FORMAT.matcher(key).matches();
     }

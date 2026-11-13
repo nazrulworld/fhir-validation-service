@@ -104,9 +104,9 @@ public class HealthService {
         return inactiveCount.get();
     }
 
-    /** Recounts the inactive contexts (startup, every configuration poll, every health report). */
-    public void refreshInactiveCount() {
-        inactiveContexts();
+    /** The number of inactive contexts, as counted by the configuration sync (start and every poll). */
+    public void setInactiveCount(long count) {
+        inactiveCount.set(count);
     }
 
     public void setDraining(boolean value) {

@@ -27,6 +27,7 @@ class ServedVersionsTest {
             assertTrue(v.isAll(), String.valueOf(raw));
             assertEquals(SupportedFhirVersion.enabled(), v.asList());
             assertSame(ServedVersions.ALL, v);
+            assertFalse(v.isConfigured(), "the log says the variable is not set");
         }
         assertEquals("STU3, R4, R4B, R5", ServedVersions.ALL.label());
         assertFalse(ServedVersions.ALL.contains(R6), "R6 is known but never served");
@@ -35,6 +36,9 @@ class ServedVersionsTest {
     @Test
     void allFourListedExplicitlyIsAll() {
         assertTrue(ServedVersions.parse("STU3,R4,R4B,R5").isAll());
+        assertTrue(ServedVersions.parse("STU3,R4,R4B,R5").isConfigured());
+        assertEquals(ServedVersions.ALL, ServedVersions.parse("STU3,R4,R4B,R5"), "equal sets are equal however they were set");
+        assertTrue(ServedVersions.parse("R4").isConfigured());
     }
 
     @Test

@@ -106,18 +106,15 @@ public class IgPackageService {
         this.admitBuild = admitBuild;
     }
 
-    /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
     /** The FHIR versions this instance serves (spec 009); {@link nzi.fhir.validator.core.enums.ServedVersions#ALL} by default. */
     private volatile nzi.fhir.validator.core.enums.ServedVersions servedVersions = nzi.fhir.validator.core.enums.ServedVersions.ALL;
 
+    /** Spec 009 FR-008: include refuses versions not in {@code served}; changes to inactive contexts skip the local wait. */
     public void setServedVersions(nzi.fhir.validator.core.enums.ServedVersions served) {
         this.servedVersions = served;
     }
 
-    public nzi.fhir.validator.core.enums.ServedVersions servedVersions() {
-        return servedVersions;
-    }
-
+    /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
     public void setTxCacheSize(int txCacheSize) {
         this.txCacheSize = txCacheSize;
     }

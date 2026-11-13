@@ -16,7 +16,8 @@ import java.util.UUID;
  * within that time. Holds two entries.
  */
 public class FixedCallers {
-    private record Cached(KeyInfo info, long expiresAt) {
+    /** A lookup result, found or not (a revoked key is cached too, so refusals cost no query; code review). */
+    private record Cached(java.util.Optional<KeyInfo> info, long expiresAt) {
     }
 
     private final ApiKeyRepository repository;
@@ -35,28 +36,28 @@ public class FixedCallers {
     }
 
     public Future<KeyInfo> admin() {
-        Cached c = admin;
-        if (c != null && c.expiresAt() > System.currentTimeMillis()) {
-            return Future.succeededFuture(c.info());
-        }
-        return load(Constant.SYS_ORG_ADMIN_API_KEY_UUID).onSuccess(info -> admin = cache(info));
+        return lookup(admin, Constant.SYS_ORG_ADMIN_API_KEY_UUID, c -> admin = c);
     }
 
     public Future<KeyInfo> validate() {
-        Cached c = validate;
-        if (c != null && c.expiresAt() > System.currentTimeMillis()) {
-            return Future.succeededFuture(c.info());
+        return lookup(validate, Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID, c -> validate = c);
+    }
+
+    private Future<KeyInfo> lookup(Cached cached, UUID id, java.util.function.Consumer<Cached> store) {
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) {
+            return result(cached.info());
         }
-        return load(Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID).onSuccess(info -> validate = cache(info));
+        return repository.findById(id).compose(info -> {
+            if (ttlMs > 0) {
+                store.accept(new Cached(info, System.currentTimeMillis() + ttlMs));
+            }
+            return result(info);
+        });
     }
 
-    private Cached cache(KeyInfo info) {
-        return ttlMs > 0 ? new Cached(info, System.currentTimeMillis() + ttlMs) : null;
-    }
-
-    private Future<KeyInfo> load(UUID id) {
-        return repository.findById(id).compose(info -> info.isPresent() ? Future.succeededFuture(info.get())
+    private static Future<KeyInfo> result(java.util.Optional<KeyInfo> info) {
+        return info.isPresent() ? Future.succeededFuture(info.get())
                 : Future.failedFuture(new ProblemException(403, "forbidden",
-                "This operation's fixed caller key is revoked; restart to re-create it")));
+                "This operation's fixed caller key is revoked; restart to re-create it"));
     }
 }
