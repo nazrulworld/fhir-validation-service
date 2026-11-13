@@ -125,7 +125,7 @@ paths:
             Without a version (or with `latest`) the highest included version is used; the response reports the
             concrete version. Only IG versions included for this FHIR version can be named: a stored version
             that isn't included is answered 400 invalid-request. Absent: the core specification only. One value; at most 256 characters. Only packages your organisation owns or
-            that are shareable can be named. Anonymous callers can name shareable packages only. Without a version,
+            that are shareable can be named. The trial validator key (and every caller in public mode) can name shareable packages only. Without a version,
             the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
             series such as `name#1.2.x` is rejected with 400 invalid-request; use the concrete version reported
             when the IG was included (POST /{version}/validator).

@@ -4,7 +4,9 @@ import io.vertx.pgclient.PgConnectOptions;
 import nzi.fhir.validator.core.StartupException;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.Location;
 import org.flywaydb.core.api.MigrationVersion;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
@@ -15,6 +17,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -49,6 +52,16 @@ class SquashedBaselineIT extends BaseTestContainer {
 
     private static Connection jdbc(PgConnectOptions o) throws SQLException {
         return DriverManager.getConnection(DatabaseService.jdbcUrl(o), o.getUser(), o.getPassword());
+    }
+
+    /** The production configuration plus the test-only V16 probe migration. */
+    private static Supplier<FluentConfiguration> withProbe(PgConnectOptions o) {
+        return () -> {
+            FluentConfiguration config = DatabaseService.flywayBuilder(o);
+            List<Location> locations = new ArrayList<>(List.of(config.getLocations()));
+            locations.add(new Location(PROBE));
+            return config.locations(locations.toArray(Location[]::new));
+        };
     }
 
     /** An earlier history, up to {@code target}. */
@@ -176,21 +189,21 @@ class SquashedBaselineIT extends BaseTestContainer {
     void migrationsAfterTheBaselineAreValidatedStrictly() throws SQLException {
         PgConnectOptions db = freshDatabase();
         earlier(db, ORIGINAL, "15").migrate();
-        DatabaseService.migrateOnce(db, PROBE);
+        DatabaseService.migrateOnce(withProbe(db));
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("16"), rows(c, "SELECT max(version::int)::text FROM " + S + ".flyway_schema_history "
                     + "WHERE version IS NOT NULL"), "V16 is applied on top of the earlier history");
         }
         execute(db, "UPDATE " + S + ".flyway_schema_history SET checksum = checksum + 1 WHERE version = '16'");
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> DatabaseService.migrateOnce(db, PROBE));
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> DatabaseService.migrateOnce(withProbe(db)));
         assertTrue(e.getMessage().contains("16"), e.getMessage());
     }
 
     @Test
     void aNewDatabaseAppliesLaterMigrationsNormally() throws SQLException {
         PgConnectOptions db = freshDatabase();
-        DatabaseService.migrateOnce(db, PROBE);
+        DatabaseService.migrateOnce(withProbe(db));
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("15", "16"), rows(c, "SELECT version FROM " + S + ".flyway_schema_history "
                     + "WHERE version IS NOT NULL ORDER BY installed_rank"));
@@ -204,9 +217,20 @@ class SquashedBaselineIT extends BaseTestContainer {
 
         StartupException e = assertThrows(StartupException.class, () -> DatabaseService.migrateOnce(db));
         assertTrue(e.getMessage().contains("unsupported early build"), e.getMessage());
+        assertTrue(e.getMessage().contains("Back up the database"), e.getMessage());
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("12"), rows(c, "SELECT max(version::int)::text FROM " + S + ".flyway_schema_history "
                     + "WHERE version IS NOT NULL"), "nothing was applied");
         }
+    }
+
+    @Test
+    void aFailedMigrationInTheHistoryIsReported() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        earlier(db, ORIGINAL, "15").migrate();
+        execute(db, "UPDATE " + S + ".flyway_schema_history SET success = false WHERE version = '15'");
+
+        StartupException e = assertThrows(StartupException.class, () -> DatabaseService.migrateOnce(db));
+        assertTrue(e.getMessage().contains("Database migration 15") && e.getMessage().contains("failed"), e.getMessage());
     }
 }

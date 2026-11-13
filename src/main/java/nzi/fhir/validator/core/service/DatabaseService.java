@@ -1,6 +1,7 @@
 package nzi.fhir.validator.core.service;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -87,15 +88,30 @@ public final class DatabaseService {
      * One migration attempt. A new database runs the baseline. A database that ran the earlier migrations keeps its
      * history unchanged: only versions up to {@link #LAST_RETIRED} are validated leniently, and later ones are
      * validated as usual. A schema that stops before {@link #LAST_RETIRED} is from an unsupported early build and is
-     * refused. {@code extraLocations} adds migration locations (tests only; production passes none).
+     * refused, as is a history with a failed migration.
      */
-    static void migrateOnce(PgConnectOptions options, String... extraLocations) {
-        Flyway plain = withLocations(flywayBuilder(options), extraLocations).load();
+    static void migrateOnce(PgConnectOptions options) {
+        migrateOnce(() -> flywayBuilder(options));
+    }
+
+    /**
+     * {@link #migrateOnce(PgConnectOptions)} with the Flyway configuration supplied (a fresh one per call; tests add
+     * migration locations this way).
+     */
+    static void migrateOnce(Supplier<FluentConfiguration> config) {
+        Flyway plain = config.get().load();
         boolean retiredHistory = false;
         MigrationVersion maxApplied = null;
         for (MigrationInfo info : plain.info().applied()) {
             MigrationVersion v = info.getVersion();
-            if (v == null || info.getType().isBaseline() || !info.getState().isApplied() || info.getState().isFailed()) {
+            if (v == null || info.getType().isBaseline()) {
+                continue;
+            }
+            if (info.getState().isFailed()) {
+                throw new StartupException("Database migration " + v + " (" + info.getDescription() + ") failed earlier and"
+                        + " left a failed row in flyway_schema_history; repair the database before starting");
+            }
+            if (!info.getState().isApplied()) {
                 continue;
             }
             if (v.compareTo(LAST_RETIRED) < 0 && v.compareTo(MigrationVersion.fromVersion("1")) >= 0) {
@@ -111,9 +127,10 @@ public final class DatabaseService {
         }
         if (maxApplied.compareTo(LAST_RETIRED) < 0) {
             throw new StartupException("Database schema is from an unsupported early build (migration " + maxApplied
-                    + "); it cannot be upgraded. Start from an empty database (docs/operations.md)");
+                    + "): this release needs one that reached migration " + LAST_RETIRED + " and cannot upgrade it."
+                    + " Nothing was changed. Back up the database before recreating it (docs/operations.md)");
         }
-        Flyway lenient = withLocations(flywayBuilder(options), extraLocations)
+        Flyway lenient = config.get()
                 .ignoreMigrationPatterns("*:missing", "*:pending", "*:future")
                 .validateOnMigrate(false)
                 .load();
@@ -128,16 +145,6 @@ public final class DatabaseService {
         logger.info("Database keeps its pre-1.0.0 migration history (up to V{}); those versions are validated leniently",
                 LAST_RETIRED);
         lenient.migrate();
-    }
-
-    private static FluentConfiguration withLocations(FluentConfiguration config, String... extraLocations) {
-        if (extraLocations.length == 0) {
-            return config;
-        }
-        String[] all = new String[extraLocations.length + 1];
-        all[0] = "classpath:db/migration";
-        System.arraycopy(extraLocations, 0, all, 1, extraLocations.length);
-        return config.locations(all);
     }
 
     private static String rootMessage(Throwable t) {

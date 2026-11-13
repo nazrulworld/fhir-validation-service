@@ -4,6 +4,10 @@
 -- Only a new database runs this file. A database that ran the earlier migrations keeps its history; DatabaseService
 -- validates versions up to 15 leniently and V16 onwards strictly. A database that stops before V15 is refused.
 --
+-- Never edit this file once released: a database created from it stores its checksum, and databases with the earlier
+-- history validate versions up to 15 leniently, so an edit would reach only some databases. Change the schema with
+-- V16 onwards.
+--
 -- The result must equal the earlier migrations applied in order (SquashedBaselineIT): the same tables, column order,
 -- defaults, constraint and index names, functions, triggers and seed rows. The well-known ids match
 -- nzi.fhir.validator.core.Constant (ConstantMigrationConsistencyTest).

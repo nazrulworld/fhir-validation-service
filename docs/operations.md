@@ -117,7 +117,10 @@ The service stops (exit 1) instead of running half-configured when:
 - **`FV_VALIDATOR_API_KEY` is malformed or equals `FV_ADMIN_API_KEY`**: a configuration error names the variable.
 - **the served FHIR versions or the access-control mode changed** without the matching confirmation setting (see
   above).
-- **the database schema is from an unsupported early build**: it cannot be upgraded; start from an empty database.
+- **the database schema is from an unsupported early build** (its migration history stops before V15): this release
+  cannot upgrade it, and nothing is changed. Keep running the build that created it, or back up the database and
+  recreate it from empty.
+- **a migration failed earlier** (a failed row in `flyway_schema_history`): repair the database, then start again.
 
 ## Usage records on shutdown
 
