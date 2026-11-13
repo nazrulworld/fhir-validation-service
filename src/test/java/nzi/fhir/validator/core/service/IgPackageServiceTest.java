@@ -158,4 +158,22 @@ class IgPackageServiceTest extends BaseTestContainer {
             vertx.close();
         }
     }
+
+    /** Spec 009 (T024, FR-008): the service refuses a version it doesn't serve before any transaction starts. */
+    @Test
+    void includeRefusesAVersionThatIsNotServed(VertxTestContext ctx) {
+        Pool pool = org.mockito.Mockito.mock(Pool.class);
+        IgPackageService service = IgPackageService.create(vertx, pool,
+                org.mockito.Mockito.mock(nzi.fhir.validator.core.npm.PostgresPackageCacheManager.class));
+        service.setServedVersions(nzi.fhir.validator.core.enums.ServedVersions.parse("R4"));
+        service.include(nzi.fhir.validator.core.security.Caller.system("system"),
+                        nzi.fhir.validator.core.enums.SupportedFhirVersion.R5, "any.ig", "latest", java.util.Optional.empty())
+                .onComplete(ctx.failing(err -> ctx.verify(() -> {
+                    nzi.fhir.validator.web.ProblemException p = assertInstanceOf(nzi.fhir.validator.web.ProblemException.class, err);
+                    assertEquals(422, p.status());
+                    assertEquals("fhir-version-disabled", p.type());
+                    org.mockito.Mockito.verifyNoInteractions(pool);
+                    ctx.completeNow();
+                })));
+    }
 }

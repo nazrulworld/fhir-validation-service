@@ -119,4 +119,50 @@ class NoSecretsInLogsTest extends BaseTestContainer {
         return nzi.fhir.validator.cli.AdminCli.run(args, out, new java.io.PrintStream(new java.io.ByteArrayOutputStream()), env,
                 new java.io.ByteArrayInputStream(stdin.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
+
+    /**
+     * Spec 009 (T039, FR-021, FR-022, SC-008): a disabled start and the switch back log neither the configured key values
+     * nor the generated random ones.
+     */
+    @Test
+    void accessControlModeChangesNeverLogKeyValues(Vertx vertx, VertxTestContext ctx) {
+        resetSchema();
+        java.util.List<String> generated = new java.util.concurrent.CopyOnWriteArrayList<>();
+        nzi.fhir.validator.core.security.AclModeStartup.setGeneratedValueListenerForTests(generated::add);
+        LogCapture logs = LogCapture.start();
+        JsonObject config = AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE, POSTGRES_USERNAME,
+                POSTGRES_PASSWORD);
+        config.put("fhir", new JsonObject().put("enabledVersions", "R4"));
+        config.getJsonObject("auth").put("bootstrapAdminKey", ADMIN_KEY).put("validatorKey", VALIDATOR_KEY);
+        JsonObject disabled = config.copy();
+        disabled.getJsonObject("auth").put("globalDisabledAclSecurity", true);
+        JsonObject enabled = config.copy();
+        enabled.getJsonObject("auth").put("aclModeChangeConfirmed", true);
+        AppHarness.start(vertx, disabled)
+                .compose(app -> app.bootstrap().warmUp().compose(v -> app.stop()))
+                .compose(v -> AppHarness.start(vertx, enabled))
+                .compose(app -> app.bootstrap().warmUp().compose(v -> app.stop()))
+                .onComplete(ar -> ctx.verify(() -> {
+                    logs.close();
+                    nzi.fhir.validator.core.security.AclModeStartup.setGeneratedValueListenerForTests(null);
+                    assertTrue(ar.succeeded(), String.valueOf(ar.cause()));
+                    assertEquals(2, generated.size(), "two random values were generated");
+                    List<String> lines = logs.events().stream().map(e -> e.message()).toList();
+                    assertTrue(lines.stream().anyMatch(l -> l.contains("re-synchronised")), "the switch back was logged");
+                    for (String line : lines) {
+                        for (String secret : List.of(ADMIN_KEY, VALIDATOR_KEY)) {
+                            for (int i = 0; i + 4 <= secret.length(); i++) {
+                                assertFalse(line.contains(secret.substring(i, i + 4)), "configured key fragment logged: " + line);
+                            }
+                        }
+                        // Random values may share short fragments with ordinary text by chance: 8 characters can't.
+                        for (String value : generated) {
+                            for (int i = 0; i + 8 <= value.length(); i++) {
+                                assertFalse(line.contains(value.substring(i, i + 8)), "generated key fragment logged: " + line);
+                            }
+                        }
+                    }
+                    ctx.completeNow();
+                }));
+    }
 }

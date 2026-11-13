@@ -24,9 +24,30 @@ import java.util.Optional;
  */
 public class ValidatorApi {
     private final IgPackageService igPackageService;
+    /** The versions this instance serves (spec 009). */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
 
-    public ValidatorApi(IgPackageService igPackageService) {
+    /** Spec 009 FR-034: sharing forced while access control is disabled. */
+    private final PublicModeSharing sharing;
+
+    public ValidatorApi(IgPackageService igPackageService, nzi.fhir.validator.core.enums.ServedVersions served,
+                        nzi.fhir.validator.core.security.AclMode aclMode) {
         this.igPackageService = igPackageService;
+        this.served = served;
+        this.sharing = new PublicModeSharing(aclMode);
+    }
+
+    /** Appends {@code warnings} to the response's {@code warnings} array (created when missing). */
+    static JsonObject withWarnings(JsonObject response, List<String> warnings) {
+        if (!warnings.isEmpty()) {
+            io.vertx.core.json.JsonArray all = response.getJsonArray("warnings");
+            if (all == null) {
+                all = new io.vertx.core.json.JsonArray();
+                response.put("warnings", all);
+            }
+            warnings.forEach(all::add);
+        }
+        return response;
     }
 
     /**
@@ -46,9 +67,9 @@ public class ValidatorApi {
                 .handler(this::handleChangeValidatorAccess);
     }
 
-    private static SupportedFhirVersion version(RoutingContext ctx) {
-        String param = ctx.pathParam("version");
-        return SupportedFhirVersion.parseEnabled(param).orElseThrow(() -> ProblemException.unsupportedVersion(param));
+    /** Changing or removing a stored context: any supported version, also one not served (spec 009 FR-032). */
+    private SupportedFhirVersion version(RoutingContext ctx) {
+        return VersionParams.supported(ctx.pathParam("version"));
     }
 
     /** {@code POST /{version}/validator}: includes an IG version (spec 004 FR-019, spec 006, spec 007 FR-003). */
@@ -56,7 +77,8 @@ public class ValidatorApi {
         SupportedFhirVersion version;
         JsonObject body;
         try {
-            version = version(ctx);
+            // Spec 009 FR-008: checked before the body, so a refused request touches nothing.
+            version = VersionParams.servedForInclude(ctx.pathParam("version"), served);
             body = ctx.body().asJsonObject();
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
@@ -87,10 +109,12 @@ public class ValidatorApi {
             return;
         }
         String requestedVersion = body.getString("igPackageVersion", "latest");
+        List<String> forced = new java.util.ArrayList<>();
+        Optional<Boolean> sharingRequested = sharing.apply(Optional.ofNullable((Boolean) shareable), forced);
         // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
         ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
-                body.getString("igPackageId"), requestedVersion, Optional.ofNullable((Boolean) shareable), terminology)
-                .map(json -> json.put("requestedVersion", requestedVersion)));
+                body.getString("igPackageId"), requestedVersion, sharingRequested, terminology)
+                .map(json -> withWarnings(json.put("requestedVersion", requestedVersion), forced)));
     }
 
     /** {@code PATCH /{version}/validator?ig=name#version} (spec 005 FR-019, spec 007 FR-003, contracts §3-4). */
@@ -112,8 +136,10 @@ public class ValidatorApi {
         } catch (RuntimeException e) {
             body = null;
         }
+        List<String> forced = new java.util.ArrayList<>();
+        AccessChange change = sharing.apply(AccessChange.parse(body), forced);
         ErrorResponder.respond(ctx, igPackageService.changeSnapshotAccess(ApiKeyAuthHandler.caller(ctx), version,
-                values.get(0), AccessChange.parse(body)));
+                values.get(0), change).map(json -> withWarnings(json, forced)));
     }
 
     /** Stops pre-building an included IG version (spec 004 FR-024): {@code DELETE /{version}/validator?ig=name#version}. */

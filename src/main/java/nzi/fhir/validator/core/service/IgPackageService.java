@@ -80,6 +80,7 @@ public class IgPackageService {
         this.applyLocally = applyLocally;
     }
 
+
     /**
      * @param admitBuild given the expanded size of a new resolved package set, fails (413 {@code package-too-large})
      *                   if this instance could not build a validator from it; checked before the include is
@@ -96,6 +97,14 @@ public class IgPackageService {
      */
     public void setAdmitBuild(java.util.function.BiFunction<Long, Long, Future<Void>> admitBuild) {
         this.admitBuild = admitBuild;
+    }
+
+    /** The FHIR versions this instance serves (spec 009); {@link nzi.fhir.validator.core.enums.ServedVersions#ALL} by default. */
+    private volatile nzi.fhir.validator.core.enums.ServedVersions servedVersions = nzi.fhir.validator.core.enums.ServedVersions.ALL;
+
+    /** Spec 009 FR-008: include refuses versions not in {@code served}; changes to inactive contexts skip the local wait. */
+    public void setServedVersions(nzi.fhir.validator.core.enums.ServedVersions served) {
+        this.servedVersions = served;
     }
 
     /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
@@ -151,6 +160,11 @@ public class IgPackageService {
     public Future<JsonObject> include(Caller caller, SupportedFhirVersion fhirVersion, String name, String requestedVersion,
                                       Optional<Boolean> shareable,
                                       Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology) {
+        // Spec 009 FR-008 (research R4, defence in depth): a version this deployment doesn't serve is refused before
+        // anything is read or written, also for callers that don't come through the HTTP API.
+        if (!servedVersions.contains(fhirVersion)) {
+            return Future.failedFuture(ProblemException.fhirVersionDisabled(fhirVersion, servedVersions));
+        }
         if (name == null || name.isBlank()) {
             return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
         }

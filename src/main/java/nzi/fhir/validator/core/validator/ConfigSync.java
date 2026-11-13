@@ -65,6 +65,8 @@ public class ConfigSync {
     private volatile PackageCatalogView reconciled = PackageCatalogView.EMPTY;
     /** Access of the included contexts, per version (spec 005): read without a lock on the validation hot path. */
     private final Map<SupportedFhirVersion, PinnedAccess> pinnedAccess = new java.util.concurrent.ConcurrentHashMap<>();
+    /** The versions this instance serves (spec 009): notifications and polls for any other version are ignored. */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
     private PgSubscriber subscriber;
     private long pollTimer = -1;
     private volatile boolean notificationsEnabled = true;
@@ -79,6 +81,17 @@ public class ConfigSync {
      */
     public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, ValidatorRegistry registry,
                       PackageCatalog catalog, PackageCache packageCache, long pollIntervalMs) {
+        this(vertx, pool, connectOptions, registry, catalog, packageCache, pollIntervalMs,
+                nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    /**
+     * @param served the FHIR versions this instance serves (spec 009): only these are synced
+     */
+    public ConfigSync(Vertx vertx, Pool pool, PgConnectOptions connectOptions, ValidatorRegistry registry,
+                      PackageCatalog catalog, PackageCache packageCache, long pollIntervalMs,
+                      nzi.fhir.validator.core.enums.ServedVersions served) {
+        this.served = served;
         this.vertx = vertx;
         this.pool = pool;
         this.connectOptions = connectOptions;
@@ -86,7 +99,7 @@ public class ConfigSync {
         this.catalog = catalog;
         this.packageCache = packageCache;
         this.pollIntervalMs = pollIntervalMs;
-        SupportedFhirVersion.enabled().forEach(v -> states.put(v, new Serial()));
+        served.asList().forEach(v -> states.put(v, new Serial()));
         registry.setCatalog(catalog::current);
     }
 
@@ -108,15 +121,17 @@ public class ConfigSync {
         Future<Void> initial = catalog.refresh()
                 .compose(view -> ConfigRevisionRepository.current(pool).compose(rows -> {
                     reconciled = view;
+                    reportInactive(rows);
                     List<Future<Void>> builds = new ArrayList<>();
                     for (SupportedFhirVersion version : states.keySet()) {
                         ConfigRevisionRepository.ConfigRow row = rows.get(version);
                         long revision = row == null ? 0 : row.revision();
-                        List<String> included = row == null ? List.of() : row.included();
+                        // Spec 009 FR-006: only active contexts are built or used.
+                        List<String> included = row == null ? List.of() : row.active();
                         if (row != null) {
-                            pinnedAccess.put(version, row.access());
+                            pinnedAccess.put(version, row.activeAccess());
                         }
-                        PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.access();
+                        PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.activeAccess();
                         builds.add(registry.applyPinned(version, revision, resolveAll(row, included, view, access))
                                 .recover(err -> Future.succeededFuture()));
                     }
@@ -162,15 +177,31 @@ public class ConfigSync {
         }
         try {
             JsonObject message = new JsonObject(payload);
+            // Every other kind (IG, IG_EXCLUDE, IG_ACCESS, IG_TERMINOLOGY and, spec 009, IG_ACTIVATION) re-reads the
+            // version's row.
             if (ConfigRevisionRepository.KIND_PACKAGE.equals(message.getString("kind"))) {
                 syncCatalog();
                 return;
             }
             String version = message.getString("fhirVersion");
-            SupportedFhirVersion.parseEnabled(version).ifPresent(this::sync);
+            served.find(version).ifPresent(this::sync);
         } catch (Exception e) {
             logger.warn("Ignoring malformed configuration notification");
         }
+    }
+
+    /**
+     * Spec 009 (research R15): told the number of inactive contexts, counted from the configuration rows this sync
+     * already reads at start and on every poll (no query of its own).
+     */
+    private volatile java.util.function.LongConsumer inactiveCountListener = n -> { };
+
+    public void setInactiveCountListener(java.util.function.LongConsumer listener) {
+        this.inactiveCountListener = listener == null ? n -> { } : listener;
+    }
+
+    private void reportInactive(Map<SupportedFhirVersion, ConfigRevisionRepository.ConfigRow> rows) {
+        inactiveCountListener.accept(rows.values().stream().mapToLong(r -> r.inactive().size()).sum());
     }
 
     private void poll() {
@@ -179,7 +210,7 @@ public class ConfigSync {
                 syncCatalog();
             }
         });
-        ConfigRevisionRepository.current(pool).onSuccess(rows -> rows.forEach((version, row) -> {
+        ConfigRevisionRepository.current(pool).onSuccess(this::reportInactive).onSuccess(rows -> rows.forEach((version, row) -> {
             if (states.containsKey(version)) {
                 registry.noteSeen(version, row.revision());
                 if (row.revision() > registry.appliedRevision(version)) {
@@ -195,6 +226,9 @@ public class ConfigSync {
      */
     public void sync(SupportedFhirVersion version) {
         Serial state = states.get(version);
+        if (state == null) {
+            return; // spec 009: a version this instance doesn't serve has nothing to apply
+        }
         synchronized (state) {
             if (state.backgroundQueued) {
                 return;
@@ -214,7 +248,10 @@ public class ConfigSync {
      * applying the very change it waits for.
      */
     public Future<Void> syncNow(SupportedFhirVersion version) {
-        return enqueue(states.get(version), () -> { }, () -> runSync(version));
+        Serial state = states.get(version);
+        // Spec 009 FR-032: a version this instance doesn't serve has nothing to apply (its contexts are inactive here),
+        // so a change of an inactive context answers as soon as it is committed.
+        return state == null ? Future.succeededFuture() : enqueue(state, () -> { }, () -> runSync(version));
     }
 
     /**
@@ -258,22 +295,23 @@ public class ConfigSync {
      */
     private Future<Void> runSync(SupportedFhirVersion version) {
         return ConfigRevisionRepository.current(pool)
+                .onSuccess(this::reportInactive)
                 .compose(rows -> {
                     ConfigRevisionRepository.ConfigRow row = rows.get(version);
                     if (row == null) {
                         return Future.succeededFuture();
                     }
                     // Access first: it takes effect at once, also while a changed context is still being built.
-                    PinnedAccess previous = pinnedAccess.put(version, row.access());
-                    if (previous != null && !previous.equals(row.access())) {
+                    PinnedAccess previous = pinnedAccess.put(version, row.activeAccess());
+                    if (previous != null && !previous.equals(row.activeAccess())) {
                         logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
-                    boolean unknown = row.included().stream().anyMatch(k -> !catalog.current().contains(k));
+                    boolean unknown = row.active().stream().anyMatch(k -> !catalog.current().contains(k));
                     Future<PackageCatalogView> view = unknown
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
                     return view.compose(v -> registry.applyPinned(version, row.revision(),
-                            resolveAll(row, row.included(), v, row.access())));
+                            resolveAll(row, row.active(), v, row.activeAccess())));
                 });
     }
 

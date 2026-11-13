@@ -27,9 +27,20 @@ public class ProblemException extends RuntimeException {
         return new ProblemException(503, "not-ready", detail).withHeader("Retry-After", "5");
     }
 
-    public static ProblemException unsupportedVersion(String version) {
+    /** Spec 009 FR-005: the same 400 for an unknown version and one this deployment doesn't serve; lists the served. */
+    public static ProblemException unsupportedVersion(String version, nzi.fhir.validator.core.enums.ServedVersions served) {
         return new ProblemException(400, "unsupported-fhir-version",
-                "FHIR version '" + version + "' is not supported. Supported versions: STU3, R4, R4B, R5");
+                "FHIR version '" + version + "' is not supported. Supported versions: " + served.label());
+    }
+
+    /**
+     * Spec 009 FR-008: adding a validator context for a version this release supports but this deployment doesn't
+     * serve ({@code FV_ENABLED_FHIR_VERSIONS}).
+     */
+    public static ProblemException fhirVersionDisabled(nzi.fhir.validator.core.enums.SupportedFhirVersion version,
+                                                       nzi.fhir.validator.core.enums.ServedVersions served) {
+        return new ProblemException(422, "fhir-version-disabled", "IG validator contexts for " + version.name()
+                + " can't be added: this service serves " + served.label() + " only (FV_ENABLED_FHIR_VERSIONS)");
     }
 
     /**

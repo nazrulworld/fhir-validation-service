@@ -318,4 +318,27 @@ class AdminCliIT extends BaseTestContainer {
         assertExit(cli("snapshot", "share", "--fhir-version", "R4", "--ig", "cli.pkg"), 2);
         assertExit(cli("package", "share", "--ig", "cli.pkg#1.0.0"), 2);
     }
+
+    /** Spec 009 (T031, FR-032): the command line changes a context that is inactive because R4 isn't served. */
+    @Test
+    void snapshotCommandsWorkOnAnInactiveContext() throws Exception {
+        JsonObject config = AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE,
+                POSTGRES_USERNAME, POSTGRES_PASSWORD);
+        app = await(AppHarness.start(vertx, config));
+        await(app.awaitReady(90_000));
+        await(TestPackages.includePackage(app.bootstrap().services(), TestPackages.profilePackage("cli.pkg", "1.0.0"),
+                "cli.pkg", "1.0.0"));
+        await(app.stop());
+        app = await(AppHarness.start(vertx, config.copy().put("fhir", new JsonObject().put("enabledVersions", "R5")
+                .put("versionsChangeConfirmed", true))));
+        await(app.awaitReady(90_000));
+        Run share = cli("snapshot", "share", "--fhir-version", "R4", "--ig", "cli.pkg#1.0.0", "--shareable", "false");
+        assertExit(share, 0);
+        assertEquals(false, share.json().getBoolean("shareable"));
+        var rows = await(app.bootstrap().services().pool().query("SELECT is_active, is_shareable FROM "
+                + "fhir_validator_schema.fhir_validator_snapshots WHERE ig_package = 'cli.pkg#1.0.0'").execute());
+        var row = rows.iterator().next();
+        assertFalse(row.getBoolean(0), "still inactive");
+        assertFalse(row.getBoolean(1), "the change is stored");
+    }
 }

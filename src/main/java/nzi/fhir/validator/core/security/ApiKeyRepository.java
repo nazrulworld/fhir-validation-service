@@ -85,6 +85,24 @@ public class ApiKeyRepository {
         this.pool = pool;
     }
 
+    /** The CSPRNG for every generated key; seeded when the class loads, so generating never waits on an event loop. */
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
+    static {
+        RANDOM.nextBytes(new byte[1]);
+    }
+
+    /**
+     * A new key value: 32 random bytes (256 bits) from a CSPRNG, base64url without padding, 43 characters of
+     * {@code [A-Za-z0-9_-]}, so always {@link #isWellFormed well-formed}. Used by {@code fv-admin key create} and, spec 009
+     * FR-021, for the fixed callers' unknown keys while access control is disabled.
+     */
+    public static String generateKey() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
     public static boolean isWellFormed(String key) {
         return key != null && KEY_FORMAT.matcher(key).matches();
     }
@@ -97,24 +115,38 @@ public class ApiKeyRepository {
         }
     }
 
+    /** An active key and its organisation: not revoked and (spec 008 FR-006) not expired. */
+    private static final String SELECT_ACTIVE = "SELECT k.id, k.role, k.owner, o.name_short, o.is_active, k.name, k.expires_at FROM "
+            + TABLE + " k JOIN " + ORGANISATIONS + " o ON o.id = k.owner WHERE k.revoked_at IS NULL "
+            + "AND (k.expires_at IS NULL OR k.expires_at > now()) ";
+
     public Future<Optional<KeyInfo>> findActive(String key) {
         if (!isWellFormed(key)) {
             return Future.succeededFuture(Optional.empty());
         }
-        return pool.preparedQuery("SELECT k.id, k.role, k.owner, o.name_short, o.is_active, k.name, k.expires_at FROM " + TABLE + " k "
-                        + "JOIN " + ORGANISATIONS + " o ON o.id = k.owner WHERE k.key_hash = $1 AND k.revoked_at IS NULL "
-                        // Spec 008 FR-006: an expired key is not active.
-                        + "AND (k.expires_at IS NULL OR k.expires_at > now())")
+        return pool.preparedQuery(SELECT_ACTIVE + "AND k.key_hash = $1")
                 .execute(Tuple.of(Buffer.buffer(hash(key))))
-                .map(rows -> {
-                    if (rows.size() == 0) {
-                        return Optional.empty();
-                    }
-                    io.vertx.sqlclient.Row r = rows.iterator().next();
-                    java.time.OffsetDateTime expires = r.getOffsetDateTime(6);
-                    return Optional.of(new KeyInfo(r.getUUID(0), r.getString(5), Role.valueOf(r.getString(1)), r.getUUID(2),
-                            r.getString(3), r.getBoolean(4), expires == null ? null : expires.toInstant()));
-                });
+                .map(ApiKeyRepository::firstKeyInfo);
+    }
+
+    /**
+     * The active key {@code id} (spec 009, research R9: the fixed callers, resolved without their unknown value); empty
+     * when it doesn't exist, is revoked or has expired.
+     */
+    public Future<Optional<KeyInfo>> findById(UUID id) {
+        return pool.preparedQuery(SELECT_ACTIVE + "AND k.id = $1")
+                .execute(Tuple.of(id))
+                .map(ApiKeyRepository::firstKeyInfo);
+    }
+
+    private static Optional<KeyInfo> firstKeyInfo(io.vertx.sqlclient.RowSet<io.vertx.sqlclient.Row> rows) {
+        if (rows.size() == 0) {
+            return Optional.empty();
+        }
+        io.vertx.sqlclient.Row r = rows.iterator().next();
+        java.time.OffsetDateTime expires = r.getOffsetDateTime(6);
+        return Optional.of(new KeyInfo(r.getUUID(0), r.getString(5), Role.valueOf(r.getString(1)), r.getUUID(2),
+                r.getString(3), r.getBoolean(4), expires == null ? null : expires.toInstant()));
     }
 
     /** Whether {@code name} is reserved for a key installed from configuration (spec 008). */
@@ -127,16 +159,31 @@ public class ApiKeyRepository {
      * owner and expiry are overwritten, so restarting is idempotent and a changed value rotates the key in place. A
      * value that was ever revoked is refused (V13).
      *
+     * Runs on {@code client}, inside the startup access-control transaction (spec 009), so both keys and the stored
+     * mode change together. Concurrent starters serialise on that transaction's settings-row lock, so two installs of
+     * the same key never race.
+     *
      * @return whether the key was installed ({@code false}: the value was revoked before; nothing changed); fails with {@link nzi.fhir.validator.core.StartupException} when the key is malformed, or when its name or
      * value is already used by another key (the message names the conflict, never the key)
      */
-    public Future<Boolean> upsertWellKnown(UUID id, String name, String key, Role role, UUID owner, java.time.Instant expiresAt) {
+    public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
+                                           UUID owner, java.time.Instant expiresAt) {
+        return upsertWellKnown(client, id, name, key, role, owner, expiresAt, false);
+    }
+
+    /**
+     * As above; with {@code keepRevocation} a revoked key stays revoked although its value changes (spec 009: the fixed
+     * keys' random values while access control is disabled). Without it a new value un-revokes the key (a rotation).
+     */
+    public Future<Boolean> upsertWellKnown(io.vertx.sqlclient.SqlClient client, UUID id, String name, String key, Role role,
+                                           UUID owner, java.time.Instant expiresAt, boolean keepRevocation) {
         if (!isWellFormed(key)) {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
         }
         Tuple params = Tuple.of(id, name, Buffer.buffer(hash(key)), role.name(), owner,
-                expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC));
+                expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC))
+                .addBoolean(keepRevocation);
         // A value whose hash was revoked is never installed again (V13, code review): an instance still configured with a
         // leaked, revoked value can't bring it back, also after the key was rotated to a new value. A revoked key also
         // stays revoked while the configured value is unchanged; a new value un-revokes it (rotation).
@@ -145,13 +192,9 @@ public class ApiKeyRepository {
                 + "WHERE NOT EXISTS (SELECT 1 FROM " + REVOKED_HASHES + " r WHERE r.key_hash = $3::bytea) "
                 + "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
                 + "role = EXCLUDED.role, owner = EXCLUDED.owner, expires_at = EXCLUDED.expires_at, "
-                + "revoked_at = CASE WHEN k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
+                + "revoked_at = CASE WHEN $7::boolean OR k.key_hash = EXCLUDED.key_hash THEN k.revoked_at ELSE NULL END, "
                 + "key_hash = EXCLUDED.key_hash";
-        return pool.preparedQuery(sql).execute(params)
-                // Instances starting at once on a database without the row: a concurrent insert can surface as a unique
-                // violation on name or key_hash instead of the DO UPDATE path. The row exists now, so one retry updates.
-                .recover(err -> nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)
-                        ? pool.preparedQuery(sql).execute(params) : Future.failedFuture(err))
+        return client.preparedQuery(sql).execute(params)
                 .map(rows -> rows.rowCount() > 0)
                 .recover(err -> {
                     if (nzi.fhir.validator.core.PgErrors.isUniqueViolation(err)) {
@@ -166,6 +209,12 @@ public class ApiKeyRepository {
                     }
                     return Future.failedFuture(err);
                 });
+    }
+
+    /** Whether the key {@code id} is revoked (spec 009: a revoked fixed key stays revoked in disabled mode). */
+    public Future<Boolean> isRevoked(io.vertx.sqlclient.SqlClient client, UUID id) {
+        return client.preparedQuery("SELECT revoked_at IS NOT NULL FROM " + TABLE + " WHERE id = $1").execute(Tuple.of(id))
+                .map(rows -> rows.size() > 0 && rows.iterator().next().getBoolean(0));
     }
 
     /**

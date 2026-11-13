@@ -452,4 +452,20 @@ class ApiKeyAuthIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /** Spec 009 US6-5 (T044): access control explicitly enforced ({@code false}) behaves as 4.1: keys are required. */
+    @Test
+    void explicitlyEnforcedAccessControlRequiresKeys(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, new JsonObject().put("globalDisabledAclSecurity", false))
+                .compose(a -> Future.all(callAdminOperations(null), validate(null), validate("Bearer-garbage-0123456789abcdefghijk"),
+                        req("GET", "/health", null).send()))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    cf.<List<HttpResponse<Buffer>>>resultAt(0).forEach(r -> assertProblem(r, 401, "unauthorized"));
+                    assertProblem(cf.resultAt(1), 401, "unauthorized");
+                    assertProblem(cf.resultAt(2), 401, "unauthorized");
+                    assertEquals("enabled", cf.<HttpResponse<Buffer>>resultAt(3).bodyAsJsonObject()
+                            .getJsonObject("security").getString("aclSecurity"));
+                    ctx.completeNow();
+                })));
+    }
 }

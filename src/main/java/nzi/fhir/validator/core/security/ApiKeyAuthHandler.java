@@ -9,6 +9,7 @@ import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -42,6 +43,18 @@ public class ApiKeyAuthHandler {
     private final CidrList adminCidrs;
     private final int maxCachedKeys;
     private final LinkedHashMap<String, Cached> cache;
+    /** Spec 009: whether keys are required ({@code FV_GLOBAL_DISABLED_ACL_SECURITY}). */
+    private volatile AclMode aclMode = AclMode.ENABLED;
+    /** Spec 009 FR-018: the callers requests run as while access control is disabled. */
+    private volatile FixedCallers fixedCallers;
+    /**
+     * Spec 009 research R10: closed by {@link #configureAcl} and opened once the startup access-control step has
+     * committed; while closed, keyed paths answer 503 in both modes. In disabled mode an instance about to be refused
+     * never serves public requests; in enabled mode (code review of PR #72) a key isn't looked up, and a miss cached,
+     * while the stored keys may still be the previous disabled run's random ones. A handler that is never configured
+     * (tests) is open.
+     */
+    private volatile boolean gateOpen = true;
 
     public ApiKeyAuthHandler(ApiKeyRepository repository, long cacheTtlMs) {
         this(repository, cacheTtlMs, CidrList.EMPTY);
@@ -71,6 +84,21 @@ public class ApiKeyAuthHandler {
         };
     }
 
+    /**
+     * Spec 009: the access-control mode, and the fixed callers used while it is {@link AclMode#DISABLED}. Call before
+     * the HTTP server takes requests.
+     */
+    public void configureAcl(AclMode mode, FixedCallers fixed) {
+        this.aclMode = mode;
+        this.fixedCallers = fixed;
+        this.gateOpen = false;
+    }
+
+    /** Spec 009 research R10: the startup access-control step has committed; keyed paths may be served. */
+    public void openGate() {
+        gateOpen = true;
+    }
+
     /** Number of cached key lookups (tests, sizing). */
     int cachedKeys() {
         synchronized (cache) {
@@ -80,8 +108,27 @@ public class ApiKeyAuthHandler {
 
     private static final java.util.regex.Pattern ADMIN_PATHS =
             java.util.regex.Pattern.compile("^/(igs/(upload|register)|igs/[^/]+/[^/]+|[^/]+/validator)/?$");
+    /** Validation and the package reads: VALIDATE or ADMIN with a key. */
     private static final java.util.regex.Pattern VALIDATE_PATHS =
             java.util.regex.Pattern.compile("^/([^/]+/validate|igs/[^/]+/[^/]+/(dependencies|conformance))/?$");
+
+    /**
+     * A class of keyed paths: the roles a key needs, and (spec 009 FR-018) the fixed caller the request runs as while
+     * access control is disabled. Administrative paths are also limited to the admin networks, in both modes.
+     */
+    private record KeyedPaths(java.util.function.Predicate<RoutingContext> matches, boolean administrative, Role fixedRole,
+                              Role... roles) {
+    }
+
+    /**
+     * Checked in order. Validation and the package reads run as the {@code trial validator} while access control is
+     * disabled: like any VALIDATE key, it sees shareable content and the trial organisation's own, never other
+     * organisations' private packages (FR-031).
+     */
+    private static final List<KeyedPaths> KEYED_PATHS = List.of(
+            new KeyedPaths(ApiKeyAuthHandler::isAdministrative, true, Role.ADMIN, Role.ADMIN),
+            new KeyedPaths(ctx -> VALIDATE_PATHS.matcher(ctx.normalizedPath()).matches(), false, Role.VALIDATE,
+                    Role.VALIDATE, Role.ADMIN));
 
     /**
      * Whether the request is an administrative operation: one that changes IGs or validator configuration. Every
@@ -101,20 +148,55 @@ public class ApiKeyAuthHandler {
      */
     public Handler<RoutingContext> rootHandler() {
         return ctx -> {
-            if (isAdministrative(ctx)) {
-                // Spec 008 FR-002: decided before the key is read, so it holds for every key and costs no lookup.
-                if (!adminCidrs.isEmpty() && !adminCidrs.contains(ClientAddress.of(ctx))) {
+            for (KeyedPaths paths : KEYED_PATHS) {
+                if (!paths.matches().test(ctx)) {
+                    continue;
+                }
+                // Spec 008 FR-002 (and spec 009 FR-030 in disabled mode): decided before the key is read, so it holds
+                // for every key and costs no lookup.
+                if (paths.administrative() && !adminCidrs.isEmpty() && !adminCidrs.contains(ClientAddress.of(ctx))) {
                     ErrorResponder.fail(ctx, new ProblemException(403, "forbidden",
                             "Administrative operations are not allowed from this network"));
                     return;
                 }
-                authorise(ctx, Role.ADMIN);
-            } else if (VALIDATE_PATHS.matcher(ctx.normalizedPath()).matches()) {
-                authorise(ctx, Role.VALIDATE, Role.ADMIN);
-            } else {
-                ctx.next();
+                if (!gateOpen) {
+                    ErrorResponder.fail(ctx, ProblemException.notReady("The service is still starting; retry shortly"));
+                    return;
+                }
+                if (aclMode == AclMode.DISABLED) {
+                    runAsFixedCaller(ctx, paths.fixedRole());
+                } else {
+                    authorise(ctx, paths.roles());
+                }
+                return;
             }
+            ctx.next();
         };
+    }
+
+
+    /**
+     * Spec 009 FR-017, FR-018: access control is disabled, so the {@code Authorization} header is never read; the
+     * request runs as the fixed caller of {@code role}, exactly as if that key had been sent (ownership, access checks,
+     * usage and the key's last-used audit). A deactivated organisation is still refused (403).
+     */
+    private void runAsFixedCaller(RoutingContext ctx, Role role) {
+        fixedCallers.resolve(role).onComplete(ar -> {
+            if (ar.failed()) {
+                ErrorResponder.fail(ctx, schemaNotReady(ar.cause())
+                        ? ProblemException.notReady("The service is still starting; retry shortly") : ar.cause());
+                return;
+            }
+            KeyInfo info = ar.result();
+            if (!info.ownerActive()) {
+                ErrorResponder.fail(ctx, new ProblemException(403, "forbidden", "The organisation of this API key is deactivated"));
+                return;
+            }
+            ctx.put(CONTEXT_KEY, info.role().name());
+            ctx.put(CALLER_KEY, info.caller());
+            repository.touch(info.id(), ClientAddress.of(ctx));
+            ctx.next();
+        });
     }
 
     private void authorise(RoutingContext ctx, Role... allowed) {

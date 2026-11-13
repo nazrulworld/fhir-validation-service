@@ -581,6 +581,49 @@ class MigrationUpgradeIT extends BaseTestContainer {
         }
     }
 
+    /**
+     * Spec 009 (FR-007, US3-4, T005): a populated 4.1.0 (V13) schema migrates to V15 with every validator context
+     * active, a row for each included package that had none, and an empty service_settings table.
+     */
+    @Test
+    void v14v15MarkEveryContextActiveAndAddServiceSettings() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target(MigrationVersion.fromVersion("13")).load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("UPDATE " + S + ".fhir_validator_logs SET included_ig_packages = '{a.ig#1.0.0,b.ig#1.0.0}', revision = 3 "
+                    + "WHERE fhir_version = 'R4'");
+            st.execute("UPDATE " + S + ".fhir_validator_logs SET included_ig_packages = '{c.ig#2.0.0}', revision = 2 "
+                    + "WHERE fhir_version = 'R5'");
+            // b.ig has no snapshot row (the backfill must add it); a.ig and c.ig have one.
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package, is_shareable) VALUES "
+                    + "('R4', 'a.ig#1.0.0', false), ('R5', 'c.ig#2.0.0', true)");
+        }
+
+        DatabaseService.flyway(db).migrate();
+
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertEquals(List.of("R4|a.ig#1.0.0|false|true|", "R4|b.ig#1.0.0|true|true|", "R5|c.ig#2.0.0|true|true|"),
+                    column(c, "SELECT fhir_version || '|' || ig_package || '|' || is_shareable || '|' || is_active || '|' "
+                            + "|| coalesce(inactive_reason, '') FROM " + S + ".fhir_validator_snapshots ORDER BY 1"));
+            assertEquals(List.of(NEW_SYSTEM_ID), column(c, "SELECT DISTINCT owner::text FROM " + S
+                    + ".fhir_validator_snapshots WHERE ig_package = 'b.ig#1.0.0'"), "the backfilled row is system-owned");
+            assertEquals(List.of("3|{a.ig#1.0.0,b.ig#1.0.0}"), column(c, "SELECT revision || '|' || included_ig_packages::text FROM "
+                    + S + ".fhir_validator_logs WHERE fhir_version = 'R4'"), "the configuration row is unchanged");
+            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".service_settings"));
+
+            assertThrows(SQLException.class, () -> st.execute("UPDATE " + S
+                    + ".fhir_validator_snapshots SET is_active = false WHERE ig_package = 'a.ig#1.0.0'"), "inactive needs a reason");
+            assertThrows(SQLException.class, () -> st.execute("UPDATE " + S
+                    + ".fhir_validator_snapshots SET is_active = false, inactive_reason = 'other' WHERE ig_package = 'a.ig#1.0.0'"),
+                    "only known reasons");
+            st.execute("UPDATE " + S + ".fhir_validator_snapshots SET is_active = false, inactive_reason = 'fhir-version-disabled' "
+                    + "WHERE ig_package = 'a.ig#1.0.0'");
+            assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S
+                    + ".service_settings (name, value) VALUES ('acl_security', 'off')"), "acl_security is enabled|disabled");
+            st.execute("INSERT INTO " + S + ".service_settings (name, value) VALUES ('acl_security', 'disabled'), ('other', 'x')");
+        }
+    }
+
     private static <T> T join(io.vertx.core.Future<T> f) throws Exception {
         return f.toCompletionStage().toCompletableFuture().get(120, java.util.concurrent.TimeUnit.SECONDS);
     }

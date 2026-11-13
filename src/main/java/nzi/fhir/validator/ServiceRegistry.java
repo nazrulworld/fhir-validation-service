@@ -84,8 +84,11 @@ public final class ServiceRegistry {
         this.apiKeys = new ApiKeyRepository(pool);
         this.organisations = new OrganisationRepository(pool);
         this.auth = new ApiKeyAuthHandler(apiKeys, config.authCacheTtlMs(), config.adminCidrs());
-        this.validationApi = new ValidationApi(validationService);
-        this.validatorApi = new ValidatorApi(igPackageService);
+        // Spec 009: with access control disabled, requests run as the fixed callers (FR-018).
+        this.auth.configureAcl(config.aclMode(), new nzi.fhir.validator.core.security.FixedCallers(apiKeys,
+                config.authCacheTtlMs()));
+        this.validationApi = new ValidationApi(validationService, config.servedVersions());
+        this.validatorApi = new ValidatorApi(igPackageService, config.servedVersions(), config.aclMode());
     }
 
     public static ServiceRegistry create(Vertx vertx, ApplicationConfig config, Pool pool, Executors executors,
@@ -115,10 +118,12 @@ public final class ServiceRegistry {
                 "Too many administrative operations in progress; retry shortly");
         // Only base and included contexts exist (spec 007 FR-021): nothing is built on demand, evicted or admitted per
         // request, so the registry needs no limits of its own.
-        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder);
+        // Spec 009: only the served FHIR versions get base contexts, syncs and per-version meters.
+        nzi.fhir.validator.core.enums.ServedVersions served = config.servedVersions();
+        ValidatorRegistry registry = new ValidatorRegistry(vertx, builder, served);
         PackageCatalog catalog = PackageCatalog.of(pool);
         ConfigSync sync = new ConfigSync(vertx, pool, PgConfig.createPgOptions(config), registry, catalog, builder.cache(),
-                config.syncPollIntervalMs());
+                config.syncPollIntervalMs(), served);
         // A package stored here is visible at once on this instance; other instances follow the PACKAGE notification.
         packages.setStoreListener(key -> {
             catalog.markStale();
@@ -130,11 +135,15 @@ public final class ServiceRegistry {
             return null;
         }, false));
         igPackageService.setTxCacheSize(config.txCacheSize());
+        igPackageService.setServedVersions(served);
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
         healthService.setCatalogRevision(() -> catalog.current().revision());
         healthService.setTerminologyStatus(txRegistry::status);
+        healthService.setServedVersions(served);
+        healthService.setSecurity(config.aclMode());
+        sync.setInactiveCountListener(healthService::setInactiveCount);
         igPackageService.setTxAllowlist(txRegistry);
         PackageCache packageCache = builder.cache();
         FhirValidationService validationService = new FhirValidationService(registry, executors,
@@ -146,9 +155,10 @@ public final class ServiceRegistry {
                 catalog.current(), sync.pinnedAccess(key.fhirVersion())));
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
                 validationService, fetcher, adminAdmission);
-        ServiceMetrics metrics = new ServiceMetrics(meterRegistry);
+        ServiceMetrics metrics = new ServiceMetrics(meterRegistry, served);
         metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache);
         metrics.bindTerminology(txRegistry, txClients, txServices.resolver());
+        metrics.bindSpec009(config.aclMode(), healthService::inactiveCount);
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;

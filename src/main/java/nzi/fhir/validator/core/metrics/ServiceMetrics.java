@@ -35,8 +35,16 @@ public class ServiceMetrics {
      */
     private final java.util.concurrent.ConcurrentMap<String, Counter> counters = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** The versions this instance serves (spec 009): per-version validator meters exist only for these. */
+    private final nzi.fhir.validator.core.enums.ServedVersions served;
+
     public ServiceMetrics(PrometheusMeterRegistry registry) {
+        this(registry, nzi.fhir.validator.core.enums.ServedVersions.ALL);
+    }
+
+    public ServiceMetrics(PrometheusMeterRegistry registry, nzi.fhir.validator.core.enums.ServedVersions served) {
         this.registry = registry;
+        this.served = served;
     }
 
     public static PrometheusMeterRegistry newRegistry() {
@@ -68,7 +76,7 @@ public class ServiceMetrics {
                 .description("IG package cache hits").register(registry);
         FunctionCounter.builder("fv.package.cache.misses", packageCache, PackageCache::misses)
                 .description("IG package cache misses").register(registry);
-        for (SupportedFhirVersion version : SupportedFhirVersion.enabled()) {
+        for (SupportedFhirVersion version : served.asList()) {
             Gauge.builder("fv.config.revision", validators, v -> v.appliedRevision(version))
                     .tag("version", version.name()).description("Configuration revision applied on this instance").register(registry);
             Gauge.builder("fv.validator.ready", validators, v -> v.status(version) == ValidatorRegistry.Status.ACTIVE ? 1 : 0)
@@ -109,6 +117,17 @@ public class ServiceMetrics {
     }
 
     /**
+     * Spec 009 (research R15): {@code fv_acl_security_disabled} (1 while access control is disabled) and
+     * {@code fv_validator_contexts_inactive}.
+     */
+    public void bindSpec009(nzi.fhir.validator.core.security.AclMode mode, java.util.function.LongSupplier inactiveContexts) {
+        Gauge.builder("fv.acl.security.disabled", () -> mode == nzi.fhir.validator.core.security.AclMode.DISABLED ? 1 : 0)
+                .description("1 while API keys are not required (FV_GLOBAL_DISABLED_ACL_SECURITY)").register(registry);
+        Gauge.builder("fv.validator.contexts.inactive", inactiveContexts::getAsLong)
+                .description("Stored validator contexts that are inactive (FHIR version not enabled)").register(registry);
+    }
+
+    /**
      * Terminology meters (spec 007 FR-026, contracts §6). Labels never carry codes, value set URLs or IG names: the
      * server label is a host name, the outcome and result labels are fixed words.
      */
@@ -141,7 +160,9 @@ public class ServiceMetrics {
                         "fhir_version", version.name(), "result", result).increment();
             }
         });
-        for (SupportedFhirVersion version : SupportedFhirVersion.enabled()) {
+        // Spec 009: per-version meters exist only for the served versions (the registry itself still covers every
+        // supported version, see TxRegistry#refreshNow).
+        for (SupportedFhirVersion version : served.asList()) {
             for (nzi.fhir.validator.core.terminology.TxServerAllowlist.Source source
                     : nzi.fhir.validator.core.terminology.TxServerAllowlist.Source.values()) {
                 Gauge.builder("fv.tx.allowlist.age", txRegistry, r -> r.current().list(version)

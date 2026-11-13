@@ -169,13 +169,28 @@ public final class Bootstrap {
 
         return vertx.deployVerticle(() -> new HttpVerticle(services), new DeploymentOptions().setInstances(config.httpInstances()))
                 .map(id -> {
+                    // Spec 009 FR-015 (contracts/operations.md §3).
+                    nzi.fhir.validator.core.enums.ServedVersions served = config.servedVersions();
+                    logger().info("FHIR versions served: {} ({})", served.label(),
+                            served.isConfigured() ? "FV_ENABLED_FHIR_VERSIONS" : "all; FV_ENABLED_FHIR_VERSIONS not set");
                     Future<Void> warmUp = DatabaseService.migrate(vertx, executors, PgConfig.createPgOptions(config))
                             .compose(v -> services.organisations().ensureWellKnown())
                             .compose(v -> installSystemOrganisation(services))
-                            .compose(v -> installBootstrapKey(services))
-                            .compose(v -> installTrialValidatorKey(services))
+                            // Spec 009 (research R11): the access-control mode, the fixed callers' keys and the gate, and
+                            // (FR-010 to FR-014) stored contexts following FV_ENABLED_FHIR_VERSIONS before any is built.
+                            // One transaction (T069): a start refused by either guard (FR-029, FR-033) changes nothing,
+                            // and the gate opens only after both have committed.
+                            .compose(v -> nzi.fhir.validator.core.security.AclModeStartup.run(services.pool(),
+                                    services.apiKeys(), services.config(), services.auth(),
+                                    (tx, afterCommit) -> nzi.fhir.validator.core.validator.ContextActivation.reconcile(tx,
+                                            services.config().servedVersions(),
+                                            services.config().fhirVersionsChangeConfirmed(), afterCommit)))
+                            .<Void>mapEmpty()
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
+                            // Spec 009 FR-015: the total, counted by the sync's start, at every start (not only changes).
+                            .onSuccess(v -> logger().info("{} validator context(s) inactive (FHIR version not enabled)",
+                                    services.healthService().inactiveCount()))
                             .onSuccess(v -> logger().info("Validators initialised: {}", services.validatorRegistry().details().encode()))
                             .onFailure(err -> logger().error("Validator initialisation failed", err));
                     return new Bootstrap(vertx, services, id, warmUp);
@@ -193,50 +208,6 @@ public final class Bootstrap {
         }
         return services.organisations().applySystemConfig(fields)
                 .onSuccess(o -> logger().info("System organisation configured: {}", fields.keySet()))
-                .mapEmpty();
-    }
-
-    /** The system administrator key from {@code FV_ADMIN_API_KEY} (spec 005 FR-006, spec 008). */
-    private static Future<Void> installBootstrapKey(ServiceRegistry services) {
-        return installWellKnownKey(services, "FV_ADMIN_API_KEY", services.config().bootstrapAdminKey(),
-                nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_UUID, nzi.fhir.validator.core.Constant.SYS_ORG_ADMIN_API_KEY_NAME,
-                nzi.fhir.validator.core.security.ApiKeyRepository.Role.ADMIN, nzi.fhir.validator.core.Constant.SYSTEM_ORG_UUID);
-    }
-
-    /** Spec 008 FR-026: the trial organisation's shared VALIDATE key, from {@code FV_VALIDATOR_API_KEY}. */
-    private static Future<Void> installTrialValidatorKey(ServiceRegistry services) {
-        return installWellKnownKey(services, "FV_VALIDATOR_API_KEY", services.config().validatorKey(),
-                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID,
-                nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_NAME,
-                nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE, nzi.fhir.validator.core.Constant.TRIAL_ORG_UUID);
-    }
-
-    /**
-     * Installs (or rotates) a key from configuration under its fixed id. An unset variable changes nothing in the
-     * database: instances may be configured differently (e.g. only admin-facing ones get {@code FV_ADMIN_API_KEY}), so
-     * one instance's missing variable must not revoke a key the others rely on. Seeded keys are revoked with
-     * {@code fv-admin key revoke}; a revoked value is never installed again (V13), only a new one.
-     */
-    private static Future<Void> installWellKnownKey(ServiceRegistry services, String variable, String key, java.util.UUID id,
-                                                    String name, nzi.fhir.validator.core.security.ApiKeyRepository.Role role,
-                                                    java.util.UUID owner) {
-        if (key == null || key.isBlank()) {
-            // Spec 008 US2/AC4: without the trial key, validation still needs a key created with 'key create'.
-            logger().warn("{} is not set: {}this instance installs no '{}' key (one stored earlier stays valid until revoked)",
-                    variable, role == nzi.fhir.validator.core.security.ApiKeyRepository.Role.VALIDATE
-                            ? "validation is key-only and " : "", name);
-            return Future.succeededFuture();
-        }
-        return services.apiKeys().upsertWellKnown(id, name, key, role, owner, nzi.fhir.validator.core.Constant.SYS_ORG_API_KEY_EXPIRES_AT)
-                .onSuccess(installed -> {
-                    if (installed) {
-                        logger().info("'{}' API key installed ({})", name, variable);
-                    } else {
-                        // V13: a revoked value is never installed again; the stored key is left as it is.
-                        logger().error("{} is set to a value that was revoked: this instance does not install it, and the "
-                                + "stored '{}' key is unchanged. Configure a new value.", variable, name);
-                    }
-                })
                 .mapEmpty();
     }
 
