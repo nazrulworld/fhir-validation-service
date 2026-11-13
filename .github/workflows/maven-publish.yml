@@ -39,6 +39,7 @@ jobs:
             docs/upgrade-3.0.md
             docs/upgrade-4.0.md
             docs/upgrade-4.1.md
+            docs/upgrade-4.2.md
             scripts/export-custom-profiles.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

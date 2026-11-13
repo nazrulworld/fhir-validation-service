@@ -6,7 +6,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [4.2.0] - Unreleased
+## [4.2.0] - 2026-11-13
 
 Operator switches for the FHIR versions an instance serves and for API access control (spec 009). A **minor release
 without breaking changes**: with the new settings unset, behaviour is unchanged. Migrations V14 and V15 are additive,
