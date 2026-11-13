@@ -17,24 +17,14 @@ PostgreSQL database; IG changes reach every instance within seconds, without res
 > the system organisation (stop every 4.0 instance first) and adds usage accounting. Read
 > [docs/upgrade-4.1.md](docs/upgrade-4.1.md) before upgrading.
 >
-> **Upgrading from 3.x?** 4.0.0 serves `?ig=` only from **included** IGs (a stored IG that isn't included answers
-> 400), renames `/{version}/include-ig` to `/{version}/validator`, and adds optional terminology servers per included
-> IG. Read [docs/upgrade-4.0.md](docs/upgrade-4.0.md) before upgrading.
->
-> **Upgrading from 2.x?** 3.0.0 validates a request against the core specification only unless it names an IG with
-> `?ig=name#version`. Read [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before upgrading.
->
-> **Upgrading from 1.x?** 2.0.0 removes custom profile registration and deletes stored custom profiles. Read
-> [docs/upgrade-2.0.md](docs/upgrade-2.0.md) **before** upgrading: export first.
+> **Upgrading from before 4.0?** Releases before 4.0.0 are retired. Upgrade to 4.2.0 first (`FV_TAG=4.2.0`,
+> following that release's upgrade notes), then to this release.
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
 - Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
 - Errors as RFC 9457 `application/problem+json`, with an `X-Request-Id` correlation id on every response
 - Liveness, readiness and Prometheus metrics for orchestrators
 - Container images for x86_64 and arm64
-
-> Upgrading from 0.1.x? Read [docs/upgrade-1.0.md](docs/upgrade-1.0.md) first: the database is no longer bundled in
-> the container, and data must be moved once.
 
 ## Requirements
 
@@ -86,9 +76,7 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 `latest` is now 4.1.0, a minor release with breaking changes. A 4.0 deployment that tracks `latest` (the default
 `FV_TAG` in `compose.yaml`) would upgrade on its next pull: every validation without an API key would answer 401, and
 the database upgrade needs every 4.0 instance stopped first. Pin `FV_TAG` to your current release and follow
-[docs/upgrade-4.1.md](docs/upgrade-4.1.md) before moving to 4.1.0 (from 3.x, follow
-[docs/upgrade-4.0.md](docs/upgrade-4.0.md) first; from 2.x, [docs/upgrade-3.0.md](docs/upgrade-3.0.md) before that;
-from 1.x, [docs/upgrade-2.0.md](docs/upgrade-2.0.md) before that).
+[docs/upgrade-4.1.md](docs/upgrade-4.1.md) before moving to 4.1.0.
 
 **1. Create a directory and an `.env` file**
 
@@ -682,7 +670,6 @@ FV_PROFILE=dev FV_PG_PORT=54329 FV_PG_PASSWORD=... java -jar target/fhir-validat
 ```
 
 - Load tests: [`perf/README.md`](perf/README.md)
-- Upgrade rehearsal: `sh scripts/upgrade-rehearsal.sh`
 - Design and decisions: [`specs/001-service-hardening/`](specs/001-service-hardening/)
 - Project principles: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
 - Changes: [`CHANGELOG.md`](CHANGELOG.md)

@@ -39,8 +39,8 @@ wait_ready() {
   done
 }
 
-# A rolling restart must never cross a major version: 2.0.0 drops tables 1.x reads, and a mixed 1.x/2.x fleet on one
-# database is not supported (spec 003, FR-015c). Compare a running validator's image with the version being built.
+# A rolling restart must never cross a major version: a mixed-major fleet on one database is not supported
+# (spec 003, FR-015c). Compare a running validator's image with the version being built.
 target_version=$(sed -n 's:^    <version>\(.*\)</version>:\1:p' pom.xml | head -n 1)
 running=$(docker compose ps -q validator 2> /dev/null | head -n 1)
 if [ -n "$running" ] && [ -n "$target_version" ]; then
@@ -49,7 +49,7 @@ if [ -n "$running" ] && [ -n "$target_version" ]; then
   case "$running_version" in [0-9]*) ;; *) running_version="" ;; esac
   if [ -n "$running_version" ] && [ "${running_version%%.*}" != "${target_version%%.*}" ]; then
     echo "ROLLING RESTART REFUSED: running $running_version, target $target_version." >&2
-    echo "Rolling restart across major versions is not supported; see docs/upgrade-2.0.md" >&2
+    echo "Rolling restart across major versions is not supported; stop every instance first" >&2
     exit 1
   fi
   # 4.0 → 4.1 is a minor release, but migration V11 re-keys the system organisation while 4.0 instances still use the
