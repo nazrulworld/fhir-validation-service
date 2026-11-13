@@ -491,7 +491,7 @@ take effect within that time; an expired key is refused at its expiry, cached or
 out.
 
 The names `system administrator` and `trial validator` are reserved for the keys installed from `FV_ADMIN_API_KEY` and
-`FV_VALIDATOR_API_KEY` (`key create` refuses them). They are rotated by changing the variable and restarting. Seeded keys are revoked like any other key, with `key revoke --name "trial validator"`. A revoked seeded key's value is never installed again (it is remembered in `revoked_key_hashes`, V13): an instance
+`FV_VALIDATOR_API_KEY` (`key create` refuses them). They are rotated by changing the variable and restarting. Seeded keys are revoked like any other key, with `key revoke --name "trial validator"`. A revoked seeded key's value is never installed again (it is remembered in `revoked_key_hashes`): an instance
 still configured with a leaked, revoked value logs an ERROR and leaves the stored key alone, also after the key was
 rotated. Deploy a new value to replace it. Instances configured with different non-revoked values still overwrite each
 other's key, so change the value on all instances together. An instance started without the variable leaves the
