@@ -19,6 +19,13 @@ already relies on this for `TerminologyBudget.CURRENT`, `TerminologyClients.CURR
 and reads package CodeSystems and ValueSets through `vsc.getRootValidationSupport()`. So the scoped module subclasses
 it and delegates `route()` to the scope.
 
+**No scope open** (decided during implementation): `TerminologyScope.current()` then returns the offline scope (mode
+`none`), instead of throwing as data-model §5 and T009 first said. Every validation opens a scope
+(`ValidatorSnapshot.validate`), so a call without one can only come from outside validation, for example a
+definition lookup that touches a code system. Failing closed and offline is the safe answer there, and a thrown
+exception inside HAPI would surface as a validation error. Covered by
+`RequestScopedTerminologySupportTest.noScopeOpenBehavesAsNone`.
+
 **Alternatives considered**:
 - One chain and validator per (snapshot, setting), created lazily. It keeps HAPI's chain cache unchanged, but the
   number of chains grows with the servers used, each chain has its own definition cache, and every new chain pays
