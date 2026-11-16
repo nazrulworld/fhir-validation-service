@@ -23,6 +23,13 @@ jobs:
           java-version: "17"
           distribution: temurin
           cache: maven
+      - name: Cache locked test packages (spec 010)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fv-test-packages
+          key: fv-test-packages-${{ hashFiles('src/test/resources/ig/packages/010-packages.lock') }}
+      - name: Fetch locked test packages
+        run: sh scripts/fetch-test-packages.sh
       - name: Unit, integration and contract tests
         run: ./mvnw -B verify
 
