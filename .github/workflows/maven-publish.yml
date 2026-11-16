@@ -23,6 +23,13 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
+      - name: Cache locked test packages (spec 010)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fv-test-packages
+          key: fv-test-packages-${{ hashFiles('src/test/resources/ig/packages/010-packages.lock') }}
+      - name: Fetch locked test packages
+        run: sh scripts/fetch-test-packages.sh
       - name: Build and test
         run: ./mvnw -B verify
 
