@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'official' (discriminator: ('official' in use))",
+    "expression": [
+      "Patient.name[1]"
+    ],
+    "location": [
+      "Patient.name[1]",
+      "Line[38] Col[6]"
+    ],
+    "severity": "information"
+  }
+]

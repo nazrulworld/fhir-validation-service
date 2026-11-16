@@ -1,0 +1,17 @@
+# Spec 010 (T001): packages for the shared-definitions tests (SC-004, SC-005, SC-008).
+# DK Core 3.5.0 and MedCom Core 4.0.0 as two R4 contexts, with the full dependency closure of both, resolved as the
+# service resolves it (DependencyResolver: core skipped, highest version wins, ihe.formatcode.fhir#1.4.x -> 1.4.0).
+# The two contexts share every package except medcom.fhir.dk.core and medcom.fhir.dk.terminology.
+# Downloaded by scripts/fetch-test-packages.sh; never committed. Format: name#version url sha256
+hl7.fhir.dk.core#3.5.0 https://packages.fhir.org/hl7.fhir.dk.core/3.5.0 1ce040e1cb2347a7fc840cf3cf99f3616cf1422c167254d00de7df4c1e799123
+medcom.fhir.dk.core#4.0.0 https://packages.fhir.org/medcom.fhir.dk.core/4.0.0 13d8adead7b0fbd8cb0f5ad0f821480cca2babeed23f6c417ebe3c23e4856148
+medcom.fhir.dk.terminology#2.0.2 https://packages.fhir.org/medcom.fhir.dk.terminology/2.0.2 2c743f9644c3a19f2e943f789e81785f918e7c17abee01955f00ae0846c68d37
+hl7.fhir.uv.extensions.r4#5.3.0-ballot-tc1 https://packages.fhir.org/hl7.fhir.uv.extensions.r4/5.3.0-ballot-tc1 5f5d1e88052d615453e6b7a1eb4f885df36590f14b52974e5860485d16819bd9
+hl7.terminology.r4#7.0.1 https://packages.fhir.org/hl7.terminology.r4/7.0.1 7e88619af8d6ec06f0f521a64800da7d8197ceb1c451c293ec1b796efce3840e
+ihe.iti.mhd#4.2.3 https://packages.fhir.org/ihe.iti.mhd/4.2.3 0a11808dd94c9eac87e4ee56f0f08c2e782f022df9554acf31a3bb64a2624f2e
+ihe.formatcode.fhir#1.4.0 https://packages.fhir.org/ihe.formatcode.fhir/1.4.0 d803d12f3b51940ae44f8a72372918cc409052e072d7e22bc968de58e301a34c
+ihe.iti.balp#1.1.4 https://packages.fhir.org/ihe.iti.balp/1.1.4 be46dda3088ee9d486d7163458dc5a4d7192e8a1c587fd47e2beb70e4bcefa90
+hl7.fhir.uv.ipa#1.1.0 https://packages.fhir.org/hl7.fhir.uv.ipa/1.1.0 013b9f91683c496fc09eed93a8798b47dcbfb775587890fa3e11253a2409feef
+hl7.fhir.uv.smart-app-launch#2.0.0 https://packages.fhir.org/hl7.fhir.uv.smart-app-launch/2.0.0 627e7a64e7abe130201fbae2ee7d2cb85d7d94972458d302c4d06d59e2c7d084
+hl7.fhir.uv.phd#1.1.0 https://packages.fhir.org/hl7.fhir.uv.phd/1.1.0 18f16420a3af7f64b2c498be2f71dad1186ab8028acffe0f432048155b361f9b
+hl7.fhir.uv.pocd#0.3.0 https://packages.fhir.org/hl7.fhir.uv.pocd/0.3.0 927fcd5bbc941b4fd44c7bf6ad7275941e644211ad879c4519dae1cb98521d4a

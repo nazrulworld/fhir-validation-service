@@ -120,6 +120,41 @@ class UsageIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Spec 010 FR-010: a validation records the terminology setting it used (mode, server, source); a request refused
+     * before validation starts (here 400 for txMode=server with no server anywhere) records none.
+     */
+    @Test
+    void theTerminologySettingUsedIsRecorded(Vertx vertx, VertxTestContext ctx) {
+        start(vertx, "db", null)
+                .compose(a -> validateRequest(AppHarness.VALIDATOR_AUTH).sendBuffer(Buffer.buffer(PATIENT)))
+                .compose(ok -> {
+                    ctx.verify(() -> assertEquals(200, ok.statusCode(), ok.bodyAsString()));
+                    return validateRequest(AppHarness.VALIDATOR_AUTH).addQueryParam("txMode", "server")
+                            .sendBuffer(Buffer.buffer(PATIENT));
+                })
+                .compose(refused -> {
+                    ctx.verify(() -> assertEquals(400, refused.statusCode(), refused.bodyAsString()));
+                    return awaitRows(vertx, 2);
+                })
+                .compose(rows -> app.bootstrap().services().pool().query("SELECT http_status, tx_mode, tx_server, tx_source "
+                        + "FROM fhir_validator_schema.validation_usage ORDER BY id").execute())
+                .onComplete(ctx.succeeding(rs -> ctx.verify(() -> {
+                    List<Row> rows = new ArrayList<>();
+                    rs.forEach(rows::add);
+                    assertEquals(2, rows.size());
+                    Row validated = rows.stream().filter(r -> r.getInteger(0) == 200).findFirst().orElseThrow();
+                    assertEquals("none", validated.getString(1));
+                    assertNull(validated.getString(2));
+                    assertEquals("context", validated.getString(3));
+                    Row refusedRow = rows.stream().filter(r -> r.getInteger(0) == 400).findFirst().orElseThrow();
+                    assertNull(refusedRow.getString(1), "refused before validation: no setting recorded");
+                    assertNull(refusedRow.getString(2));
+                    assertNull(refusedRow.getString(3));
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void errorsRejectionsAndRefusalsAreRecordedAsTheSpecSays(Vertx vertx, VertxTestContext ctx) {
         start(vertx, "db", null)

@@ -1,0 +1,27 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Encounter.extension[0]"
+    ],
+    "location": [
+      "Encounter.extension[0]",
+      "Line[7] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Bundled or contained reference not found within the bundle/resource Patient/733cef33-3626-422b-955d-d506aaa65fe1",
+    "expression": [
+      "Encounter.subject"
+    ],
+    "location": [
+      "Encounter.subject"
+    ],
+    "severity": "error"
+  }
+]

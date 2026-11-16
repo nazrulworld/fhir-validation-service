@@ -1,0 +1,34 @@
+{
+  "id": "CenterForDiabetes",
+  "identifier": [
+    {
+      "system": "urn:oid:1.2.208.176.1.1",
+      "value": "633271000016006"
+    },
+    {
+      "system": "http://cvr.dk",
+      "value": "64942212"
+    }
+  ],
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization"
+    ]
+  },
+  "resourceType": "Organization",
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Organization CenterForDiabetes</b></p><a name=\"CenterForDiabetes\"> </a><a name=\"hcCenterForDiabetes\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-organization.html\">Danish Core Organization Profile</a></p></div><p><b>identifier</b>: <code>urn:oid:1.2.208.176.1.1</code>/633271000016006, <code>http://cvr.dk</code>/64942212</p><p><b>type</b>: <span title=\"Codes:{http://snomed.info/sct 264361005}\">sundhedscenter</span></p></div>",
+    "status": "generated"
+  },
+  "type": [
+    {
+      "coding": [
+        {
+          "code": "264361005",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    }
+  ]
+}

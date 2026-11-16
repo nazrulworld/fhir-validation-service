@@ -1,0 +1,57 @@
+{
+  "code": {
+    "coding": [
+      {
+        "code": "6942003",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/unknown-extension",
+      "valueString": "x"
+    }
+  ],
+  "id": "ElseConsciousness",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+    ]
+  },
+  "method": {
+    "coding": [
+      {
+        "code": "733985002",
+        "display": "Reported (qualifier value)",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "performer": [
+    {
+      "reference": "Practitioner/SidselSygeplejerske"
+    }
+  ],
+  "resourceType": "Observation",
+  "status": "final",
+  "subject": {
+    "reference": "Patient/else"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseConsciousness</b></p><a name=\"ElseConsciousness\"> </a><a name=\"hcElseConsciousness\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-observation.html\">Danish Core Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>code</b>: <span title=\"Codes:{http://snomed.info/sct 6942003}\">Bevidsthedsniveau</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: <span title=\"Codes:{http://snomed.info/sct 450847001}\">reagerer på smerte</span></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 733985002}\">Reported (qualifier value)</span></p></div>",
+    "status": "generated"
+  },
+  "valueCodeableConcept": {
+    "coding": [
+      {
+        "code": "450847001",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  }
+}

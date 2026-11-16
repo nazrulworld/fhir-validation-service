@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Patient.extension[0]"
+    ],
+    "location": [
+      "Patient.extension[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "information"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4.12 for 'urn:oid:1.2.208.176.2.4.12#DS721+TUL1'",
+    "expression": [
+      "Condition.code"
+    ],
+    "location": [
+      "Condition.code",
+      "Line[23] Col[4]"
+    ],
+    "severity": "warning"
+  }
+]

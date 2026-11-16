@@ -30,7 +30,7 @@
     "registryRefreshMs": 21600000,
     "timeoutMs": 5000,
     "requestBudgetMs": 10000,
-    "cacheSize": 5000,
+    "cacheSize": 50000,
     "cacheTtlMs": 600000,
     "maxConnectionsPerServer": 10
   },

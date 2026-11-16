@@ -17,6 +17,11 @@ import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 
 import ca.uhn.fhir.util.FhirTerser;
+import nzi.fhir.validator.core.terminology.EffectiveTerminology;
+import nzi.fhir.validator.core.terminology.TerminologyBudget;
+import nzi.fhir.validator.core.terminology.TerminologyRouter;
+import nzi.fhir.validator.core.terminology.TerminologyScope;
+import nzi.fhir.validator.core.terminology.TerminologyServices;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -37,9 +42,19 @@ public final class ValidatorSnapshot {
      *
      * @param contextAccess owner and sharing of the context used (spec 005 FR-020); set by the validation service,
      *                      {@code null} until then
+     * @param effective     the terminology setting the validation used (spec 010 FR-010)
      */
     public record Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
-                          FhirContext fhirContext, String igPackage, Access contextAccess) {
+                          FhirContext fhirContext, String igPackage, Access contextAccess, EffectiveTerminology effective) {
+        public Outcome {
+            effective = effective == null ? EffectiveTerminology.NONE : effective;
+        }
+
+        public Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
+                       FhirContext fhirContext, String igPackage, Access contextAccess) {
+            this(version, result, appliedProfiles, fhirContext, igPackage, contextAccess, EffectiveTerminology.NONE);
+        }
+
         public Outcome(SupportedFhirVersion version, ValidationResult result, List<String> appliedProfiles,
                        FhirContext fhirContext, String igPackage) {
             this(version, result, appliedProfiles, fhirContext, igPackage, null);
@@ -51,7 +66,7 @@ public final class ValidatorSnapshot {
         }
 
         public Outcome withContextAccess(Access access) {
-            return new Outcome(version, result, appliedProfiles, fhirContext, igPackage, access);
+            return new Outcome(version, result, appliedProfiles, fhirContext, igPackage, access, effective);
         }
 
         /** {@code name#version} of the IG package, or {@code base}: the {@code X-Validation-Context} header value. */
@@ -60,6 +75,14 @@ public final class ValidatorSnapshot {
         }
     }
 
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_ID = new java.util.concurrent.atomic.AtomicLong();
+
+    /** A new snapshot id, unique in this process (spec 010: part of every code-cache key). */
+    public static long newSnapshotId() {
+        return NEXT_ID.incrementAndGet();
+    }
+
+    private final long snapshotId;
     private final SupportedFhirVersion version;
     private final SnapshotKey key;
     private final Map<String, byte[]> packageHashes;
@@ -69,10 +92,8 @@ public final class ValidatorSnapshot {
     private final FhirValidator validator;
     private final ValidationSupportChain chain;
     private volatile long packageArchiveBytes;
-    /** Spec 007: the setting this snapshot was built with, and the per-request terminology budget. */
-    private volatile nzi.fhir.validator.core.terminology.TerminologySettings terminology =
-            nzi.fhir.validator.core.terminology.TerminologySettings.NONE;
-    private volatile long requestBudgetMs;
+    /** The shared terminology infrastructure (spec 010): request budget and the instance's code cache. */
+    private volatile TerminologyServices txServices = TerminologyServices.OFFLINE;
 
     public ValidatorSnapshot(SupportedFhirVersion version, long revision, List<String> resolvedPackages,
                              FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
@@ -85,6 +106,17 @@ public final class ValidatorSnapshot {
      */
     public ValidatorSnapshot(SnapshotKey key, long revision, List<String> resolvedPackages, Map<String, byte[]> packageHashes,
                              FhirContext fhirContext, FhirValidator validator, ValidationSupportChain chain) {
+        this(chain instanceof ScopedValidationSupportChain scoped ? scoped.snapshotId() : newSnapshotId(), key, revision,
+                resolvedPackages, packageHashes, fhirContext, validator, chain);
+    }
+
+    /**
+     * @param snapshotId unique per build ({@link #newSnapshotId()}); the same id as the chain's code-cache keys
+     */
+    public ValidatorSnapshot(long snapshotId, SnapshotKey key, long revision, List<String> resolvedPackages,
+                             Map<String, byte[]> packageHashes, FhirContext fhirContext, FhirValidator validator,
+                             ValidationSupportChain chain) {
+        this.snapshotId = snapshotId;
         this.version = key.fhirVersion();
         this.key = key;
         this.packageHashes = Map.copyOf(packageHashes);
@@ -104,14 +136,18 @@ public final class ValidatorSnapshot {
         this.packageArchiveBytes = bytes;
     }
 
-    void setTerminology(nzi.fhir.validator.core.terminology.TerminologySettings terminology, long requestBudgetMs) {
-        this.terminology = terminology;
-        this.requestBudgetMs = requestBudgetMs;
+    void setTerminologyServices(TerminologyServices txServices) {
+        this.txServices = txServices;
     }
 
-    /** The terminology setting this snapshot was built with (spec 007). */
-    public nzi.fhir.validator.core.terminology.TerminologySettings terminology() {
-        return terminology;
+    /**
+     * Test hook: the context default the plain {@code validate} overloads apply, as {@code FhirValidationService} would
+     * (with the same allowlist check). Never set in production, where the service passes each request's setting.
+     */
+    private volatile nzi.fhir.validator.core.terminology.TerminologySettings testDefault;
+
+    void setDefaultTerminologyForTests(nzi.fhir.validator.core.terminology.TerminologySettings settings) {
+        this.testDefault = settings;
     }
 
     /**
@@ -135,6 +171,24 @@ public final class ValidatorSnapshot {
      * @param maxBundleEntries a Bundle with more entries is refused with 413 ({@code FV_VALIDATION_MAX_BUNDLE_ENTRIES})
      */
     public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries) {
+        nzi.fhir.validator.core.terminology.TerminologySettings d = testDefault;
+        if (d == null) {
+            return validate(body, contentType, profiles, maxBundleEntries, EffectiveTerminology.NONE, TerminologyRouter.NONE);
+        }
+        EffectiveTerminology e = EffectiveTerminology.resolve(d, nzi.fhir.validator.core.terminology.TerminologyOverride.ABSENT);
+        if (d.server() != null && !txServices.allowlist().current().isAllowed(d.server(), version)) {
+            e = e.asDenied();
+        }
+        return validate(body, contentType, profiles, maxBundleEntries, e,
+                TerminologyRouter.of(e, version, txServices.resolver(), txServices.allowlist()));
+    }
+
+    /**
+     * @param effective the request's terminology setting (spec 010 FR-003), fixed for the whole validation
+     * @param router    the server choice of {@code effective}
+     */
+    public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries,
+                            EffectiveTerminology effective, TerminologyRouter router) {
         IParser parser = (contentType == SupportedContentType.XML || contentType == SupportedContentType.FHIR_XML)
                 ? fhirContext.newXmlParser() : fhirContext.newJsonParser();
         parser.setParserErrorHandler(new LenientErrorHandler(false).setErrorOnInvalidValue(false));
@@ -174,23 +228,31 @@ public final class ValidatorSnapshot {
                     .filter(p -> p != null && !applied.contains(p) && resolves(p))
                     .forEach(applied::add);
         }
-        // Spec 007 FR-019a, research R5, R6: the request's terminology budget (only time spent on terminology calls
-        // counts) is open while HAPI validates on this worker thread; a request that got a degraded answer drops the
-        // snapshot's expiring code cache, so a "not checked" warning never outlives the outage.
-        boolean opened = !nzi.fhir.validator.core.terminology.TerminologyBudget.isOpen();
-        if (opened) {
-            nzi.fhir.validator.core.terminology.TerminologyBudget.open(
-                    terminology.mode() == nzi.fhir.validator.core.terminology.TerminologyMode.NONE ? 0 : requestBudgetMs);
+        // Spec 010 FR-003: the request's terminology scope (setting and router) is open while HAPI validates on this
+        // worker thread. Spec 007 FR-019a, research R5, R6: so is its terminology budget (only time spent on
+        // terminology calls counts; 0 in mode none). A request that got a degraded answer drops the cached code
+        // results of its own scope (spec 010 FR-013), so a "not checked" warning never outlives the outage.
+        boolean openedScope = !TerminologyScope.isOpen();
+        if (openedScope) {
+            TerminologyScope.open(effective, router);
+        }
+        boolean openedBudget = !TerminologyBudget.isOpen();
+        if (openedBudget) {
+            TerminologyBudget.open(TerminologyScope.current().offline() ? 0 : txServices.requestBudgetMs());
         }
         try {
             ValidationResult result = validator.validateWithResult(body, options);
-            if (nzi.fhir.validator.core.terminology.TerminologyBudget.degraded()) {
-                chain.invalidateExpiringCaches();
+            if (TerminologyBudget.degraded()) {
+                txServices.codeCache().invalidateScope(TerminologyScope.current().scopeId());
             }
-            return new Outcome(version, result, List.copyOf(applied), fhirContext, key.igPackage());
+            return new Outcome(version, result, List.copyOf(applied), fhirContext, key.igPackage(), null,
+                    TerminologyScope.current().effective());
         } finally {
-            if (opened) {
-                nzi.fhir.validator.core.terminology.TerminologyBudget.close();
+            if (openedBudget) {
+                TerminologyBudget.close();
+            }
+            if (openedScope) {
+                TerminologyScope.close();
             }
         }
     }
@@ -215,6 +277,11 @@ public final class ValidatorSnapshot {
         }
         String sdVersion = terser.getSinglePrimitiveValueOrNull(sd, "version");
         return sdVersion != null && canonical.equals(url + "|" + sdVersion);
+    }
+
+    /** Unique per build in this process (spec 010: the code cache keys results by it). */
+    public long snapshotId() {
+        return snapshotId;
     }
 
     public SupportedFhirVersion version() {

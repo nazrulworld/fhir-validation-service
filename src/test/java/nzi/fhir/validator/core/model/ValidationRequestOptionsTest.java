@@ -66,4 +66,59 @@ class ValidationRequestOptionsTest {
         List<String> parsed = ValidationRequestOptions.parseProfiles("a");
         assertThrows(UnsupportedOperationException.class, () -> parsed.add("b"));
     }
+
+    // ---- Spec 010 FR-005, FR-007, contracts §2: tx and txMode
+
+    private static nzi.fhir.validator.core.terminology.TerminologyOverride tx(List<String> tx, List<String> mode) {
+        return ValidationRequestOptions.parseTerminology(tx, mode);
+    }
+
+    private static void refused(List<String> tx, List<String> mode, String detail) {
+        ProblemException e = assertThrows(ProblemException.class, () -> tx(tx, mode));
+        assertEquals(400, e.status());
+        assertEquals("invalid-request", e.type());
+        assertEquals(detail, e.detail());
+        for (String value : tx == null ? List.<String>of() : tx) {
+            if (value.length() > 8) {
+                assertFalse(e.detail().contains(value.trim()), "the address is never echoed");
+            }
+        }
+    }
+
+    @Test
+    void absentParametersGiveNoOverride() {
+        assertFalse(tx(List.of(), List.of()).present());
+        assertFalse(tx(null, null).present());
+    }
+
+    @Test
+    void txIsTrimmedAndNormalised() {
+        var o = tx(List.of("  HTTPS://Tx.Example.org/r4/ "), List.of());
+        assertEquals("https://tx.example.org/r4", o.server());
+        assertNull(o.mode());
+        assertEquals(nzi.fhir.validator.core.terminology.TerminologyMode.ECOSYSTEM,
+                tx(List.of(), List.of("ecosystem")).mode());
+    }
+
+    @Test
+    void everyMalformedInputHasItsFixedText() {
+        refused(List.of("https://a.example.org", "https://b.example.org"), List.of(), "Give tx and txMode at most once each");
+        refused(List.of(), List.of("none", "server"), "Give tx and txMode at most once each");
+        refused(List.of("  "), List.of(), "tx and txMode must not be empty");
+        refused(List.of(), List.of(""), "tx and txMode must not be empty");
+        refused(List.of(), List.of("Server"), "txMode must be none, server or ecosystem");
+        refused(List.of(), List.of("remote"), "txMode must be none, server or ecosystem");
+        refused(List.of("ftp://tx.example.org/fhir"), List.of(), "tx must be an http or https base URL without query, fragment or user info");
+        refused(List.of("https://tx.example.org/fhir?x=1"), List.of(), "tx must be an http or https base URL without query, fragment or user info");
+        refused(List.of("https://user@tx.example.org/fhir"), List.of(), "tx must be an http or https base URL without query, fragment or user info");
+        refused(List.of("https://tx.example.org/" + "a".repeat(500)), List.of(), "tx must be at most 512 characters");
+        refused(List.of("https://tx.example.org/fhir"), List.of("none"), "tx is not allowed with txMode=none");
+    }
+
+    @Test
+    void txOf512CharactersIsAccepted() {
+        String prefix = "https://tx.example.org/";
+        String ok = prefix + "a".repeat(512 - prefix.length());
+        assertEquals(ok, tx(List.of(ok), List.of()).server());
+    }
 }

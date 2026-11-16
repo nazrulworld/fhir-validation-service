@@ -1,0 +1,54 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Observation.extension[0]"
+    ],
+    "location": [
+      "Observation.extension[0]",
+      "Line[23] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85353-1'",
+    "expression": [
+      "Observation.code"
+    ],
+    "location": [
+      "Observation.code",
+      "Line[12] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85353-1'",
+    "expression": [
+      "Observation.code.coding[0]"
+    ],
+    "location": [
+      "Observation.code.coding[0]",
+      "Line[14] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Observation"
+    ],
+    "location": [
+      "Observation",
+      "Line[1] Col[2]"
+    ],
+    "severity": "warning"
+  }
+]

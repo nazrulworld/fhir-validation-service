@@ -1,0 +1,27 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "CareTeam.extension[0]"
+    ],
+    "location": [
+      "CareTeam.extension[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Bundled or contained reference not found within the bundle/resource Organization/12ee0dde-a672-462f-820d-5efe832d73c9",
+    "expression": [
+      "CareTeam.managingOrganization[0]"
+    ],
+    "location": [
+      "CareTeam.managingOrganization[0]"
+    ],
+    "severity": "error"
+  }
+]

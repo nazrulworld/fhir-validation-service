@@ -10,8 +10,9 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The terminology setting of one included validator context (spec 007 FR-001, FR-002, data-model §1). It is part of
- * what the context is built from: a different setting is a different context build (research R12).
+ * The terminology setting of one included validator context (spec 007 FR-001, FR-002, data-model §1), and the shape
+ * of a request's effective setting. Since spec 010 it is the context's default, applied per request; it is not part of
+ * what the context is built from (FR-001).
  *
  * @param mode   never {@code null}
  * @param server a normalised base URL ({@link #normaliseUrl}); required for {@code SERVER}, optional for

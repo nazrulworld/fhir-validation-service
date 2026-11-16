@@ -1,0 +1,41 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/condition-category#not-a-real-code-010'",
+    "expression": [
+      "Condition.category[0]"
+    ],
+    "location": [
+      "Condition.category[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Condition Category Codes' (http://hl7.org/fhir/ValueSet/condition-category|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://terminology.hl7.org/CodeSystem/condition-category#not-a-real-code-010)",
+    "expression": [
+      "Condition.category[0]"
+    ],
+    "location": [
+      "Condition.category[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4.12 for 'urn:oid:1.2.208.176.2.4.12#DZ340'",
+    "expression": [
+      "Condition.code"
+    ],
+    "location": [
+      "Condition.code",
+      "Line[20] Col[4]"
+    ],
+    "severity": "warning"
+  }
+]

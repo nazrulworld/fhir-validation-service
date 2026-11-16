@@ -1,0 +1,28 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/v3-RoleCode#not-a-real-code-010'",
+    "expression": [
+      "RelatedPerson.relationship[0]"
+    ],
+    "location": [
+      "RelatedPerson.relationship[0]",
+      "Line[29] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'DK Related Person Relationship Types' (http://hl7.dk/fhir/core/ValueSet/dk-core-RelatedPersonRelationshipTypes|3.5.0), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://terminology.hl7.org/CodeSystem/v3-RoleCode#not-a-real-code-010)",
+    "expression": [
+      "RelatedPerson.relationship[0]"
+    ],
+    "location": [
+      "RelatedPerson.relationship[0]",
+      "Line[29] Col[6]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -1,0 +1,78 @@
+{
+  "code": {
+    "coding": [
+      {
+        "code": "not-a-real-code-010",
+        "system": "http://hl7.org/fhir/fhir-types"
+      }
+    ]
+  },
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.url",
+      "valueUri": "http://medcomfhir.dk/ig/core/ActorDefinition/ProducerActor"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.version",
+      "valueString": "4.0.0"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.name",
+      "valueString": "Producer of FHIR resources"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.title",
+      "valueString": "Producer of FHIR resources"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.status",
+      "valueCode": "active"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.date",
+      "valueDateTime": "2026-01-13T14:02:50+00:00"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.publisher",
+      "valueString": "MedCom"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.contact",
+      "valueContactDetail": {
+        "name": "MedCom",
+        "telecom": [
+          {
+            "system": "url",
+            "value": "http://www.medcom.dk"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.description",
+      "valueMarkdown": "The system that creates the FHIR resources"
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.jurisdiction",
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "DK",
+            "display": "Denmark",
+            "system": "urn:iso:std:iso:3166"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.type",
+      "valueCode": "system"
+    }
+  ],
+  "id": "ProducerActor",
+  "resourceType": "Basic",
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: ActorDefinition ProducerActor</b></p><a name=\"ProducerActor\"> </a><a name=\"hcProducerActor\"> </a><table class=\"grid\"><tr><td><b>Actor: Producer of FHIR resources </b></td><td>Producer of FHIR resources</td><td>Type: system </td></tr><tr><td colspan=\"3\"/></tr></table></div>",
+    "status": "generated"
+  }
+}

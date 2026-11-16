@@ -23,6 +23,7 @@ import nzi.fhir.validator.core.service.IgPackageService;
 import nzi.fhir.validator.core.terminology.NetworkGuard;
 import nzi.fhir.validator.core.terminology.RegistryResolver;
 import nzi.fhir.validator.core.terminology.TerminologyClients;
+import nzi.fhir.validator.core.terminology.TerminologyCodeCache;
 import nzi.fhir.validator.core.terminology.TerminologyServices;
 import nzi.fhir.validator.core.terminology.TxRegistry;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
@@ -96,6 +97,14 @@ public final class ServiceRegistry {
         return create(vertx, config, pool, executors, healthService, ServiceMetrics.newRegistry());
     }
 
+    /**
+     * Test hook, never set in production: the guard of the terminology clients, so in-process tests can reach local
+     * stub servers (spec 010 ITs). A guard that allows loopback can only be made by test code
+     * ({@code NetworkGuard.forTests()} is package-private and reached through the test-only {@code TestTerminology}),
+     * and no configuration sets this field.
+     */
+    public static volatile NetworkGuard terminologyGuardForTests;
+
     public static ServiceRegistry create(Vertx vertx, ApplicationConfig config, Pool pool, Executors executors,
                                          HealthService healthService, PrometheusMeterRegistry meterRegistry) {
         SafePackageFetcher fetcher = SafePackageFetcher.create(vertx, executors.packages(), config);
@@ -106,14 +115,18 @@ public final class ServiceRegistry {
         // Spec 007: the allowlist comes only from the official HL7 terminology registry (fixed address, public
         // addresses only); there is no setting that changes either (FR-006, FR-011).
         TxRegistry txRegistry = TxRegistry.official(vertx, pool, config.txRegistryRefreshMs(), config.txTimeoutMs());
-        TerminologyClients txClients = new TerminologyClients(txRegistry, NetworkGuard.strict(), config.txTimeoutMs(),
-                config.txMaxConnectionsPerServer());
+        NetworkGuard txGuard = terminologyGuardForTests;
+        TerminologyClients txClients = new TerminologyClients(txRegistry, txGuard != null ? txGuard : NetworkGuard.strict(),
+                config.txTimeoutMs(), config.txMaxConnectionsPerServer());
+        // Spec 010: HAPI's chain cache memoises definitions only (its defaults); code results go to the one cache of the
+        // instance, bounded by FV_TX_CACHE_SIZE entries (FR-013) and reserved once in the heap budget (FR-024).
+        TerminologyCodeCache codeCache = new TerminologyCodeCache(config.txCacheSize(), Duration.ofMillis(config.txCacheTtlMs()));
+        heap.reserveFixed(TerminologyCodeCache.ENTRY_BYTES * config.txCacheSize());
+        txRegistry.setListChangeListener(codeCache::invalidateEcosystem);
         TerminologyServices txServices = new TerminologyServices(txRegistry, RegistryResolver.official(config.txTimeoutMs()),
-                txClients, ValidationSupportChain.CacheConfiguration.defaultValues()
-                        .setCacheSize(config.txCacheSize()).setCacheTimeout(Duration.ofMillis(config.txCacheTtlMs())),
-                config.txRequestBudgetMs());
+                txClients, ValidationSupportChain.CacheConfiguration.defaultValues(), config.txRequestBudgetMs(), codeCache);
         SnapshotBuilder builder = new SnapshotBuilder(executors, packages, new PackageCache(config.packageCacheMaxMb()),
-                config.packageWorkers(), heap, txServices);
+                config.packageWorkers(), heap, txServices, new nzi.fhir.validator.core.npm.SharedPackageDefinitions());
         AdmissionController adminAdmission = new AdmissionController(config.adminMaxPending(),
                 "Too many administrative operations in progress; retry shortly");
         // Only base and included contexts exist (spec 007 FR-021): nothing is built on demand, evicted or admitted per
@@ -134,8 +147,11 @@ public final class ServiceRegistry {
             heap.admitInclude(expandedBytes, additionalBytes);
             return null;
         }, false));
-        igPackageService.setTxCacheSize(config.txCacheSize());
         igPackageService.setServedVersions(served);
+        igPackageService.setSharedPackage((version, id) -> {
+            byte[] hash = catalog.current().sha256(id);
+            return hash != null && builder.isShared(version, id, java.util.Map.of(id, hash));
+        });
         long localApplyWaitMs = Math.min(10_000, config.httpRequestTimeoutMs() / 2);
         igPackageService.setLocalApplyWaitMs(localApplyWaitMs);
         healthService.setValidatorReadiness(registry::notReadyReasons, registry::details);
@@ -151,6 +167,11 @@ public final class ServiceRegistry {
         validationService.setCatalog(catalog);
         // Spec 005: access of included contexts for the validation hot path, and the health filter (research R12).
         validationService.setPinnedAccess(sync::pinnedAccess);
+        validationService.setTerminologyDefaults(sync::terminologyDefaults);
+        validationService.setTerminologyServices(txServices);
+        registry.setTerminologyDefaults(sync::terminologyDefaults);
+        // Spec 010 research R4: results of a replaced or dropped snapshot are never read again; free them now.
+        registry.setRetiredSnapshotListener(snapshot -> codeCache.invalidateSnapshot(snapshot.snapshotId()));
         registry.setPublicFilter((key, resolved) -> nzi.fhir.validator.core.security.AccessPolicy.isPublic(key, resolved,
                 catalog.current(), sync.pinnedAccess(key.fhirVersion())));
         ServiceRegistry services = new ServiceRegistry(config, pool, executors, healthService, igPackageService, registry, sync,
@@ -158,6 +179,7 @@ public final class ServiceRegistry {
         ServiceMetrics metrics = new ServiceMetrics(meterRegistry, served);
         metrics.bind(services.validationService.admission(), services.adminAdmission, registry, packageCache);
         metrics.bindTerminology(txRegistry, txClients, txServices.resolver());
+        metrics.bindSpec010(builder.sharedDefinitions(), codeCache, HeapBudget.SHARED_RETAINED_PER_EXPANDED_BYTE);
         metrics.bindSpec009(config.aclMode(), healthService::inactiveCount);
         services.validationService.setMetrics(metrics);
         registry.setBuildFailureListener(metrics::recordBuildFailure);

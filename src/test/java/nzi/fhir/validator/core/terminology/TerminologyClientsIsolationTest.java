@@ -71,4 +71,37 @@ class TerminologyClientsIsolationTest {
                 new ConceptValidationOptions(), "http://loinc.org", "8867-4", null, null));
         assertEquals(0, stub.hits());
     }
+
+    /**
+     * Spec 010 FR-015, research R12: failure tracking is per server. Five failures open B's circuit (B was named by a
+     * request override); calls to A (a context default) still go through, and B is skipped without a call.
+     */
+    @Test
+    void aFailingServerCannotBlockAnother(Vertx vertx) throws Exception {
+        // Calls block: they run on the test thread, never on the event loop the stubs answer on.
+        StubTerminologyServer b = new StubTerminologyServer("/r4").error();
+        b.start(vertx).toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+        try {
+            TxServerAllowlistSource allowlist = TestTerminology.allowlist(R4, stub.base(), b.base());
+            TerminologyClients clients = new TerminologyClients(allowlist, NetworkGuard.forTests(), 2_000, 2);
+            IgAwareRemoteTerminologySupport clientB = clients.client(ctx, R4, b.base());
+            java.util.function.Supplier<IValidationSupport.CodeValidationResult> callB = () -> clients.call(b.base(), R4,
+                    () -> clientB.validateCode(new ValidationSupportContext(clientB), new ConceptValidationOptions(),
+                            "http://loinc.org", "8867-4", null, null),
+                    reason -> TerminologyClients.notChecked(reason, "http://loinc.org", "8867-4"));
+            for (int i = 0; i < CircuitBreaker.THRESHOLD; i++) {
+                callB.get();
+            }
+            assertTrue(clients.circuitOpen(b.base()), "B's circuit is open");
+            int bHits = b.hits();
+            callB.get();
+            assertEquals(bHits, b.hits(), "B is skipped without a call");
+            assertFalse(clients.circuitOpen(stub.base()), "A's circuit is unaffected");
+            IValidationSupport.CodeValidationResult ok = check(clients);
+            assertNotEquals(IValidationSupport.IssueSeverity.WARNING, ok.getSeverity(), "A still answers: " + ok.getMessage());
+            assertNotSame(clients.client(ctx, R4, stub.base()), clientB, "separate clients per server");
+        } finally {
+            b.stop().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
 }

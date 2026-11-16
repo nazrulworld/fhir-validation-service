@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "ServiceRequest.status: minimum required = 1, but only found 0 (from http://hl7.dk/fhir/core/StructureDefinition/dk-core-person-servicerequest|3.5.0)",
+    "expression": [
+      "ServiceRequest"
+    ],
+    "location": [
+      "ServiceRequest",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  }
+]

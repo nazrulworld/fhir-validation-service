@@ -66,6 +66,10 @@ public class UsageMeter {
         }
 
         @Override
+        public void terminology(nzi.fhir.validator.core.terminology.EffectiveTerminology effective) {
+        }
+
+        @Override
         public void markAdmitted() {
         }
 
@@ -113,6 +117,9 @@ public class UsageMeter {
     private volatile String contentType;
     private volatile int profiles;
     private volatile String ig;
+    private volatile String txMode;
+    private volatile String txServer;
+    private volatile String txSource;
     private volatile String serviceOutcome;
     private volatile long admitted = UNSET;
     private volatile long contextReady = UNSET;
@@ -165,6 +172,15 @@ public class UsageMeter {
     /** The validator context used ({@code name#version} or {@code base}), or the requested reference. */
     public void ig(String ig) {
         this.ig = ig;
+    }
+
+    /** The terminology setting the validation used (spec 010 FR-010); never set for a request refused before. */
+    public void terminology(nzi.fhir.validator.core.terminology.EffectiveTerminology effective) {
+        if (effective != null) {
+            this.txMode = effective.settings().mode().wire();
+            this.txServer = effective.reportedServer();
+            this.txSource = effective.source().wire();
+        }
     }
 
     /** The service's outcome ({@code ServiceMetrics.OUTCOME_*}). */
@@ -267,7 +283,8 @@ public class UsageMeter {
         return new UsageRecord(requestId, startedAt, keyId, caller == null ? null : caller.apiKeyName(),
                 caller == null ? null : caller.orgId(), fhirVersion, ig, profiles, contentType, requestBytes, outcome(),
                 status, fatal, error, warning, information, clientIp, ms(end - entry), queue < 0 ? -1 : ms(queue),
-                context < 0 ? -1 : ms(context), validate < 0 ? -1 : ms(validate), cpuNanos, allocatedBytes);
+                context < 0 ? -1 : ms(context), validate < 0 ? -1 : ms(validate), cpuNanos, allocatedBytes,
+                txMode, txServer, txSource);
     }
 
     private static int ms(long nanos) {

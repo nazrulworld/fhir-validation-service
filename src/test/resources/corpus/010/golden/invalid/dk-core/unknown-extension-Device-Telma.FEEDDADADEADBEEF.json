@@ -1,0 +1,184 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[121] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[121] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[121] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Device.extension[0]"
+    ],
+    "location": [
+      "Device.extension[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#SYSID)",
+    "expression": [
+      "Device.identifier[0].type"
+    ],
+    "location": [
+      "Device.identifier[0].type",
+      "Line[12] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531981'",
+    "expression": [
+      "Device.type"
+    ],
+    "location": [
+      "Device.type",
+      "Line[149] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532352'",
+    "expression": [
+      "Device.version[0].type"
+    ],
+    "location": [
+      "Device.version[0].type",
+      "Line[161] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531974'",
+    "expression": [
+      "Device.version[1].type"
+    ],
+    "location": [
+      "Device.version[1].type",
+      "Line[174] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531975'",
+    "expression": [
+      "Device.version[2].type"
+    ],
+    "location": [
+      "Device.version[2].type",
+      "Line[187] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531976'",
+    "expression": [
+      "Device.version[3].type"
+    ],
+    "location": [
+      "Device.version[3].type",
+      "Line[200] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532353'",
+    "expression": [
+      "Device.property[0].type"
+    ],
+    "location": [
+      "Device.property[0].type",
+      "Line[33] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532355'",
+    "expression": [
+      "Device.property[1].type"
+    ],
+    "location": [
+      "Device.property[1].type",
+      "Line[74] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#68220'",
+    "expression": [
+      "Device.property[2].type"
+    ],
+    "location": [
+      "Device.property[2].type",
+      "Line[98] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532226'",
+    "expression": [
+      "Device.property[2].valueCode[0]"
+    ],
+    "location": [
+      "Device.property[2].valueCode[0]",
+      "Line[109] Col[10]"
+    ],
+    "severity": "warning"
+  }
+]

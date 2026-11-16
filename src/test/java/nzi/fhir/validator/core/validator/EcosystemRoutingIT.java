@@ -189,7 +189,7 @@ class EcosystemRoutingIT {
                 TestTerminology.resolver(registry.base(), nanos::get), 10_000);
         ValidatorSnapshot none = TerminologyRoutingIT.snapshot(TerminologySettings.NONE, shared);
         ValidatorSnapshot base = SnapshotBuilder.assemble(SnapshotKey.base(R4), 1, java.util.List.of(), java.util.Map.of(),
-                java.util.List.of(), TerminologySettings.NONE, shared);
+                java.util.List.of(), shared);
         TerminologyRoutingIT.validate(vertx, routed.snapshot(), TestPackages.codedObservation(LOINC, "8867-4"));
         a.clear();
         b.clear();

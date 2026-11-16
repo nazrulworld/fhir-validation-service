@@ -1,0 +1,38 @@
+{
+  "id": "19f9ee18-7677-4caf-88fe-8f6df2f2906e",
+  "identifier": [
+    {
+      "system": "urn:oid:1.2.208.176.1.1",
+      "value": "12345678901"
+    },
+    {
+      "system": "https://www.gs1.org/gln",
+      "value": "5798002472264"
+    }
+  ],
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization"
+    ]
+  },
+  "name": "Ortopædkirurgisk sengeafsnit",
+  "partOf": {
+    "reference": "Organization/8510eec9-180b-4e9c-95b6-02fad9f853d3"
+  },
+  "resourceType": "Organization",
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Organization 19f9ee18-7677-4caf-88fe-8f6df2f2906e</b></p><a name=\"19f9ee18-7677-4caf-88fe-8f6df2f2906e\"> </a><a name=\"hc19f9ee18-7677-4caf-88fe-8f6df2f2906e\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-organization.html\">Danish Core Organization Profile</a></p></div><p><b>identifier</b>: <code>urn:oid:1.2.208.176.1.1</code>/12345678901, <code>https://www.gs1.org/gln</code>/5798002472264</p><p><b>type</b>: <span title=\"Codes:{http://snomed.info/sct 551611000005102}\">operationsgang</span></p><p><b>name</b>: Ortopædkirurgisk sengeafsnit</p><p><b>partOf</b>: <a href=\"Organization-8510eec9-180b-4e9c-95b6-02fad9f853d3.html\">Organization Ortopædkirurgisk sengeafdeling</a></p></div>",
+    "status": "generated"
+  },
+  "type": [
+    {
+      "coding": [
+        {
+          "code": "551611000005102",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    }
+  ]
+}

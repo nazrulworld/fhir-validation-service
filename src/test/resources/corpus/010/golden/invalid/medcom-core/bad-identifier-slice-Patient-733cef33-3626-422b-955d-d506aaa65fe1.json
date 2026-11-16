@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Constraint failed: cpr: 'Requirement of danish civil registration numbers. See https://cpr.dk/cpr-systemet/opbygning-af-cpr-nummeret/#:~:text=5%20%2D%206%20position%20angiver%20personens,i%20personnummeret%20angiver%20personens%20k%C3%B8n.' (defined in http://hl7.dk/fhir/core/StructureDefinition/dk-core-cpr-identifier)",
+    "expression": [
+      "Patient.identifier[0].value"
+    ],
+    "location": [
+      "Patient.identifier[0].value",
+      "Line[6] Col[21]"
+    ],
+    "severity": "error"
+  }
+]

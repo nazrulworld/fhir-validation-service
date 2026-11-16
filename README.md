@@ -9,8 +9,9 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
-> **1.0.0** is the first release. Settings, API and behaviour details are below; procedures for operating the
-> service are in [docs/operations.md](docs/operations.md).
+> **1.1.0** adds a terminology setting per request (`tx`, `txMode`), applies terminology changes without rebuilding,
+> and shares the definitions of common packages between contexts (see [CHANGELOG.md](CHANGELOG.md)). Settings, API
+> and behaviour details are below; procedures for operating the service are in [docs/operations.md](docs/operations.md).
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
 - Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
@@ -373,6 +374,8 @@ curl -X POST http://127.0.0.1:8880/R4/validate \
 - For an IG included with a terminology mode (see below), codes that can't be decided from its packages are checked
   by a terminology server. A code that could not be checked (server unavailable, the request's terminology time used
   up, no permitted server) is reported as a **warning**, never an error; the answer is still 200.
+- `tx` and `txMode` choose the terminology setting for one request (see [Terminology servers](#terminology-servers)).
+  The 200 response names the setting used in `X-Tx-Mode`, `X-Tx-Server` and `X-Tx-Source`.
 
 ### Manage IGs (administrator key required)
 
@@ -433,7 +436,8 @@ like `validator_cli.jar -tx`:
 curl -H "$AUTH" -H 'Content-Type: application/json' \
   --data '{"igPackageId":"hl7.fhir.uv.ips","igPackageVersion":"2.0.0","terminology":{"mode":"ecosystem"}}' \
   http://127.0.0.1:8880/R4/validator
-# ... or change it later (the context's owner or the system organisation); every instance rebuilds the context.
+# ... or change it later (the context's owner or the system organisation). Every instance uses the new setting from
+# its next request; the context is not rebuilt.
 curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminology":{"mode":"none"}}' \
   'http://127.0.0.1:8880/R4/validator?ig=hl7.fhir.uv.ips%232.0.0'
 ```
@@ -451,11 +455,49 @@ curl -H "$AUTH" -H 'Content-Type: application/json' -X PATCH --data '{"terminolo
 - An IG's own value sets are sent with the request, so membership follows the IG; its code systems go along as
   `tx-resource`.
 - Each call is bounded by `FV_TX_TIMEOUT_MS`, each request by `FV_TX_REQUEST_BUDGET_MS` of terminology time; a server
-  that keeps failing is skipped for a minute. Answers are cached per context (`FV_TX_CACHE_SIZE`, `FV_TX_CACHE_TTL_MS`).
+  that keeps failing is skipped for a minute. Answers are cached once per instance (`FV_TX_CACHE_SIZE`, default
+  50,000 entries, about 50 MB; `FV_TX_CACHE_TTL_MS`), separately per server and per context build, so an answer is
+  never served for another server.
 - Validation workers wait on terminology calls, so terminology-heavy traffic may need a larger `FV_VALIDATION_WORKERS`.
 - `GET /health` shows the allowlist per FHIR version (`source`: `registry`, `stored-registry` or `built-in`) and each
   context's setting; `/metrics` adds `fv_tx_calls_total`, `fv_tx_call_seconds`, `fv_tx_routing_lookups_total`,
-  `fv_tx_code_cache_hits_total` and `fv_tx_allowlist_age_seconds`.
+  `fv_tx_code_cache_hits_total`, `fv_tx_code_cache_misses_total`, `fv_tx_code_cache_size`,
+  `fv_tx_code_cache_invalidations_total`, `fv_validations_tx_source_total` and `fv_tx_allowlist_age_seconds`.
+
+**Per request.** A context's setting is its default. `tx` (a server base URL) and `txMode` (`none`, `server`,
+`ecosystem`) choose another setting for one request, without a rebuild; any caller that may validate against the
+context may use them:
+
+| `txMode`    | `tx`   | setting used                                                                         |
+|-------------|--------|--------------------------------------------------------------------------------------|
+| –           | –      | the context's setting (`none` for the base context)                                  |
+| –           | url    | the context's mode if `server` or `ecosystem`, else `server`; with that server       |
+| `server`    | url    | that server                                                                          |
+| `server`    | –      | the context's server; 400 if it has none                                             |
+| `ecosystem` | url    | registry routing, with that server instead of tx.fhir.org                            |
+| `ecosystem` | –      | registry routing, with the context's server if its mode is `ecosystem`               |
+| `none`      | –      | no terminology server                                                                |
+| `none`      | url    | 400                                                                                  |
+
+```bash
+# Check codes against another allowed server, or offline, for this request only
+curl -H "$AUTH" -H 'Content-Type: application/fhir+json' --data @observation.json \
+  'http://127.0.0.1:8880/R4/validate?ig=hl7.fhir.uv.ips%232.0.0&tx=https%3A%2F%2Ftx.fhir.org%2Fr4'
+curl -H "$AUTH" -H 'Content-Type: application/fhir+json' --data @observation.json \
+  'http://127.0.0.1:8880/R4/validate?ig=hl7.fhir.uv.ips%232.0.0&txMode=none'
+```
+
+A server named in `tx` must be on the allowlist (otherwise **400** `tx-server-not-registered`, or **503**
+`tx-registry-unavailable` while no registry list was ever obtained); no call is made to a server that is not allowed.
+Malformed values answer **400** `invalid-request`. The response headers `X-Tx-Mode`, `X-Tx-Server` and
+`X-Tx-Source` (`request` or `context`) report the setting used; the body is unchanged. During a rolling upgrade from
+1.0.0, instances still on 1.0.0 ignore `tx`/`txMode`: rely on them once every instance runs 1.1.0.
+
+**Shared package definitions.** Contexts of one FHIR version that contain the same package content (same
+`name#version` and content hash) share its parsed definitions on an instance, so a second context costs about its own
+packages plus small indexes. Profiles a context completes itself stay private to it, and results are the same as
+without sharing. `/metrics` shows `fv_packages_shared_entries`, `fv_packages_shared_expanded_bytes`,
+`fv_packages_shared_retained_estimate_bytes` and `fv_packages_shared_lookups_total` (`hit`, `miss`, `failure`).
 
 ### Organisations and API keys
 
@@ -640,7 +682,7 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
 | `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
 | `FV_TX_TIMEOUT_MS` / `FV_TX_REQUEST_BUDGET_MS`                               | 5000 / 10000                                                    | one terminology call / a request's total terminology time         |
-| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 5000 / 600000                                                   | code results cached per terminology context                       |
+| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 50000 / 600000                                                  | code results cached per instance (1.1.0; was 5000 per context)    |
 | `FV_TX_REGISTRY_REFRESH_MS`                                                  | 21600000 (6 h)                                                  | how often the registry's server list is refreshed                 |
 | `FV_TX_MAX_CONNECTIONS_PER_SERVER`                                           | 10                                                              | pooled connections per terminology server                         |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |

@@ -1,0 +1,41 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.21 for 'urn:oid:1.2.208.176.2.21#I4.4'",
+    "expression": [
+      "Condition.code"
+    ],
+    "location": [
+      "Condition.code",
+      "Line[20] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@67c0c1aa]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present",
+    "expression": [
+      "Condition.code.coding[1]"
+    ],
+    "location": [
+      "Condition.code.coding[1]",
+      "Line[27] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#1163220007) was not found in the value set 'Condition/Problem/Diagnosis Codes' (http://hl7.org/fhir/ValueSet/condition-code|4.0.1), and a code is required from this value set.  (error message = Failed to expand ValueSet 'http://hl7.org/fhir/ValueSet/condition-code' (in-memory). Could not validate code http://snomed.info/sct#1163220007. Error was: HAPI-2646: Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@67c0c1aa]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present; Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@67c0c1aa]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present)",
+    "expression": [
+      "Condition.code.coding[1]"
+    ],
+    "location": [
+      "Condition.code.coding[1]",
+      "Line[27] Col[8]"
+    ],
+    "severity": "error"
+  }
+]

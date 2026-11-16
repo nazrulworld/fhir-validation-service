@@ -26,6 +26,10 @@ public final class CorsConfig {
         return Optional.of(handler
                 .allowedMethods(Set.of(HttpMethod.GET, HttpMethod.POST, HttpMethod.OPTIONS))
                 .allowedHeaders(Set.of("Content-Type", "Authorization", "Accept", RequestIdHandler.HEADER))
-                .exposedHeaders(Set.of(RequestIdHandler.HEADER, "Retry-After")));
+                // Spec 010 FR-010: browsers must be able to read the terminology setting a validation used.
+                .exposedHeaders(Set.of(RequestIdHandler.HEADER, "Retry-After",
+                        nzi.fhir.validator.web.endpoint.ValidationApi.TX_MODE_HEADER,
+                        nzi.fhir.validator.web.endpoint.ValidationApi.TX_SERVER_HEADER,
+                        nzi.fhir.validator.web.endpoint.ValidationApi.TX_SOURCE_HEADER)));
     }
 }

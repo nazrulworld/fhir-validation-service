@@ -49,6 +49,16 @@ public final class TestTerminology {
         return new MutableAllowlist(TxServerAllowlist.builtIn()).allow(version, List.of(urls));
     }
 
+    /** Re-reads the stored registry lists of {@code registry} (an allowlist change in an in-process test). */
+    public static io.vertx.core.Future<Void> reloadStored(TxRegistry registry) {
+        return registry.reloadStored();
+    }
+
+    /** A guard that allows loopback (local stubs), for {@code ServiceRegistry.terminologyGuardForTests}. */
+    public static NetworkGuard loopbackGuard() {
+        return NetworkGuard.forTests();
+    }
+
     /** Clients whose guard allows loopback (local stubs). */
     public static TerminologyClients clients(TxServerAllowlistSource allowlist, long timeoutMs) {
         return new TerminologyClients(allowlist, NetworkGuard.forTests(), timeoutMs, 10);

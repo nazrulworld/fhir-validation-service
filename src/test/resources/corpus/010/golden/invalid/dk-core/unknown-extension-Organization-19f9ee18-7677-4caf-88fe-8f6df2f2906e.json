@@ -1,0 +1,119 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'EAN-ID' (discriminator: ('http://www.gs1.org/gln' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SOR-ID' (discriminator: ('urn:oid:1.2.208.176.1.1' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'KOMBIT-ORG-ID' (discriminator: ('https://kombit.dk/sts/organisation' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'Ydernummer' (discriminator: ('urn:oid:1.2.208.176.1.4' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'CVR-ID' (discriminator: ('http://cvr.dk' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'Kommunekode' (discriminator: ('http://hl7.dk/fhir/core/CodeSystem/dk-core-municipality-codes' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'Regionskode' (discriminator: ('http://hl7.dk/fhir/core/CodeSystem/dk-core-regional-subdivision-codes' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'ProducentID' (discriminator: ('http://medcomfhir.dk/ig/terminology/CodeSystem/MedComProducentID' in system))",
+    "expression": [
+      "Organization.identifier[1]"
+    ],
+    "location": [
+      "Organization.identifier[1]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Organization.extension[0]"
+    ],
+    "location": [
+      "Organization.extension[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "information"
+  }
+]

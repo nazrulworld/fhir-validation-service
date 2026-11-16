@@ -1,0 +1,18 @@
+{
+  "gender": "female",
+  "id": "no-birthdate",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
+    ]
+  },
+  "name": [
+    {
+      "family": "Test",
+      "given": [
+        "Spec"
+      ]
+    }
+  ],
+  "resourceType": "Patient"
+}

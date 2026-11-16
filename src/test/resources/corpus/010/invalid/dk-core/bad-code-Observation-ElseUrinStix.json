@@ -1,0 +1,44 @@
+{
+  "code": {
+    "coding": [
+      {
+        "code": "not-a-real-code-010",
+        "display": "U—Leukocytter; arb.k.(proc.) = ?",
+        "system": "http://npu-terminology.org"
+      },
+      {
+        "code": "252385000",
+        "display": "Urine dipstick for leukocyte esterase (procedure)",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+  "id": "ElseUrinStix",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+    ]
+  },
+  "method": {
+    "coding": [
+      {
+        "code": "272391002",
+        "display": "Measurement technique (qualifier value)",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "resourceType": "Observation",
+  "status": "final",
+  "subject": {
+    "reference": "Patient/else"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseUrinStix</b></p><a name=\"ElseUrinStix\"> </a><a name=\"hcElseUrinStix\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-observation.html\">Danish Core Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>code</b>: <span title=\"Codes:{http://npu-terminology.org NPU03987}, {http://snomed.info/sct 252385000}\">U—Leukocytter; arb.k.(proc.) = ?</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>value</b>: Påviselige leukocytter</p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 272391002}\">Measurement technique (qualifier value)</span></p></div>",
+    "status": "generated"
+  },
+  "valueString": "Påviselige leukocytter"
+}

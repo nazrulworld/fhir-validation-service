@@ -6,6 +6,49 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-16
+
+Shared package definitions and a terminology setting per request (spec 010). No path, payload or status code of an
+existing request changes.
+
+### Added
+
+- `POST /{version}/validate` takes `tx` (a terminology server base URL) and `txMode` (`none`, `server`,
+  `ecosystem`) to choose the terminology setting for one request; the context's setting is the default. A server
+  named in `tx` must be on the allowlist (400 `tx-server-not-registered`, or 503 `tx-registry-unavailable` while no
+  registry list was ever obtained), and no call is made to a server that is not allowed. Malformed values answer 400
+  `invalid-request` with a fixed text that never contains the address.
+- 200 validation responses carry `X-Tx-Mode`, `X-Tx-Server` and `X-Tx-Source` (`request` or `context`); they are
+  exposed to browsers through CORS. The body is unchanged.
+- Usage records (log and `db` sinks) record `txMode`, `txServer` and `txSource`; migration **V16** adds the nullable
+  columns `tx_mode`, `tx_server`, `tx_source` to `validation_usage`.
+- Contexts of one FHIR version share the parsed definitions of identical package content (same `name#version` and
+  content hash) on an instance, so a second context costs about its own packages. Profiles a context completes stay
+  private to it; results are identical to 1.0.0 (checked against a corpus recorded from 1.0.0). The memory check
+  before a build counts shared packages for their indexes only.
+- Metrics: `fv_packages_shared_entries`, `fv_packages_shared_expanded_bytes`,
+  `fv_packages_shared_retained_estimate_bytes`, `fv_packages_shared_lookups_total`, `fv_tx_code_cache_misses_total`,
+  `fv_tx_code_cache_size`, `fv_tx_code_cache_invalidations_total`, `fv_validations_tx_source_total`.
+
+### Changed
+
+- A context's terminology setting is no longer part of what it is built from: changing it (PATCH or include) takes
+  effect on the next request on every instance, without a rebuild (amends spec 007 FR-004). A default server that is
+  no longer on the allowlist is detected per request and fails closed for terminology only, as before, without a
+  rebuild (amends spec 007 FR-010b).
+- Code results are cached once per instance, separately per terminology scope (mode and server) and per context build,
+  instead of per context (amends spec 007 FR-018). A "not checked" answer is never cached.
+- **`FV_TX_CACHE_SIZE` now bounds the one cache of the instance**, and its default changes from 5000 (per context) to
+  **50,000** (per instance, about 50 MB, reserved once in the memory budget). If you set it explicitly for a fleet with
+  several terminology contexts, raise it accordingly.
+
+### Upgrading from 1.0.0
+
+- Migration V16 runs at start (nullable columns only; no table rewrite).
+- During a rolling upgrade, instances still on 1.0.0 ignore `tx`/`txMode` (they answer with the context's setting and
+  without the `X-Tx-*` headers) and still rebuild a context when its terminology setting changes. Rely on
+  `tx`/`txMode` once every instance runs 1.1.0.
+
 ## [1.0.0] - 2026-11-13
 
 First release. Version numbering starts here: earlier development builds are not supported. The database schema is

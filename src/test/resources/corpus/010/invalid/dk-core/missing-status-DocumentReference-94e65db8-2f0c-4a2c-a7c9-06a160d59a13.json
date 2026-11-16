@@ -1,0 +1,172 @@
+{
+  "authenticator": {
+    "reference": "#42cb9200-f421-4d08-8391-7d51a2503cb4"
+  },
+  "author": [
+    {
+      "reference": "#8fa7df76-bec2-4fe2-9a44-750030a0eda0"
+    }
+  ],
+  "category": [
+    {
+      "coding": [
+        {
+          "code": "001",
+          "display": "Klinisk rapport",
+          "system": "urn:oid:1.2.208.184.100.9"
+        }
+      ]
+    }
+  ],
+  "contained": [
+    {
+      "id": "42cb9200-f421-4d08-8391-7d51a2503cb4",
+      "meta": {
+        "profile": [
+          "http://hl7.dk/fhir/core/StructureDefinition/dk-core-practitioner"
+        ]
+      },
+      "name": [
+        {
+          "family": "Andersen",
+          "given": [
+            "Sidsel"
+          ]
+        }
+      ],
+      "resourceType": "Practitioner"
+    },
+    {
+      "id": "8fa7df76-bec2-4fe2-9a44-750030a0eda0",
+      "identifier": [
+        {
+          "system": "urn:oid:1.2.208.176.1.1",
+          "value": "61741000016007"
+        }
+      ],
+      "meta": {
+        "profile": [
+          "http://hl7.dk/fhir/core/StructureDefinition/dk-core-organization"
+        ]
+      },
+      "name": "Lægerne Hasseris Bymidte",
+      "resourceType": "Organization"
+    },
+    {
+      "birthDate": "1991-01-02",
+      "gender": "female",
+      "id": "37628912-7816-47a3-acd8-396b610be142",
+      "identifier": [
+        {
+          "system": "urn:oid:1.2.208.176.1.2",
+          "value": "0201919990"
+        }
+      ],
+      "meta": {
+        "profile": [
+          "http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
+        ]
+      },
+      "name": [
+        {
+          "family": "Lauridsen",
+          "given": [
+            "Else",
+            "Test"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient"
+    }
+  ],
+  "content": [
+    {
+      "attachment": {
+        "contentType": "application/fhir+json",
+        "creation": "2024-05-01T12:00:00+01:00",
+        "language": "da",
+        "title": "Diagnoseoversigt for 2509479989",
+        "url": "DOC001.XML"
+      },
+      "format": {
+        "code": "urn:ad:dk:medcom:plr-v1.0:full",
+        "display": "DK PLR schema",
+        "system": "urn:oid:1.2.208.184.100.10"
+      }
+    }
+  ],
+  "context": {
+    "facilityType": {
+      "coding": [
+        {
+          "code": "394761003",
+          "display": "almen lægepraksis",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    },
+    "practiceSetting": {
+      "coding": [
+        {
+          "code": "408443003",
+          "display": "almen medicin",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    },
+    "sourcePatientInfo": {
+      "reference": "#37628912-7816-47a3-acd8-396b610be142"
+    }
+  },
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version",
+      "valueString": "1.0.0"
+    }
+  ],
+  "id": "94e65db8-2f0c-4a2c-a7c9-06a160d59a13",
+  "identifier": [
+    {
+      "value": "urn:uuid:7c596b9a-112e-4386-ae71-5ecdd3ed7c50"
+    }
+  ],
+  "masterIdentifier": {
+    "system": "urn:ietf:rfc:3986",
+    "use": "usual",
+    "value": "urn:uuid:bf1bb63b-d405-4dfe-9810-37b16b333a01"
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-minimaldocumentreference"
+    ]
+  },
+  "resourceType": "DocumentReference",
+  "securityLabel": [
+    {
+      "coding": [
+        {
+          "code": "N"
+        }
+      ]
+    }
+  ],
+  "subject": {
+    "reference": "#37628912-7816-47a3-acd8-396b610be142"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: DocumentReference 94e65db8-2f0c-4a2c-a7c9-06a160d59a13</b></p><a name=\"94e65db8-2f0c-4a2c-a7c9-06a160d59a13\"> </a><a name=\"hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-minimaldocumentreference.html\">Danish Core Minimal DocumentReference Profile</a></p></div><p><b>Extension Definition for DocumentReference.version for Version 5.0</b>: 1.0.0</p><p><b>masterIdentifier</b>: <a href=\"http://terminology.hl7.org/6.3.0/NamingSystem-uri.html\" title=\"As defined by RFC 3986 (http://www.ietf.org/rfc/rfc3986.txt)(with many schemes defined in many RFCs). For OIDs and UUIDs, use the URN form (urn:oid:(note: lowercase) and urn:uuid:). See http://www.ietf.org/rfc/rfc3001.txt and http://www.ietf.org/rfc/rfc4122.txt \r\n\r\nThis oid is used as an identifier II.root to indicate the the extension is an absolute URI (technically, an IRI). Typically, this is used for OIDs and GUIDs. Note that when this OID is used with OIDs and GUIDs, the II.extension should start with urn:oid or urn:uuid: \r\n\r\nNote that this OID is created to aid with interconversion between CDA and FHIR - FHIR uses urn:ietf:rfc:3986 as equivalent to this OID. URIs as identifiers appear more commonly in FHIR.\r\n\r\nThis OID may also be used in CD.codeSystem.\">Uniform Resource Identifier (URI)</a>/urn:uuid:bf1bb63b-d405-4dfe-9810-37b16b333a01 (use: usual, )</p><p><b>identifier</b>: urn:uuid:7c596b9a-112e-4386-ae71-5ecdd3ed7c50</p><p><b>status</b>: Current</p><p><b>type</b>: <span title=\"Codes:{http://loinc.org 11450-4}\">Problem list - Reported</span></p><p><b>category</b>: <span title=\"Codes:{urn:oid:1.2.208.184.100.9 001}\">Klinisk rapport</span></p><p><b>subject</b>: <a href=\"#hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/37628912-7816-47a3-acd8-396b610be142\">Else Test Lauridsen (official) Kvinde, DoB: 1991-01-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>author</b>: <a href=\"#hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/8fa7df76-bec2-4fe2-9a44-750030a0eda0\">Organization Lægerne Hasseris Bymidte</a></p><p><b>authenticator</b>: <a href=\"#hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/42cb9200-f421-4d08-8391-7d51a2503cb4\">Practitioner Sidsel Andersen </a></p><p><b>securityLabel</b>: <span title=\"Codes:\">N</span></p><blockquote><p><b>content</b></p><h3>Attachments</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>ContentType</b></td><td><b>Language</b></td><td><b>Url</b></td><td><b>Title</b></td><td><b>Creation</b></td></tr><tr><td style=\"display: none\">*</td><td>application/fhir+json</td><td>Danish</td><td>DOC001.XML</td><td>Diagnoseoversigt for 2509479989</td><td>2024-05-01 12:00:00+0100</td></tr></table><p><b>format</b>: unknown: urn:ad:dk:medcom:plr-v1.0:full (DK PLR schema)</p></blockquote><h3>Contexts</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>FacilityType</b></td><td><b>PracticeSetting</b></td><td><b>SourcePatientInfo</b></td></tr><tr><td style=\"display: none\">*</td><td><span title=\"Codes:{http://snomed.info/sct 394761003}\">almen lægepraksis</span></td><td><span title=\"Codes:{http://snomed.info/sct 408443003}\">almen medicin</span></td><td><a href=\"#hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/37628912-7816-47a3-acd8-396b610be142\">Else Test Lauridsen (official) Kvinde, DoB: 1991-01-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></td></tr></table><hr/><blockquote><p class=\"res-header-id\"><b>Generated Narrative: Practitioner #42cb9200-f421-4d08-8391-7d51a2503cb4</b></p><a name=\"94e65db8-2f0c-4a2c-a7c9-06a160d59a13/42cb9200-f421-4d08-8391-7d51a2503cb4\"> </a><a name=\"hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/42cb9200-f421-4d08-8391-7d51a2503cb4\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-practitioner.html\">Danish Core Practitioner Profile</a></p></div><p><b>name</b>: Sidsel Andersen </p></blockquote><hr/><blockquote><p class=\"res-header-id\"><b>Generated Narrative: Organization #8fa7df76-bec2-4fe2-9a44-750030a0eda0</b></p><a name=\"94e65db8-2f0c-4a2c-a7c9-06a160d59a13/8fa7df76-bec2-4fe2-9a44-750030a0eda0\"> </a><a name=\"hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/8fa7df76-bec2-4fe2-9a44-750030a0eda0\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-organization.html\">Danish Core Organization Profile</a></p></div><p><b>identifier</b>: <code>urn:oid:1.2.208.176.1.1</code>/61741000016007</p><p><b>name</b>: Lægerne Hasseris Bymidte</p></blockquote><hr/><blockquote><p class=\"res-header-id\"><b>Generated Narrative: Patient #37628912-7816-47a3-acd8-396b610be142</b></p><a name=\"94e65db8-2f0c-4a2c-a7c9-06a160d59a13/37628912-7816-47a3-acd8-396b610be142\"> </a><a name=\"hc94e65db8-2f0c-4a2c-a7c9-06a160d59a13/37628912-7816-47a3-acd8-396b610be142\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-patient.html\">Danish Core Patient Profile</a></p></div><p style=\"border: 1px #661aff solid; background-color: #e6e6ff; padding: 10px;\">Else Test Lauridsen (official) Kvinde, DoB: 1991-01-02 ( urn:oid:1.2.208.176.1.2#0201919990)</p><hr/></blockquote></div>",
+    "status": "extensions"
+  },
+  "type": {
+    "coding": [
+      {
+        "code": "11450-4",
+        "display": "Problem list - Reported",
+        "system": "http://loinc.org"
+      }
+    ]
+  }
+}

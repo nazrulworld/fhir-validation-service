@@ -1,0 +1,53 @@
+{
+  "category": [
+    {
+      "coding": [
+        {
+          "code": "658161000005107",
+          "display": "hjemmesygepleje",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "code": "225358003",
+        "display": "sårbehandling og -pleje",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "id": "JohnsServiceRequest",
+  "intent": "plan",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+    ]
+  },
+  "orderDetail": [
+    {
+      "coding": [
+        {
+          "code": "410379003",
+          "display": "overvågning af forbindingskift/sårpleje",
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/554471000005108"
+        }
+      ]
+    }
+  ],
+  "priority": "routine",
+  "resourceType": "ServiceRequest",
+  "status": "active",
+  "subject": {
+    "reference": "Patient/john"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: ServiceRequest JohnsServiceRequest</b></p><a name=\"JohnsServiceRequest\"> </a><a name=\"hcJohnsServiceRequest\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-person-servicerequest.html\">Danish Core Person ServiceRequest Profile</a></p></div><p><b>status</b>: Aktiv</p><p><b>intent</b>: Plan</p><p><b>category</b>: <span title=\"Codes:{http://snomed.info/sct 658161000005107}\">hjemmesygepleje</span></p><p><b>priority</b>: Routine</p><p><b>code</b>: <span title=\"Codes:{http://snomed.info/sct 225358003}\">sårbehandling og -pleje</span></p><p><b>orderDetail</b>: <span title=\"Codes:{http://snomed.info/sct 410379003}\">overvågning af forbindingskift/sårpleje</span></p><p><b>subject</b>: <a href=\"Patient-john.html\">Johnny Mand, DoB: 1960-01-02 ( urn:oid:1.2.208.176.1.2#0201609995)</a></p></div>",
+    "status": "generated"
+  }
+}

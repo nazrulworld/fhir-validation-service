@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "A code with no system has no defined meaning, and it cannot be validated. A system should be provided",
+    "expression": [
+      "Patient.meta.security[0]"
+    ],
+    "location": [
+      "Patient.meta.security[0]",
+      "Line[26] Col[8]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -1,0 +1,262 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Observation.extension[0]"
+    ],
+    "location": [
+      "Observation.extension[0]",
+      "Line[75] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Observation.value.ofType(Quantity)"
+    ],
+    "location": [
+      "Observation.value.ofType(Quantity)",
+      "Line[136] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Observation.referenceRange[0].high"
+    ],
+    "location": [
+      "Observation.referenceRange[0].high",
+      "Line[88] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Observation.referenceRange[0].high"
+    ],
+    "location": [
+      "Observation.referenceRange[0].high",
+      "Line[88] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Observation.referenceRange[1].low"
+    ],
+    "location": [
+      "Observation.referenceRange[1].low",
+      "Line[105] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Observation.referenceRange[1].low"
+    ],
+    "location": [
+      "Observation.referenceRange[1].low",
+      "Line[105] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Observation.referenceRange[1].high"
+    ],
+    "location": [
+      "Observation.referenceRange[1].high",
+      "Line[99] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Observation.referenceRange[1].high"
+    ],
+    "location": [
+      "Observation.referenceRange[1].high",
+      "Line[99] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Observation.referenceRange[2].low"
+    ],
+    "location": [
+      "Observation.referenceRange[2].low",
+      "Line[116] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Observation.referenceRange[2].low"
+    ],
+    "location": [
+      "Observation.referenceRange[2].low",
+      "Line[116] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Observation.component[0].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[0].value.ofType(CodeableConcept)",
+      "Line[22] Col[8]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9268-4'",
+    "expression": [
+      "Observation.component[0].code"
+    ],
+    "location": [
+      "Observation.component[0].code",
+      "Line[13] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6566-9'",
+    "expression": [
+      "Observation.component[0].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[0].value.ofType(CodeableConcept)",
+      "Line[22] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Observation.component[1].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[1].value.ofType(CodeableConcept)",
+      "Line[42] Col[8]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9270-0'",
+    "expression": [
+      "Observation.component[1].code"
+    ],
+    "location": [
+      "Observation.component[1].code",
+      "Line[33] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6560-2'",
+    "expression": [
+      "Observation.component[1].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[1].value.ofType(CodeableConcept)",
+      "Line[42] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Observation.component[2].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[2].value.ofType(CodeableConcept)",
+      "Line[62] Col[8]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9267-6'",
+    "expression": [
+      "Observation.component[2].code"
+    ],
+    "location": [
+      "Observation.component[2].code",
+      "Line[53] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6556-0'",
+    "expression": [
+      "Observation.component[2].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.component[2].value.ofType(CodeableConcept)",
+      "Line[62] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Observation"
+    ],
+    "location": [
+      "Observation",
+      "Line[1] Col[2]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -172,7 +172,7 @@ class ConfigLoaderTest {
         assertEquals(21_600_000L, cfg.txRegistryRefreshMs());
         assertEquals(5_000L, cfg.txTimeoutMs());
         assertEquals(10_000L, cfg.txRequestBudgetMs());
-        assertEquals(5_000, cfg.txCacheSize());
+        assertEquals(50_000, cfg.txCacheSize(), "spec 010 FR-013: one cache per instance");
         assertEquals(600_000L, cfg.txCacheTtlMs());
         assertEquals(10, cfg.txMaxConnectionsPerServer());
         ApplicationConfig set = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_TX_REGISTRY_REFRESH_MS", "300000",

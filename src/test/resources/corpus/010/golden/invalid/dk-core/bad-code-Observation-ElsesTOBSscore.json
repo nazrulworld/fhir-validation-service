@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes for 'http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes#not-a-real-code-010'",
+    "expression": [
+      "Observation.code"
+    ],
+    "location": [
+      "Observation.code",
+      "Line[2] Col[4]"
+    ],
+    "severity": "warning"
+  }
+]

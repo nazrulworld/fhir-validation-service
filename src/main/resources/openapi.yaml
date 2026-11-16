@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 1.0.0
+  version: 1.1.0
 
 servers:
   - url: http://localhost:8880
@@ -110,6 +110,18 @@ paths:
         (404), and a dependency the caller may not use gives 424 without naming it. 403 forbidden means the API key's
         organisation is deactivated. X-Validation-Context-Owner and X-Validation-Context-Shareable report the owner
         (short name) and sharing of the context used.
+        Terminology per request (1.1.0): a context's terminology setting is its default; `tx` and `txMode` choose
+        another setting for one request without a rebuild. Effective setting, with D the context's setting (`none`
+        for the base context and a context without one): no parameters = D; only `tx` = D's mode if `server` or
+        `ecosystem`, else `server`, with server `tx`; `txMode=server` = `tx`, else D's server (400 invalid-request if
+        neither exists); `txMode=ecosystem` = the registry's routing with `tx`, else D's server if D is `ecosystem`, as
+        the default server; `txMode=none` = no terminology server (400 invalid-request together with `tx`). A server
+        named in `tx` must be allowed for this FHIR version: 400 tx-server-not-registered, or 503
+        tx-registry-unavailable while no registry list was ever obtained; no call is made to a server that is not
+        allowed. These checks run after the `ig` resolution and access checks, and before not-ready. Malformed
+        `tx`/`txMode` (repeated, empty, an unknown mode, not an http(s) base URL, over 512 characters) is 400
+        invalid-request with a fixed text that never contains the address. The 200 response reports the setting used
+        in X-Tx-Mode, X-Tx-Server and X-Tx-Source; the body is unchanged.
       parameters:
         - name: version
           in: path
@@ -142,6 +154,29 @@ paths:
             downloaded. At most 10 distinct profiles per request, each at most 1024 characters (otherwise 400
             invalid-request). If any URL cannot be resolved the request fails with 400 unknown-profile (listing
             `unresolvedProfiles`) and nothing is validated.
+          schema:
+            type: string
+        - name: tx
+          in: query
+          required: false
+          description: >-
+            Terminology server for this request only: an http(s) base URL, at most 512 characters, without query,
+            fragment or user info. It must be on the official HL7 terminology registry's allowlist for this FHIR
+            version (otherwise 400 tx-server-not-registered, or 503 tx-registry-unavailable while no registry list was
+            ever obtained). No call is made to a server that is not allowed. Not allowed with txMode=none. Overrides
+            the context's own server; the context's setting stays the default for other requests. The resource itself
+            is never sent to the server. Checked in code (length, form, a single value), so every refusal carries a
+            fixed text.
+          schema:
+            type: string
+        - name: txMode
+          in: query
+          required: false
+          description: >-
+            Terminology mode for this request only: `none` (no terminology server), `server` (one server: `tx`, or the
+            context's server) or `ecosystem` (route each code system through the HL7 registry; `tx`, if given,
+            replaces the registry's default server). Exact lower-case values. Absent: the context's mode, or `server`
+            when only `tx` is given. Checked in code, so an unknown value is 400 invalid-request with a fixed text.
           schema:
             type: string
       requestBody:
@@ -179,6 +214,23 @@ paths:
               schema:
                 type: string
                 enum: ['true', 'false']
+            X-Tx-Mode:
+              description: Terminology mode used for this validation (1.1.0)
+              schema:
+                type: string
+                enum: [none, server, ecosystem]
+            X-Tx-Server:
+              description: >-
+                Normalised base URL of the terminology server used (mode server). For mode ecosystem, the `tx` value
+                if given, else the context's server, else absent (the registry's own default server is not reported).
+                Absent for mode none. (1.1.0)
+              schema:
+                type: string
+            X-Tx-Source:
+              description: Where the setting came from, `request` (tx or txMode given) or `context` (the default) (1.1.0)
+              schema:
+                type: string
+                enum: [request, context]
           content:
             application/json:
               schema:
@@ -244,8 +296,9 @@ paths:
         context's terminology mode; a server must be listed by the official HL7 terminology registry
         (https://ecosystem.hl7.org/tx-reg) for this FHIR version (400 tx-server-not-registered otherwise), or, while
         the service has never obtained the registry's list, be on the built-in fallback list (503
-        tx-registry-unavailable otherwise). For an already included context `terminology` is ignored with a
-        warning; change it with PATCH. Enabled FHIR versions: a FHIR version that is supported but not
+        tx-registry-unavailable otherwise). The setting is the context's default; a validation request can override
+        it with `tx`/`txMode`. For an already included context `terminology` is ignored with a warning; change it
+        with PATCH (no rebuild). Enabled FHIR versions: a FHIR version that is supported but not
         enabled on this deployment (FV_ENABLED_FHIR_VERSIONS) is refused with 422 fhir-version-disabled; this also
         applies when an inactive context for it is already stored. Public mode: while access control is
         disabled (FV_GLOBAL_DISABLED_ACL_SECURITY), `shareable: false` is ignored and the context is stored as
@@ -375,8 +428,9 @@ paths:
         a caller that isn't the system organisation), 400 (body, unknown or inactive target organisation, or a
         private context of an IG package owned by another organisation, or a malformed terminology setting), then
         400 tx-server-not-registered and 503 tx-registry-unavailable for the terminology server. Access changes take
-        effect on every instance within the propagation window without a rebuild. A terminology change
-        rebuilds the context on every instance; the old context serves until the new one is ready. Setting the same
+        effect on every instance within the propagation window without a rebuild. Changing `terminology` takes
+        effect on the next validation on every instance within the same window; the context is not rebuilt (1.1.0).
+        It is the context's default: a validation request can override it with `tx`/`txMode`. Setting the same
         terminology again changes nothing. Enabled FHIR versions: also works for a context that is inactive
         because its FHIR version is not enabled (FV_ENABLED_FHIR_VERSIONS); the change is stored, nothing is built,
         and it applies when the version is enabled again.

@@ -125,17 +125,16 @@ class ValidatorRegistryKeyTest {
         assertEquals(1, builder.count(key("b#1")));
     }
 
-    /** Spec 007 FR-004: a changed terminology setting rebuilds the context; the same setting doesn't. */
+    /**
+     * Spec 010 FR-001 (amends spec 007 FR-004): the terminology setting is not part of a context's build identity, so
+     * re-applying the same packages never rebuilds, whatever the configured setting.
+     */
     @Test
-    void aChangedTerminologySettingRebuildsTheContext(Vertx vertx) {
+    void reapplyingTheSamePackagesNeverRebuilds(Vertx vertx) {
         ValidatorRegistry registry = registry(vertx);
-        TerminologySettings routed = new TerminologySettings(TerminologyMode.ECOSYSTEM, null);
         registry.applyPinned(R4, 1, Map.of("a#1", ctx("a#1", (byte) 1)));
-        assertTrue(registry.applyPinned(R4, 2, Map.of("a#1", ctx("a#1", (byte) 1).withTerminology(routed))).succeeded());
-        assertEquals(2, builder.count(key("a#1")));
-        assertEquals(routed, builder.contexts.get(builder.contexts.size() - 1).terminology(), "built with the new setting");
-        assertTrue(registry.applyPinned(R4, 3, Map.of("a#1", ctx("a#1", (byte) 1).withTerminology(routed))).succeeded());
-        assertEquals(2, builder.count(key("a#1")), "same setting: no rebuild");
+        assertTrue(registry.applyPinned(R4, 2, Map.of("a#1", ctx("a#1", (byte) 1))).succeeded());
+        assertEquals(1, builder.count(key("a#1")), "no rebuild");
     }
 
     /** Spec 007 FR-021: an excluded context is dropped, not kept on demand. */
@@ -239,16 +238,12 @@ class ValidatorRegistryKeyTest {
         registry.close();
     }
 
-    /** Spec 007 FR-004: the terminology setting is part of a context's build identity. */
+    /** Spec 010 FR-001: {@code sameAs} compares packages and content hashes only. */
     @Test
-    void sameAsComparesTheTerminologySetting() {
-        ResolvedContext offline = ctx("a#1", (byte) 1);
-        ResolvedContext routed = offline.withTerminology(new TerminologySettings(TerminologyMode.ECOSYSTEM, null));
-        assertEquals(TerminologySettings.NONE, offline.terminology());
-        assertTrue(offline.sameAs(ctx("a#1", (byte) 1)));
-        assertFalse(offline.sameAs(routed), "same packages, different terminology");
-        assertFalse(routed.sameAs(offline));
-        assertTrue(routed.sameAs(ctx("a#1", (byte) 1).withTerminology(routed.terminology())));
-        assertEquals(offline.packages(), routed.packages());
+    void sameAsComparesPackagesAndHashesOnly() {
+        ResolvedContext a = ctx("a#1", (byte) 1);
+        assertTrue(a.sameAs(ctx("a#1", (byte) 1)));
+        assertFalse(a.sameAs(ctx("a#1", (byte) 2)), "replaced content");
+        assertFalse(a.sameAs(ctx("b#1", (byte) 1)), "other packages");
     }
 }

@@ -4,7 +4,6 @@ import nzi.fhir.validator.core.npm.DependencyResolver;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.AccessPolicy;
-import nzi.fhir.validator.core.terminology.TerminologySettings;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -21,31 +20,21 @@ import java.util.UUID;
  * @param missing  required dependencies that are not stored (skipped from {@code packages}); found at include time,
  *                 when the included context builds without them, with a warning, as include always has (validation
  *                 never builds a context since spec 007)
- * @param terminology the context's terminology setting (spec 007 FR-004): part of what the context is built from, so
- *                    a changed setting rebuilds it; {@link TerminologySettings#NONE} for the base context
+ * <p>
+ * The terminology setting is not part of it (spec 010 FR-001): it is a per-request default, published by
+ * {@code ConfigSync} as {@code TerminologyDefaults}, so a setting change never rebuilds a context.
  */
-public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing,
-                              TerminologySettings terminology) {
+public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing) {
     public static final ResolvedContext EMPTY = new ResolvedContext(List.of(), Map.of());
 
     public ResolvedContext {
         packages = List.copyOf(packages);
         hashes = Map.copyOf(hashes);
         missing = List.copyOf(missing);
-        terminology = terminology == null ? TerminologySettings.NONE : terminology;
-    }
-
-    public ResolvedContext(List<String> packages, Map<String, byte[]> hashes, List<String> missing) {
-        this(packages, hashes, missing, TerminologySettings.NONE);
     }
 
     public ResolvedContext(List<String> packages, Map<String, byte[]> hashes) {
         this(packages, hashes, List.of());
-    }
-
-    /** The same packages with terminology setting {@code settings}. */
-    public ResolvedContext withTerminology(TerminologySettings settings) {
-        return new ResolvedContext(packages, hashes, missing, settings);
     }
 
     /**
@@ -107,12 +96,11 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
     }
 
     /**
-     * Same packages with the same content (hashes compared by value) and the same terminology setting: a context
-     * whose setting changed must be rebuilt (spec 007 FR-004, research R12).
+     * Same packages with the same content (hashes compared by value). The terminology setting is not compared: a
+     * setting change takes effect on the next request without a rebuild (spec 010 FR-001).
      */
     public boolean sameAs(ResolvedContext other) {
-        if (other == null || !packages.equals(other.packages) || !hashes.keySet().equals(other.hashes.keySet())
-                || !terminology.equals(other.terminology)) {
+        if (other == null || !packages.equals(other.packages) || !hashes.keySet().equals(other.hashes.keySet())) {
             return false;
         }
         for (Map.Entry<String, byte[]> e : hashes.entrySet()) {

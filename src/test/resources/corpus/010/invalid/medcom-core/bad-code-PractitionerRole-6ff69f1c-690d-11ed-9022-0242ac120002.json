@@ -1,0 +1,29 @@
+{
+  "code": [
+    {
+      "coding": [
+        {
+          "code": "not-a-real-code-010",
+          "system": "http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-core-PractitionerRolesSKSadministrativ"
+        }
+      ]
+    }
+  ],
+  "id": "6ff69f1c-690d-11ed-9022-0242ac120002",
+  "meta": {
+    "profile": [
+      "http://medcomfhir.dk/ig/core/StructureDefinition/medcom-core-practitionerrole"
+    ]
+  },
+  "organization": {
+    "reference": "Organization/12ee0dde-a672-462f-820d-5efe832d73c9"
+  },
+  "practitioner": {
+    "reference": "Practitioner/e9eacb62-666b-11ed-9022-0242ac120002"
+  },
+  "resourceType": "PractitionerRole",
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: PractitionerRole 6ff69f1c-690d-11ed-9022-0242ac120002</b></p><a name=\"6ff69f1c-690d-11ed-9022-0242ac120002\"> </a><a name=\"hc6ff69f1c-690d-11ed-9022-0242ac120002\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-medcom-core-practitionerrole.html\">MedComCorePractitionerRole</a></p></div><p><b>practitioner</b>: <a href=\"Practitioner-e9eacb62-666b-11ed-9022-0242ac120002.html\">Practitioner Bo Test Vestergaard (official)</a></p><p><b>organization</b>: <a href=\"Organization-12ee0dde-a672-462f-820d-5efe832d73c9.html\">Organization Aros Burn Center</a></p><p><b>code</b>: <span title=\"Codes:{http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-core-PractitionerRolesSKSadministrativ sygeplejerske}\">Sygeplejerske</span></p></div>",
+    "status": "generated"
+  }
+}

@@ -1,0 +1,158 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.url' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[0][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.url']"
+    ],
+    "location": [
+      "Basic.extension[0][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.url']",
+      "Line[11] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.version' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[1][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.version']"
+    ],
+    "location": [
+      "Basic.extension[1][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.version']",
+      "Line[15] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.name' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[2][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.name']"
+    ],
+    "location": [
+      "Basic.extension[2][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.name']",
+      "Line[19] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.title' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[3][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.title']"
+    ],
+    "location": [
+      "Basic.extension[3][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.title']",
+      "Line[23] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.status' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[4][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.status']"
+    ],
+    "location": [
+      "Basic.extension[4][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.status']",
+      "Line[27] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.date' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[5][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.date']"
+    ],
+    "location": [
+      "Basic.extension[5][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.date']",
+      "Line[31] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.publisher' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[6][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.publisher']"
+    ],
+    "location": [
+      "Basic.extension[6][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.publisher']",
+      "Line[35] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.contact' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[7][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.contact']"
+    ],
+    "location": [
+      "Basic.extension[7][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.contact']",
+      "Line[39] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.description' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[8][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.description']"
+    ],
+    "location": [
+      "Basic.extension[8][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.description']",
+      "Line[51] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.jurisdiction' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[9][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.jurisdiction']"
+    ],
+    "location": [
+      "Basic.extension[9][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.jurisdiction']",
+      "Line[55] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.type' is not valid (invalid Version '5.0')",
+    "expression": [
+      "Basic.extension[10][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.type']"
+    ],
+    "location": [
+      "Basic.extension[10][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-ActorDefinition.type']",
+      "Line[67] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Basic.extension[11]"
+    ],
+    "location": [
+      "Basic.extension[11]",
+      "Line[71] Col[6]"
+    ],
+    "severity": "information"
+  }
+]
