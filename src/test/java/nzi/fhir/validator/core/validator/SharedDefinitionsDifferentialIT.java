@@ -165,7 +165,7 @@ class SharedDefinitionsDifferentialIT {
             List<Future<?>> futures = new ArrayList<>();
             for (Case c : rounds) {
                 futures.add(pool.submit(() -> {
-                    check(c);
+                    underLoad(() -> check(c), c);
                     return null;
                 }));
             }
@@ -239,8 +239,8 @@ class SharedDefinitionsDifferentialIT {
                 List<Future<?>> futures = new ArrayList<>();
                 for (Case c : rounds) {
                     futures.add(pool.submit(() -> {
-                        assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
-                                c.relative() + ": differs under concurrent load");
+                        underLoad(() -> assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c,
+                                effective, router), c.relative() + ": differs under concurrent load"), c);
                         return null;
                     }));
                 }
@@ -283,5 +283,42 @@ class SharedDefinitionsDifferentialIT {
         ValidatorSnapshot.Outcome outcome = snapshot.validate(body, SupportedContentType.JSON, List.of(), Integer.MAX_VALUE,
                 effective, router);
         return GoldenOutcomes.project(OutcomeRenderer.render(outcome, MediaTypes.ResponseFormat.FHIR_JSON)).encode();
+    }
+
+    /** A check that may throw (the comparison of one case). */
+    interface Check {
+        void run() throws Exception;
+    }
+
+    /**
+     * Runs {@code check} under concurrent load. HL7 core evaluates every regex on an executor with a fixed 500 ms
+     * timeout ({@code RegexTimeout.DEFAULT_TIMEOUT}); on a small CI runner, 8 validation threads can starve it, and the
+     * validation then reports an extra "Regex evaluation timed out" issue. That is load, not sharing: such a case is
+     * checked again on its own (up to 3 times), where a real difference would show again.
+     */
+    private static void underLoad(Check check, Case c) throws Exception {
+        AssertionError first;
+        try {
+            check.run();
+            return;
+        } catch (AssertionError e) {
+            if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
+                throw e;
+            }
+            first = e;
+        }
+        synchronized (SharedDefinitionsDifferentialIT.class) {
+            for (int attempt = 0; attempt < 3; attempt++) {
+                try {
+                    check.run();
+                    return;
+                } catch (AssertionError e) {
+                    if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
+                        throw e;
+                    }
+                }
+            }
+        }
+        throw new AssertionError(c.relative() + ": a regex timed out on every retry", first);
     }
 }
