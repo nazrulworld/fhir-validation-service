@@ -1,0 +1,67 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'dueTo' (discriminator: ('http://hl7.org/fhir/StructureDefinition/condition-dueTo' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'conditionLastAssertedDate' (discriminator: ('http://hl7.dk/fhir/core/StructureDefinition/ConditionLastAssertedDate' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'notFollowedAnymore' (discriminator: ('http://hl7.dk/fhir/core/StructureDefinition/NotFollowedAnymore' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4.12 for 'urn:oid:1.2.208.176.2.4.12#DZ340'",
+    "expression": [
+      "Condition.code"
+    ],
+    "location": [
+      "Condition.code",
+      "Line[20] Col[4]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -1,0 +1,314 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/ElseConsciousness*/.value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/ElseConsciousness*/.value.ofType(CodeableConcept)",
+      "Line[90] Col[10]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/ElseConsciousness*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/ElseConsciousness*/.method.coding[0]",
+      "Line[68] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code",
+      "Line[114] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8480-6'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.component[0].code",
+      "Line[129] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8462-4'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.component[1].code",
+      "Line[150] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[0]",
+      "Line[116] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[1]",
+      "Line[120] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#75367002) was not found in the value set 'DK Core SNOMED CT Basic Observation' (http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation|3.5.0), and a code should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable).  (error message = Failed to expand ValueSet 'http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation' (in-memory). Could not validate code http://snomed.info/sct#75367002. Error was: HAPI-0702: Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108; Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108)",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.code.coding[1]",
+      "Line[120] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/ElseBloodPressure*/.method.coding[0]",
+      "Line[180] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8310-5'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code",
+      "Line[217] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8310-5'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[0]",
+      "Line[219] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[1]",
+      "Line[223] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#276885007) was not found in the value set 'DK Core SNOMED CT Basic Observation' (http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation|3.5.0), and a code should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable).  (error message = Failed to expand ValueSet 'http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation' (in-memory). Could not validate code http://snomed.info/sct#276885007. Error was: HAPI-0702: Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108; Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108)",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.code.coding[1]",
+      "Line[223] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/ElseBodyTemperature*/.method.coding[0]",
+      "Line[239] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8867-4'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.code"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.code",
+      "Line[282] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8867-4'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.code.coding[0]",
+      "Line[284] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/ElseHeartRate*/.method.coding[0]",
+      "Line[304] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code",
+      "Line[347] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[0]",
+      "Line[349] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[1]",
+      "Line[353] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#86290005) was not found in the value set 'DK Core SNOMED CT Basic Observation' (http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation|3.5.0), and a code should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable).  (error message = Failed to expand ValueSet 'http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation' (in-memory). Could not validate code http://snomed.info/sct#86290005. Error was: HAPI-0702: Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108; Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.code.coding[1]",
+      "Line[353] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/ElseRespirationRate*/.method.coding[0]",
+      "Line[369] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes for 'http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes#MCS88125'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/ElsesTOBSscore*/.code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/ElsesTOBSscore*/.code",
+      "Line[402] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-practitioner|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'officialHealthAuthorization' (discriminator: ('https://autregweb.sst.dk' in identifier.system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Practitioner/SidselSygeplejerske*/.qualification[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Practitioner/SidselSygeplejerske*/.qualification[0]",
+      "Line[458] Col[12]"
+    ],
+    "severity": "information"
+  }
+]

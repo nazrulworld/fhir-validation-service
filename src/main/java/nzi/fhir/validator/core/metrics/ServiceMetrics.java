@@ -128,6 +128,72 @@ public class ServiceMetrics {
     }
 
     /**
+     * Spec 010 meters (FR-025, data-model §10): shared package definitions per served version and the instance's code
+     * cache. No label carries a server address, package name or code.
+     *
+     * @param retainedPerExpandedByte measured heap held per unpacked package byte (research R9, perf/results-1.1.0.md),
+     *                                for the estimate gauge only
+     */
+    public void bindSpec010(nzi.fhir.validator.core.npm.SharedPackageDefinitions shared,
+                            nzi.fhir.validator.core.terminology.TerminologyCodeCache codeCache, double retainedPerExpandedByte) {
+        for (SupportedFhirVersion version : served.asList()) {
+            Gauge.builder("fv.packages.shared.entries", shared, s -> s.entries(version)).tag("fhir_version", version.name())
+                    .description("Package definition sets held once and shared by the contexts that contain them")
+                    .register(registry);
+            Gauge.builder("fv.packages.shared.expanded.bytes", shared, s -> s.expandedBytes(version))
+                    .tag("fhir_version", version.name()).baseUnit("bytes")
+                    .description("Unpacked size of the shared package definition sets").register(registry);
+            Gauge.builder("fv.packages.shared.retained.estimate.bytes", shared,
+                            s -> s.expandedBytes(version) * retainedPerExpandedByte)
+                    .tag("fhir_version", version.name()).baseUnit("bytes")
+                    .description("Estimated heap held by the shared package definition sets (unpacked size x measured factor)")
+                    .register(registry);
+        }
+        shared.setListener(new nzi.fhir.validator.core.npm.SharedPackageDefinitions.Listener() {
+            @Override
+            public void hit(SupportedFhirVersion version) {
+                lookup(version, "hit");
+            }
+
+            @Override
+            public void miss(SupportedFhirVersion version) {
+                lookup(version, "miss");
+            }
+
+            @Override
+            public void failure(SupportedFhirVersion version) {
+                lookup(version, "failure");
+            }
+
+            private void lookup(SupportedFhirVersion version, String result) {
+                counter("fv.packages.shared.lookups", "Shared package definition lookups: hit (reused), miss (parsed) "
+                        + "or failure", "fhir_version", version.name(), "result", result).increment();
+            }
+        });
+        Gauge.builder("fv.tx.code.cache.size", codeCache, nzi.fhir.validator.core.terminology.TerminologyCodeCache::estimatedSize)
+                .description("Code results in the instance's terminology code cache").register(registry);
+        codeCache.setListener(new nzi.fhir.validator.core.terminology.TerminologyCodeCache.Listener() {
+            @Override
+            public void miss(SupportedFhirVersion version) {
+                counter("fv.tx.code.cache.misses", "Code checks not answered from the code cache", "fhir_version",
+                        version.name()).increment();
+            }
+
+            @Override
+            public void invalidated(String reason, long entries) {
+                counter("fv.tx.code.cache.invalidations", "Code results dropped from the code cache, by reason",
+                        "reason", reason).increment(entries);
+            }
+        });
+    }
+
+    /** Spec 010 FR-025: a validation and where its terminology setting came from ({@code request} or {@code context}). */
+    public void recordTxSource(String source) {
+        counter("fv.validations.tx_source", "Validations by the source of their terminology setting", "source", source)
+                .increment();
+    }
+
+    /**
      * Terminology meters (spec 007 FR-026, contracts §6). Labels never carry codes, value set URLs or IG names: the
      * server label is a host name, the outcome and result labels are fixed words.
      */

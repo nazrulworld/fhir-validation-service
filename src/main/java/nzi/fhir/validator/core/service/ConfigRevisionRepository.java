@@ -39,7 +39,7 @@ public final class ConfigRevisionRepository {
     public static final String KIND_IG_EXCLUDE = "IG_EXCLUDE";
     /** An included context's owner or sharing changed: swap access, never rebuild (spec 005, contracts §9). */
     public static final String KIND_IG_ACCESS = "IG_ACCESS";
-    /** Spec 007: a context's terminology setting changed; the context is rebuilt with it (research R12). */
+    /** Spec 007: a context's terminology setting changed; since spec 010 it applies per request, nothing is rebuilt. */
     public static final String KIND_IG_TERMINOLOGY = "IG_TERMINOLOGY";
     /**
      * Spec 009 (research R5): contexts of this version were (de)activated at startup because of

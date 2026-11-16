@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Specified profile type was 'Observation' in profile 'http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0', but found type 'Media'",
+    "expression": [
+      "Media"
+    ],
+    "location": [
+      "Media",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  }
+]

@@ -11,16 +11,12 @@ import nzi.fhir.validator.core.enums.SupportedContentType;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCache;
 import nzi.fhir.validator.core.npm.PostgresPackageCacheManager;
+import nzi.fhir.validator.core.npm.SharedPackageDefinitions;
 import nzi.fhir.validator.core.service.CustomNpmPackageValidationSupport;
 import nzi.fhir.validator.core.service.FhirContextLoader;
-import nzi.fhir.validator.core.terminology.DeniedTerminologySupport;
-import nzi.fhir.validator.core.terminology.RoutedTerminologySupport;
-import nzi.fhir.validator.core.terminology.ServerTerminologySupport;
-import nzi.fhir.validator.core.terminology.TerminologyBudget;
-import nzi.fhir.validator.core.terminology.TerminologyMode;
+import nzi.fhir.validator.core.terminology.RequestScopedTerminologySupport;
 import nzi.fhir.validator.core.terminology.TerminologyOnlySupport;
 import nzi.fhir.validator.core.terminology.TerminologyServices;
-import nzi.fhir.validator.core.terminology.TerminologySettings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
@@ -68,6 +64,8 @@ public class SnapshotBuilder {
     private final AsyncLimiter builds;
     private final HeapBudget heap;
     private final TerminologyServices txServices;
+    /** Spec 010: parsed package definitions shared by every context of this instance. */
+    private final SharedPackageDefinitions sharedDefinitions;
     private volatile Runnable buildHook;
 
     /**
@@ -85,6 +83,16 @@ public class SnapshotBuilder {
      */
     public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache, int packageWorkers,
                            HeapBudget heap, TerminologyServices txServices) {
+        this(executors, packages, cache, packageWorkers, heap, txServices, new SharedPackageDefinitions());
+    }
+
+    /**
+     * @param sharedDefinitions the instance's shared package definitions (spec 010 FR-017); always used, there is no
+     *                          setting that turns sharing off (FR-022)
+     */
+    public SnapshotBuilder(Executors executors, PostgresPackageCacheManager packages, PackageCache cache, int packageWorkers,
+                           HeapBudget heap, TerminologyServices txServices, SharedPackageDefinitions sharedDefinitions) {
+        this.sharedDefinitions = sharedDefinitions;
         this.txServices = txServices;
         this.executors = executors;
         this.packages = packages;
@@ -104,7 +112,7 @@ public class SnapshotBuilder {
 
     /**
      * Builds the validator context {@code key} from exactly {@code resolved.packages()} (spec 004: one IG and its
-     * dependencies, or nothing for the base context), with its terminology setting (spec 007).
+     * dependencies, or nothing for the base context). The terminology setting is applied per request (spec 010).
      */
     public Future<ValidatorSnapshot> build(SnapshotKey key, long revision, ResolvedContext resolved) {
         return builds.run(() -> buildNow(key, revision, resolved));
@@ -126,27 +134,30 @@ public class SnapshotBuilder {
             List<NpmPackage> npmPackages = new ArrayList<>();
             long archiveBytes = 0;
             long expandedBytes = 0;
+            long sharedExpandedBytes = 0;
             for (Future<Loaded> f : loaded) {
-                npmPackages.add(f.result().pkg());
+                NpmPackage pkg = f.result().pkg();
+                npmPackages.add(pkg);
                 archiveBytes += f.result().archiveBytes();
-                expandedBytes += PostgresPackageCacheManager.expandedBytes(f.result().pkg());
+                long bytes = PostgresPackageCacheManager.expandedBytes(pkg);
+                // Spec 010 FR-024: a package another context already shares costs this build its indexes only.
+                if (isShared(version, pkg.name() + "#" + pkg.version(), resolved.hashes())) {
+                    sharedExpandedBytes += bytes;
+                } else {
+                    expandedBytes += bytes;
+                }
             }
             // A build that cannot fit fails like any other (version STALE, reason in /health) instead of ending the
             // process with an OutOfMemoryError.
-            long reserved = heap.reserve(expandedBytes,
-                    HeapBudget.terminologyCacheBytes(resolved.terminology(), txServices.chainCache().getCacheSize()));
+            // The code cache is reserved once per instance (spec 010 FR-024), not per build.
+            long reserved = heap.reserve(expandedBytes, HeapBudget.sharedBytes(sharedExpandedBytes));
             try {
                 ValidatorSnapshot snapshot = assemble(key, revision, resolvedPackages, resolved.hashes(), npmPackages,
-                        resolved.terminology(), txServices);
+                        txServices, sharedDefinitions);
                 snapshot.setPackageArchiveBytes(archiveBytes);
-                // Warm caches so the first real request does not pay HAPI's lazy initialisation. A budget of 0: the
-                // warm-up never calls a terminology server (spec 007 research R5).
-                TerminologyBudget.open(0);
-                try {
-                    snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
-                } finally {
-                    TerminologyBudget.close();
-                }
+                // Warm caches so the first real request does not pay HAPI's lazy initialisation. Mode none and a budget
+                // of 0: the warm-up never calls a terminology server (spec 010 FR-004, spec 007 research R5).
+                snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
                 logger.info("Built validator for {} at revision {} with {} package(s) in {} ms", key, revision,
                         npmPackages.size(), System.currentTimeMillis() - started);
                 return snapshot;
@@ -190,6 +201,17 @@ public class SnapshotBuilder {
         return cache;
     }
 
+    public SharedPackageDefinitions sharedDefinitions() {
+        return sharedDefinitions;
+    }
+
+    /** Whether the definitions of {@code id} (with its content hash in {@code hashes}) are shared on this instance now. */
+    public boolean isShared(SupportedFhirVersion version, String id, java.util.Map<String, byte[]> hashes) {
+        byte[] hash = hashes == null ? null : hashes.get(id);
+        return sharedDefinitions != null && hash != null
+                && sharedDefinitions.contains(new nzi.fhir.validator.core.npm.SharedPackage.Key(version, id, hash));
+    }
+
     /**
      * The only source of profiles is the chain built here: core definitions first, then the included IG packages and
      * their resolved dependencies (spec 003, FR-001). Must run on a worker thread.
@@ -201,131 +223,59 @@ public class SnapshotBuilder {
 
     static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
                                       java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages) {
-        return assemble(key, revision, resolvedPackages, hashes, npmPackages, TerminologySettings.NONE,
-                TerminologyServices.OFFLINE);
+        return assemble(key, revision, resolvedPackages, hashes, npmPackages, TerminologyServices.OFFLINE);
     }
 
     /**
-     * Builds the chain for one context (spec 007). Order matters: the chain asks modules in turn, so everything that
-     * can be decided from packages and built-in code systems is answered locally, and only the rest can reach a
-     * terminology server (FR-013, research R4). A terminology module only answers terminology operations; it never
-     * supplies StructureDefinitions, ValueSets or CodeSystems, so definitions still come from packages only (FR-014,
-     * spec 003 FR-002).
+     * Builds the chain for one context (spec 007, spec 010). Order matters: the chain asks modules in turn, so
+     * everything that can be decided from packages and built-in code systems is answered locally, and only the rest
+     * can reach a terminology server (FR-013, research R4). The one terminology module routes with the request's
+     * {@code TerminologyScope} (spec 010 FR-001), so the chain holds definitions only and a setting change never
+     * rebuilds it. It only answers terminology operations; it never supplies StructureDefinitions, ValueSets or
+     * CodeSystems, so definitions still come from packages only (FR-014, spec 003 FR-002).
      *
-     * @param tx         the context's terminology setting; {@link TerminologyMode#NONE} keeps it fully offline
      * @param txServices shared terminology infrastructure (allowlist, registry resolver, client pool, code cache)
      */
     static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
                                       java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages,
-                                      TerminologySettings tx, TerminologyServices txServices) {
+                                      TerminologyServices txServices) {
+        return assemble(key, revision, resolvedPackages, hashes, npmPackages, txServices, null);
+    }
+
+    /**
+     * @param sharedDefinitions the instance's shared package definitions, or {@code null} to parse every package for
+     *                          this context alone (tests: the 1.0.0 baseline of the spec 010 differential check)
+     */
+    static ValidatorSnapshot assemble(SnapshotKey key, long revision, List<String> resolvedPackages,
+                                      java.util.Map<String, byte[]> hashes, List<NpmPackage> npmPackages,
+                                      TerminologyServices txServices, SharedPackageDefinitions sharedDefinitions) {
         SupportedFhirVersion version = key.fhirVersion();
         FhirContext ctx = FhirContextLoader.getInstance().getContext(version);
         List<IValidationSupport> modules = new ArrayList<>();
         modules.add(new DefaultProfileValidationSupport(ctx));
-        modules.add(new CustomNpmPackageValidationSupport(ctx, npmPackages));
+        modules.add(new CustomNpmPackageValidationSupport(ctx, npmPackages, hashes, sharedDefinitions, version));
         // Spec 007 research R4 (verified by TerminologyRoutingIT): the terminology module goes before the in-memory
         // one, which otherwise answers a value set it can't expand (an IG value set including LOINC) with an error
         // before a server is asked. It declines every code system decided locally (complete package CodeSystems and
-        // the common code systems), so those are still checked in-process (FR-013).
-        switch (tx.mode()) {
-            case NONE -> {
-                // Spec 003 behaviour: no terminology server, zero outbound requests.
-            }
-            case SERVER -> modules.add(new TerminologyOnlySupport(serverModule(ctx, version, key, tx, txServices)));
-            case ECOSYSTEM -> modules.add(new TerminologyOnlySupport(ecosystemModule(ctx, version, key, tx, txServices)));
-        }
+        // the common code systems), so those are still checked in-process (FR-013). In mode none the chain skips it.
+        IValidationSupport requestModule = new TerminologyOnlySupport(
+                new RequestScopedTerminologySupport(ctx, version, txServices.clients()));
+        modules.add(requestModule);
         modules.add(new InMemoryTerminologyServerValidationSupport(ctx));
         modules.add(new CommonCodeSystemsTerminologyService(ctx));
         modules.add(new SnapshotGeneratingValidationSupport(ctx));
-        // Code results are cached per snapshot: a different server means a different setting, a new snapshot and a
-        // fresh cache, so answers are never shared between servers (FR-018).
-        ValidationSupportChain chain = tx.mode() == TerminologyMode.NONE
-                ? new ValidationSupportChain(txServices.chainCache(), modules)
-                : new CacheCountingChain(txServices.chainCache(), modules, version, txServices.clients());
+        // Spec 010 FR-012: code results are cached per instance, keyed by snapshot and terminology scope, so one chain
+        // serves every setting without sharing answers between servers; HAPI's cache keeps the definitions.
+        long snapshotId = ValidatorSnapshot.newSnapshotId();
+        ValidationSupportChain chain = new ScopedValidationSupportChain(txServices.chainCache(), modules, snapshotId,
+                version, txServices.codeCache(), requestModule, txServices.clients());
         // FR-002 / research R1: no IValidatorResourceFetcher is set, so the validator can never fetch a profile,
         // reference or other conformance resource over the network. Do not add one.
         FhirValidator validator = ctx.newValidator();
         validator.registerValidatorModule(new FhirInstanceValidator(chain));
-        ValidatorSnapshot snapshot = new ValidatorSnapshot(key, revision, resolvedPackages, hashes, ctx, validator, chain);
-        snapshot.setTerminology(tx, txServices.requestBudgetMs());
+        ValidatorSnapshot snapshot = new ValidatorSnapshot(snapshotId, key, revision, resolvedPackages, hashes, ctx,
+                validator, chain);
+        snapshot.setTerminologyServices(txServices);
         return snapshot;
-    }
-
-    /**
-     * The chain of a context with a terminology mode (spec 007 FR-026, T078): a code check that the chain answers
-     * without reaching the terminology module was answered from the code cache (the modules before it answer no code
-     * checks), so it is counted as a cache hit.
-     */
-    static final class CacheCountingChain extends ValidationSupportChain {
-        private final SupportedFhirVersion version;
-        private final nzi.fhir.validator.core.terminology.TerminologyClients clients;
-
-        CacheCountingChain(ValidationSupportChain.CacheConfiguration cache, List<IValidationSupport> modules,
-                           SupportedFhirVersion version, nzi.fhir.validator.core.terminology.TerminologyClients clients) {
-            super(cache, modules);
-            this.version = version;
-            this.clients = clients;
-        }
-
-        @Override
-        public CodeValidationResult validateCode(ca.uhn.fhir.context.support.ValidationSupportContext ctx,
-                                                 ca.uhn.fhir.context.support.ConceptValidationOptions options, String system,
-                                                 String code, String display, String valueSetUrl) {
-            long before = RoutedTerminologySupport.reached();
-            CodeValidationResult result = super.validateCode(ctx, options, system, code, display, valueSetUrl);
-            count(before, result);
-            return result;
-        }
-
-        @Override
-        public CodeValidationResult validateCodeInValueSet(ca.uhn.fhir.context.support.ValidationSupportContext ctx,
-                                                           ca.uhn.fhir.context.support.ConceptValidationOptions options,
-                                                           String system, String code, String display,
-                                                           org.hl7.fhir.instance.model.api.IBaseResource valueSet) {
-            long before = RoutedTerminologySupport.reached();
-            CodeValidationResult result = super.validateCodeInValueSet(ctx, options, system, code, display, valueSet);
-            count(before, result);
-            return result;
-        }
-
-        private void count(long before, CodeValidationResult result) {
-            if (result != null && RoutedTerminologySupport.reached() == before) {
-                clients.codeCacheHit(version);
-            }
-        }
-    }
-
-    /**
-     * The module of a context in mode {@code ecosystem} (spec 007 FR-016). Its own server, when set, is checked again
-     * like a {@code server} setting; one that is no longer allowed fails closed for terminology only.
-     */
-    private static RoutedTerminologySupport ecosystemModule(FhirContext ctx, SupportedFhirVersion version, SnapshotKey key,
-                                                            TerminologySettings tx, TerminologyServices txServices) {
-        if (tx.server() != null) {
-            try {
-                txServices.allowlist().current().require(tx.server(), version);
-            } catch (nzi.fhir.validator.web.ProblemException e) {
-                logger.warn("Terminology server of context {} is not on the allowlist; its codes are not checked by a server", key);
-                return new DeniedTerminologySupport(ctx, version);
-            }
-        }
-        return new nzi.fhir.validator.core.terminology.EcosystemRoutingTerminologySupport(ctx, version, tx.server(),
-                txServices.resolver(), txServices.clients());
-    }
-
-    /**
-     * The module of a context in mode {@code server} (spec 007 FR-015). The server is checked against the allowlist
-     * again here, because the allowlist may have changed since the setting was saved (FR-010 b); a server that is no
-     * longer allowed makes the build fail closed for terminology only (US4 scenario 4).
-     */
-    private static RoutedTerminologySupport serverModule(FhirContext ctx, SupportedFhirVersion version, SnapshotKey key,
-                                                         TerminologySettings tx, TerminologyServices txServices) {
-        try {
-            txServices.allowlist().current().require(tx.server(), version);
-            return new ServerTerminologySupport(ctx, version, txServices.clients(), tx.server());
-        } catch (nzi.fhir.validator.web.ProblemException e) {
-            logger.warn("Terminology server of context {} is not on the allowlist; its codes are not checked by a server", key);
-            return new DeniedTerminologySupport(ctx, version);
-        }
     }
 }

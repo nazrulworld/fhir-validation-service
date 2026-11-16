@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Constraint failed: x-ecpr: 'Requirement of danish X-eCPR. See https://www.nspop.dk/pages/viewpage.action?pageId=226757583#eCPRFormater(XeCPRogDeCPR)-Formatetfornationaleerstatningspersonnumre-X-eCPR' (defined in http://hl7.dk/fhir/core/StructureDefinition/dk-core-x-ecpr-identifier)",
+    "expression": [
+      "Patient.identifier[0].value"
+    ],
+    "location": [
+      "Patient.identifier[0].value",
+      "Line[7] Col[21]"
+    ],
+    "severity": "error"
+  }
+]

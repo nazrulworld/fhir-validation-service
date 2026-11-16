@@ -28,6 +28,27 @@ public class HeapBudget {
     /** Heap needed per expanded package byte, including transient garbage during the build. */
     static final int HEAP_PER_EXPANDED_BYTE = 6;
     static final long BUILD_OVERHEAD_BYTES = 64 * MB;
+    /**
+     * Heap a shared package definition set holds per unpacked byte, for the estimate gauge only (spec 010 FR-025). From
+     * the measurement in {@code perf/results-1.1.0.md}.
+     */
+    public static final double SHARED_RETAINED_PER_EXPANDED_BYTE = 3.6;
+    /**
+     * Heap a build needs per unpacked byte of a package whose definitions are already shared on the instance (spec 010
+     * FR-024, research R9): the context's own lookup indexes, chain caches and private copies of the profiles it
+     * completes. Checked against the per-context part measured for SC-005 ({@code perf/results-1.1.0.md}); never lower
+     * than that measurement.
+     */
+    static final int SHARED_HEAP_PER_EXPANDED_BYTE = 1;
+
+    /**
+     * Heap a build holds for packages already shared ({@code sharedExpandedBytes}), passed as the
+     * {@code additionalBytes} of {@link #reserve(long, long)} / {@link #admitInclude(long, long)} next to the unshared
+     * packages' expanded size (spec 010 FR-024).
+     */
+    public static long sharedBytes(long sharedExpandedBytes) {
+        return SHARED_HEAP_PER_EXPANDED_BYTE * Math.max(0, sharedExpandedBytes);
+    }
 
     /**
      * A build or include that would not fit in this instance's heap. The message is curated (Principle IV).
@@ -75,24 +96,6 @@ public class HeapBudget {
     /** Estimated peak heap of a build over packages of {@code expandedBytes} in total. */
     public static long estimate(long expandedBytes) {
         return BUILD_OVERHEAD_BYTES + HEAP_PER_EXPANDED_BYTE * expandedBytes;
-    }
-
-    /** Heap one cached code result may hold (spec 007 research R15). */
-    static final long TX_CACHE_ENTRY_BYTES = 1024;
-
-    /**
-     * Heap the code cache of a context may grow to (spec 007 SC-009): {@code cacheSize × 1 KB} for a context in mode
-     * {@code server} or {@code ecosystem}; nothing for mode {@code none} and the base context, which never cache remote
-     * answers.
-     */
-    public static long terminologyCacheBytes(nzi.fhir.validator.core.terminology.TerminologySettings tx, int cacheSize) {
-        return tx == null || tx.mode() == nzi.fhir.validator.core.terminology.TerminologyMode.NONE
-                ? 0 : TX_CACHE_ENTRY_BYTES * Math.max(0, cacheSize);
-    }
-
-    /** {@link #estimate(long)} plus the context's code cache bound. */
-    public static long estimate(long expandedBytes, nzi.fhir.validator.core.terminology.TerminologySettings tx, int cacheSize) {
-        return estimate(expandedBytes) + terminologyCacheBytes(tx, cacheSize);
     }
 
     /**
@@ -156,6 +159,19 @@ public class HeapBudget {
                     + maxHeap.getAsLong() / MB + " MB; raise FV_MEMORY_LIMIT (or the JVM heap)");
         }
         check(expandedBytes, additionalBytes);
+    }
+
+    /**
+     * Holds {@code bytes} for the life of the process: the instance's one code-result cache bound (spec 010 FR-024,
+     * research R9), counted once instead of per build.
+     */
+    public synchronized void reserveFixed(long bytes) {
+        reserved.addAndGet(Math.max(0, bytes));
+    }
+
+    /** Heap currently held by admitted builds and fixed reservations (tests, status). */
+    public long reservedBytes() {
+        return reserved.get();
     }
 
     public void release(long reservedBytes) {

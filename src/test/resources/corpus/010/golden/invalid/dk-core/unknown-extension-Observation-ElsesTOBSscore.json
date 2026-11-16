@@ -1,0 +1,28 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Observation.extension[0]"
+    ],
+    "location": [
+      "Observation.extension[0]",
+      "Line[13] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes for 'http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes#MCS88125'",
+    "expression": [
+      "Observation.code"
+    ],
+    "location": [
+      "Observation.code",
+      "Line[2] Col[4]"
+    ],
+    "severity": "warning"
+  }
+]

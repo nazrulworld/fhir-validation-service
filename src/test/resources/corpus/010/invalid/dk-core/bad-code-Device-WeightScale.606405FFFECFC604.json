@@ -1,0 +1,238 @@
+{
+  "id": "WeightScale.606405FFFECFC604",
+  "identifier": [
+    {
+      "system": "urn:oid:1.2.840.10004.1.1.1.0.0.1.0.0.1.2680",
+      "type": {
+        "coding": [
+          {
+            "code": "not-a-real-code-010",
+            "display": "IEEE 11073 System Identifier",
+            "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers"
+          }
+        ]
+      },
+      "value": "60-64-05-FF-FE-CF-C6-04"
+    },
+    {
+      "system": "http://hl7.org/fhir/sid/eui-48/bluetooth",
+      "type": {
+        "coding": [
+          {
+            "code": "BTMAC",
+            "display": "Bluetooth MAC address",
+            "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers"
+          }
+        ]
+      },
+      "value": "60-64-05-CF-C6-04"
+    }
+  ],
+  "manufacturer": "A&D Medical ",
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice"
+    ]
+  },
+  "modelNumber": "UC-352BLE ",
+  "property": [
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "532353",
+            "display": "MDC_REG_CERT_DATA_CONTINUA_CERT_DEV_LIST",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_REG_CERT_DATA_CONTINUA_CERT_DEV_LIST: Continua certified device list"
+      },
+      "valueCode": [
+        {
+          "coding": [
+            {
+              "code": "32783",
+              "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaPHD"
+            }
+          ],
+          "text": "BluetoothLE: Weighing scale"
+        }
+      ]
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "68220",
+            "display": "MDC_TIME_SYNC_PROTOCOL",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_TIME_SYNC_PROTOCOL: Time synchronization protocol"
+      },
+      "valueCode": [
+        {
+          "coding": [
+            {
+              "code": "532224",
+              "display": "MDC_TIME_SYNC_NONE",
+              "system": "urn:iso:std:iso:11073:10101"
+            }
+          ],
+          "text": "MDC_TIME_SYNC_NONE: No time synchronization"
+        }
+      ]
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "532354.0",
+            "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7"
+          }
+        ],
+        "text": "regulation-status"
+      },
+      "valueCode": [
+        {
+          "coding": [
+            {
+              "code": "N",
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0136"
+            }
+          ],
+          "text": "Device is regulated"
+        }
+      ]
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "68219.0",
+            "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7"
+          }
+        ],
+        "text": "mds-time-capab-real-time-clock"
+      },
+      "valueCode": [
+        {
+          "coding": [
+            {
+              "code": "Y",
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0136"
+            }
+          ],
+          "text": "Real time clock is supported"
+        }
+      ]
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "68219.1",
+            "system": "http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7"
+          }
+        ],
+        "text": "mds-time-capab-set-clock"
+      },
+      "valueCode": [
+        {
+          "coding": [
+            {
+              "code": "Y",
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0136"
+            }
+          ],
+          "text": "Setting the real time clock is supported"
+        }
+      ]
+    }
+  ],
+  "resourceType": "Device",
+  "serialNumber": "5180400664",
+  "specialization": [
+    {
+      "systemType": {
+        "coding": [
+          {
+            "code": "528399",
+            "display": "MDC_DEV_SPEC_PROFILE_SCALE",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_DEV_SPEC_PROFILE_SCALE: Weighing scale"
+      },
+      "version": "1"
+    }
+  ],
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Device WeightScale.606405FFFECFC604</b></p><a name=\"WeightScale.606405FFFECFC604\"> </a><a name=\"hcWeightScale.606405FFFECFC604\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"http://hl7.org/fhir/uv/phd/STU1.1/StructureDefinition-PhdDevice.html\">PhdDevice</a></p></div><p><b>identifier</b>: IEEE 11073 System Identifier/60-64-05-FF-FE-CF-C6-04, Bluetooth MAC address/60-64-05-CF-C6-04</p><p><b>manufacturer</b>: A&amp;D Medical </p><p><b>serialNumber</b>: 5180400664</p><p><b>modelNumber</b>: UC-352BLE </p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 65573}\">MDC_MOC_VMS_MDS_SIMP: Personal health device</span></p><h3>Specializations</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>SystemType</b></td><td><b>Version</b></td></tr><tr><td style=\"display: none\">*</td><td><span title=\"Codes:{urn:iso:std:iso:11073:10101 528399}\">MDC_DEV_SPEC_PROFILE_SCALE: Weighing scale</span></td><td>1</td></tr></table><blockquote><p><b>version</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 532352}\">MDC_REG_CERT_DATA_CONTINUA_VERSION: Continua version</span></p><p><b>value</b>: 4.1</p></blockquote><blockquote><p><b>version</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 531974}\">MDC_ID_PROD_SPEC_HW: Hardware version</span></p><p><b>value</b>: 0.00</p></blockquote><blockquote><p><b>version</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 531975}\">MDC_ID_PROD_SPEC_SW: Software version</span></p><p><b>value</b>: 0.00</p></blockquote><blockquote><p><b>version</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 531976}\">MDC_ID_PROD_SPEC_FW: Firmware version</span></p><p><b>value</b>: WSP002_208</p></blockquote><blockquote><p><b>property</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 532353}\">MDC_REG_CERT_DATA_CONTINUA_CERT_DEV_LIST: Continua certified device list</span></p><p><b>valueCode</b>: <span title=\"Codes:{http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaPHD 32783}\">BluetoothLE: Weighing scale</span></p></blockquote><blockquote><p><b>property</b></p><p><b>type</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 68220}\">MDC_TIME_SYNC_PROTOCOL: Time synchronization protocol</span></p><p><b>valueCode</b>: <span title=\"Codes:{urn:iso:std:iso:11073:10101 532224}\">MDC_TIME_SYNC_NONE: No time synchronization</span></p></blockquote><blockquote><p><b>property</b></p><p><b>type</b>: <span title=\"Codes:{http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7 532354.0}\">regulation-status</span></p><p><b>valueCode</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/v2-0136 N}\">Device is regulated</span></p></blockquote><blockquote><p><b>property</b></p><p><b>type</b>: <span title=\"Codes:{http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7 68219.0}\">mds-time-capab-real-time-clock</span></p><p><b>valueCode</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/v2-0136 Y}\">Real time clock is supported</span></p></blockquote><blockquote><p><b>property</b></p><p><b>type</b>: <span title=\"Codes:{http://hl7.org/fhir/uv/phd/CodeSystem/ASN1ToHL7 68219.1}\">mds-time-capab-set-clock</span></p><p><b>valueCode</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/v2-0136 Y}\">Setting the real time clock is supported</span></p></blockquote></div>",
+    "status": "generated"
+  },
+  "type": {
+    "coding": [
+      {
+        "code": "65573",
+        "display": "MDC_MOC_VMS_MDS_SIMP",
+        "system": "urn:iso:std:iso:11073:10101"
+      }
+    ],
+    "text": "MDC_MOC_VMS_MDS_SIMP: Personal health device"
+  },
+  "version": [
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "532352",
+            "display": "MDC_REG_CERT_DATA_CONTINUA_VERSION",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_REG_CERT_DATA_CONTINUA_VERSION: Continua version"
+      },
+      "value": "4.1"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "531974",
+            "display": "MDC_ID_PROD_SPEC_HW",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_ID_PROD_SPEC_HW: Hardware version"
+      },
+      "value": "0.00"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "531975",
+            "display": "MDC_ID_PROD_SPEC_SW",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_ID_PROD_SPEC_SW: Software version"
+      },
+      "value": "0.00"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "code": "531976",
+            "display": "MDC_ID_PROD_SPEC_FW",
+            "system": "urn:iso:std:iso:11073:10101"
+          }
+        ],
+        "text": "MDC_ID_PROD_SPEC_FW: Firmware version"
+      },
+      "value": "WSP002_208"
+    }
+  ]
+}

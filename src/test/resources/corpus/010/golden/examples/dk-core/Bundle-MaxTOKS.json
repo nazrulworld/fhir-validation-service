@@ -1,0 +1,600 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/",
+      "Line[51] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#80288-4'",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.code"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.code",
+      "Line[62] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.value.ofType(CodeableConcept)",
+      "Line[97] Col[10]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Observation/MaxConsciousness*/.method.coding[0]",
+      "Line[80] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/",
+      "Line[110] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code",
+      "Line[121] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ZZ3160'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code",
+      "Line[121] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8480-6'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.component[0].code",
+      "Line[135] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8462-4'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.component[1].code",
+      "Line[156] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.code.coding[0]",
+      "Line[123] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Observation/MaxBloodPressure*/.method.coding[0]",
+      "Line[186] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/",
+      "Line[207] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8310-5'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code",
+      "Line[218] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ZZ0253'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code",
+      "Line[218] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8310-5'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.code.coding[0]",
+      "Line[220] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/MaxBodyTemperature*/.method.coding[0]",
+      "Line[239] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/",
+      "Line[266] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8867-4'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code",
+      "Line[277] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ZZ3140'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code",
+      "Line[277] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8867-4'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.code.coding[0]",
+      "Line[279] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/MaxHeartRate*/.method.coding[0]",
+      "Line[298] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/",
+      "Line[325] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code",
+      "Line[336] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[0]",
+      "Line[338] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[1]",
+      "Line[342] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#86290005) was not found in the value set 'DK Core SNOMED CT Basic Observation' (http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation|3.5.0), and a code should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable).  (error message = Failed to expand ValueSet 'http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation' (in-memory). Could not validate code http://snomed.info/sct#86290005. Error was: HAPI-0702: Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108; Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.code.coding[1]",
+      "Line[342] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.method.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/MaxRespirationRate*/.method.coding[0]",
+      "Line[358] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/",
+      "Line[385] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.value.ofType(Quantity)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.value.ofType(Quantity)",
+      "Line[514] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[0].high"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[0].high",
+      "Line[466] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].low"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].low",
+      "Line[483] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].high"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].high",
+      "Line[477] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "UCUM Codes that contain human readable annotations like {score} can be misleading (e.g. they are ignored when comparing units). Best Practice is not to depend on annotations in the UCUM code, so this usage should be checked",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[2].low"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[2].low",
+      "Line[494] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9268-4'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].code",
+      "Line[397] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6566-9'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].value.ofType(CodeableConcept)",
+      "Line[406] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9270-0'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].code",
+      "Line[417] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6560-2'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].value.ofType(CodeableConcept)",
+      "Line[426] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9267-6'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].code",
+      "Line[437] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#LA6556-0'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].value.ofType(CodeableConcept)",
+      "Line[446] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[0].high"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[0].high",
+      "Line[466] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].low"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].low",
+      "Line[483] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].high"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[1].high",
+      "Line[477] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown profile http://hl7.org/fhir/StructureDefinition/SimpleQuantity|4.0.1",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[2].low"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.referenceRange[2].low",
+      "Line[494] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[0].value.ofType(CodeableConcept)",
+      "Line[406] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[1].value.ofType(CodeableConcept)",
+      "Line[426] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/MaxGlasgowComaScale*/.component[2].value.ofType(CodeableConcept)",
+      "Line[446] Col[14]"
+    ],
+    "severity": "information"
+  }
+]

@@ -207,6 +207,14 @@ public class ValidationApi {
             return false;
         }
         meter.ig(ctx.queryParams().get("ig"));
+        // Spec 010 FR-008a: tx/txMode shape after the ig shape and before the body.
+        nzi.fhir.validator.core.terminology.TerminologyOverride tx;
+        try {
+            tx = ValidationRequestOptions.terminologyFromRequest(ctx.request());
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return false;
+        }
         if (ctx.body() == null || ctx.body().isEmpty()) {
             ErrorResponder.problem(ctx, 400, "invalid-request", "The request body is empty");
             return false;
@@ -214,9 +222,9 @@ public class ValidationApi {
         SupportedContentType contentType = requestFormat == RequestFormat.XML ? SupportedContentType.XML : SupportedContentType.JSON;
         ctx.put(WORK_STARTED_KEY, true);
         Future<Rendered> rendered = validationService
-                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles, meter,
+                .validate(ApiKeyAuthHandler.caller(ctx), version, ig, ctx.body().asString(), contentType, profiles, tx, meter,
                         outcome -> new Rendered(OutcomeRenderer.render(outcome, responseFormat), outcome.contextLabel(),
-                                outcome.contextAccess()))
+                                outcome.contextAccess(), outcome.effective()))
                 .recover(err -> {
                     if (err instanceof DataFormatException) {
                         return Future.failedFuture(invalidResource(err.getMessage()));
@@ -238,6 +246,13 @@ public class ValidationApi {
                         .putHeader(VALIDATION_CONTEXT_OWNER_HEADER, result.access().ownerShortName())
                         .putHeader(VALIDATION_CONTEXT_SHAREABLE_HEADER, String.valueOf(result.access().shareable()));
             }
+            // Spec 010 FR-010: the terminology setting used, in headers only (the body is unchanged).
+            nzi.fhir.validator.core.terminology.EffectiveTerminology used = result.terminology();
+            rc.response().putHeader(TX_MODE_HEADER, used.settings().mode().wire())
+                    .putHeader(TX_SOURCE_HEADER, used.source().wire());
+            if (used.reportedServer() != null) {
+                rc.response().putHeader(TX_SERVER_HEADER, used.reportedServer());
+            }
             rc.response().end(result.body());
         });
         return true;
@@ -251,7 +266,15 @@ public class ValidationApi {
     /** Names the validator context a 200 result came from: the IG package {@code name#version}, or {@code base}. */
     public static final String VALIDATION_CONTEXT_HEADER = "X-Validation-Context";
 
-    private record Rendered(String body, String context, Access access) {
+    /** Spec 010 FR-010: the terminology mode used ({@code none}, {@code server}, {@code ecosystem}). */
+    public static final String TX_MODE_HEADER = "X-Tx-Mode";
+    /** Spec 010 FR-010: the server used (mode server) or the default server named for mode ecosystem; absent otherwise. */
+    public static final String TX_SERVER_HEADER = "X-Tx-Server";
+    /** Spec 010 FR-010: where the setting came from, {@code request} or {@code context}. */
+    public static final String TX_SOURCE_HEADER = "X-Tx-Source";
+
+    private record Rendered(String body, String context, Access access,
+                            nzi.fhir.validator.core.terminology.EffectiveTerminology terminology) {
     }
 
     /**
@@ -294,6 +317,9 @@ public class ValidationApi {
         // refused the body (e.g. an empty or malformed JSON body).
         try {
             igParameter(ctx);
+            // Spec 010 FR-008a: a bad tx/txMode is reported in its place in the check order, also when the contract
+            // layer refused the request for another reason (e.g. the body).
+            ValidationRequestOptions.terminologyFromRequest(ctx.request());
         } catch (ProblemException e) {
             ErrorResponder.fail(ctx, e);
             return;

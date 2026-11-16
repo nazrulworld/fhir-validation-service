@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/location-physical-type#not-a-real-code-010'",
+    "expression": [
+      "Location.physicalType"
+    ],
+    "location": [
+      "Location.physicalType",
+      "Line[16] Col[4]"
+    ],
+    "severity": "error"
+  }
+]

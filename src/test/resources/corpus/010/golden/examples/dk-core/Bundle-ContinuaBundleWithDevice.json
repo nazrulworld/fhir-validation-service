@@ -1,0 +1,2732 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://terminology.hl7.org/CodeSystem/v2-0203#NI)",
+    "expression": [
+      "Bundle.entry[0].resource/*Patient/Poul*/.identifier[0].type"
+    ],
+    "location": [
+      "Bundle.entry[0].resource/*Patient/Poul*/.identifier[0].type",
+      "Line[15] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'official' (discriminator: ('official' in use))",
+    "expression": [
+      "Bundle.entry[0].resource/*Patient/Poul*/.name[0]"
+    ],
+    "location": [
+      "Bundle.entry[0].resource/*Patient/Poul*/.name[0]",
+      "Line[33] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#SYSID)",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.identifier[0].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.identifier[0].type",
+      "Line[60] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531981'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.type",
+      "Line[197] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532352'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[0].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[0].type",
+      "Line[209] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531974'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[1].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[1].type",
+      "Line[222] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531975'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[2].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[2].type",
+      "Line[235] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531976'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[3].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.version[3].type",
+      "Line[248] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532353'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[0].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[0].type",
+      "Line[81] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532355'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[1].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[1].type",
+      "Line[122] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#68220'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[2].type"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[2].type",
+      "Line[146] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532226'",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[2].valueCode[0]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[2].valueCode[0]",
+      "Line[157] Col[16]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]",
+      "Line[169] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]",
+      "Line[169] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhgDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[1].resource/*Device/Telma.FEEDDADADEADBEEF*/.property[3]",
+      "Line[169] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#SYSID)",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.identifier[0].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.identifier[0].type",
+      "Line[275] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#BTMAC)",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.identifier[1].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.identifier[1].type",
+      "Line[288] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'A&D Medical '",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.manufacturer"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.manufacturer",
+      "Line[300] Col[39]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'UA-651BLE '",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.modelNumber"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.modelNumber",
+      "Line[306] Col[36]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#65573'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.type",
+      "Line[443] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#528391'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.specialization[0].systemType"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.specialization[0].systemType",
+      "Line[426] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532352'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[0].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[0].type",
+      "Line[455] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531974'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[1].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[1].type",
+      "Line[468] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531975'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[2].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[2].type",
+      "Line[481] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531976'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[3].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[3].type",
+      "Line[494] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'BLP009_02_005 '",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[3].value"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.version[3].value",
+      "Line[504] Col[38]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532353'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[0].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[0].type",
+      "Line[309] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#68220'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[1].type"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[1].type",
+      "Line[332] Col[14]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532224'",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[1].valueCode[0]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[1].valueCode[0]",
+      "Line[343] Col[16]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]",
+      "Line[355] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]",
+      "Line[355] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[2]",
+      "Line[355] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]",
+      "Line[377] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]",
+      "Line[377] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[3]",
+      "Line[377] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]",
+      "Line[399] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]",
+      "Line[399] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]"
+    ],
+    "location": [
+      "Bundle.entry[2].resource/*Device/BPMonitor.C4F312FFFE53F2C9*/.property[4]",
+      "Line[399] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67996'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.code"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.code",
+      "Line[527] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device",
+      "Line[537] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device",
+      "Line[537] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device"
+    ],
+    "location": [
+      "Bundle.entry[3].resource/*Observation/BatteryLevel.0944*/.device",
+      "Line[537] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.code"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.code",
+      "Line[584] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.value.ofType(dateTime)"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.value.ofType(dateTime)",
+      "Line[627] Col[53]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device",
+      "Line[594] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device",
+      "Line[594] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device"
+    ],
+    "location": [
+      "Bundle.entry[4].resource/*Observation/CoincidentTimeStamp.0222*/.device",
+      "Line[594] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code",
+      "Line[658] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150020'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code",
+      "Line[658] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ZZ3170'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code",
+      "Line[658] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8480-6'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code",
+      "Line[680] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150021'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code",
+      "Line[680] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8462-4'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code",
+      "Line[708] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150022'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code",
+      "Line[708] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150023'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2].code",
+      "Line[736] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device",
+      "Line[759] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device",
+      "Line[759] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.device",
+      "Line[759] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'supplementalTypesComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]",
+      "Line[679] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'relativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]",
+      "Line[679] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'hiresRelativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]",
+      "Line[679] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'compound' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/MDCnotObject'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]",
+      "Line[679] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'accuracyComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0]",
+      "Line[679] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'supplementalTypesComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]",
+      "Line[707] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'relativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]",
+      "Line[707] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'hiresRelativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]",
+      "Line[707] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'compound' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/MDCnotObject'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]",
+      "Line[707] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'accuracyComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1]",
+      "Line[707] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'supplementalTypesComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'relativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'hiresRelativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'compound' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/MDCnotObject'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'accuracyComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'MDCType' (discriminator: ('urn:iso:std:iso:11073:10101' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code.coding[2]",
+      "Line[670] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'LoincCoding' (discriminator: ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code.coding[2]",
+      "Line[670] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'VSCat' (discriminator: ('vital-signs' in coding.code) and ('http://terminology.hl7.org/CodeSystem/observation-category' in coding.system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.category[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.category[1]",
+      "Line[648] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#85354-9, urn:iso:std:iso:11073:10101#150020, urn:oid:1.2.208.176.2.4#ZZ3170)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.code",
+      "Line[658] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Observation.category: minimum required = 1, but only found 0 (from http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Slice 'Observation.category:VSCat': a matching slice is required, but not found (from http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1). Note that other slices are allowed in addition to this required slice",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = urn:iso:std:iso:11073:10101#67975)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.derivedFrom[0]",
+      "Line[755] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code in fragment CodeSystem 'http://npu-terminology.org#DNK05472'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code",
+      "Line[680] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#8480-6, urn:iso:std:iso:11073:10101#150021, http://npu-terminology.org#DNK05472)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code",
+      "Line[680] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code in fragment CodeSystem 'http://npu-terminology.org#05473'",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code",
+      "Line[708] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#8462-4, urn:iso:std:iso:11073:10101#150022, http://npu-terminology.org#05473)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code",
+      "Line[708] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = urn:iso:std:iso:11073:10101#150023)",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2].code"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2].code",
+      "Line[736] Col[14]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'VSCat' (discriminator: ('vital-signs' in coding.code) and ('http://terminology.hl7.org/CodeSystem/observation-category' in coding.system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.category[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.category[1]",
+      "Line[648] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SystolicBP' (discriminator: ('8480-6' in code.coding.code) and ('http://loinc.org' in code.coding.system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'DiastolicBP' (discriminator: ('8462-4' in code.coding.code) and ('http://loinc.org' in code.coding.system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[2]",
+      "Line[735] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SBPCode' (discriminator: ('8480-6' in code) and ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code.coding[1]",
+      "Line[687] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SBPCode' (discriminator: ('8480-6' in code) and ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[0].code.coding[2]",
+      "Line[692] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'DBPCode' (discriminator: ('8462-4' in code) and ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code.coding[1]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code.coding[1]",
+      "Line[715] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'DBPCode' (discriminator: ('8462-4' in code) and ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[5].resource/*Observation/BloodPressure.Poul.643992*/.component[1].code.coding[2]",
+      "Line[720] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8867-4'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code",
+      "Line[829] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#149546'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code",
+      "Line[829] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device",
+      "Line[854] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device",
+      "Line[854] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.device",
+      "Line[854] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'MDCType' (discriminator: ('urn:iso:std:iso:11073:10101' in system))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code.coding[2]",
+      "Line[841] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'LoincCoding' (discriminator: ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code.coding[2]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code.coding[2]",
+      "Line[841] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'VSCat' (discriminator: ('vital-signs' in coding.code) and ('http://terminology.hl7.org/CodeSystem/observation-category' in coding.system))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.category[1]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.category[1]",
+      "Line[819] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#8867-4, urn:iso:std:iso:11073:10101#149546, http://npu-terminology.org#NPU21692)",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.code",
+      "Line[829] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Observation.category: minimum required = 1, but only found 0 (from http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1)",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Slice 'Observation.category:VSCat': a matching slice is required, but not found (from http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1). Note that other slices are allowed in addition to this required slice",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = urn:iso:std:iso:11073:10101#67975)",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.derivedFrom[0]",
+      "Line[850] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/heartrate|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'VSCat' (discriminator: ('vital-signs' in coding.code) and ('http://terminology.hl7.org/CodeSystem/observation-category' in coding.system))",
+    "expression": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.category[1]"
+    ],
+    "location": [
+      "Bundle.entry[6].resource/*Observation/HeartRate.Poul.1974654*/.category[1]",
+      "Line[819] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#8410608'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.code"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.code",
+      "Line[921] Col[10]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#67975'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#85354-9'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150020'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ZZ3170'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8480-6'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150021'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#8462-4'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150022'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150023'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdCompoundNumericObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#85354-9, urn:iso:std:iso:11073:10101#150020, urn:oid:1.2.208.176.2.4#ZZ3170)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Details for Observation/CoincidentTimeStamp.0222 matching against profile http://hl7.org/fhir/StructureDefinition/vitalsigns|4.0.1",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unknown code in fragment CodeSystem 'http://npu-terminology.org#DNK05472'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#8480-6, urn:iso:std:iso:11073:10101#150021, http://npu-terminology.org#DNK05472)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - Unknown code in fragment CodeSystem 'http://npu-terminology.org#05473'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://loinc.org#8462-4, urn:iso:std:iso:11073:10101#150022, http://npu-terminology.org#05473)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - None of the codings provided are in the value set 'Vital Signs' (http://hl7.org/fhir/ValueSet/observation-vitalsignresult|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = urn:iso:std:iso:11073:10101#150023)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Details for Observation/BloodPressure.Poul.643992 matching against profile http://hl7.org/fhir/StructureDefinition/Observation|4.0.1 - This element does not match any known slice defined in the profile http://hl7.org/fhir/StructureDefinition/bp|4.0.1 (this may not be a problem, but you should check that it's not intended to match a slice)",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Device|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device",
+      "Line[961] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DeviceMetric|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device",
+      "Line[961] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Device, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.device",
+      "Line[961] Col[10]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[0]",
+      "Line[954] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.derivedFrom[1]",
+      "Line[957] Col[12]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].value.ofType(CodeableConcept)",
+      "Line[942] Col[14]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'LOINC' (discriminator: ('http://loinc.org' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SNOMEDCT' (discriminator: ('http://snomed.info/sct' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'NPU' (discriminator: ('http://npu-terminology.org' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'IEEE' (discriminator: ('urn:iso:std:iso:11073:10101' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'MedCom' (discriminator: ('http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SKS' (discriminator: ('urn:oid:1.2.208.176.2.4' in system))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0].code.coding[0]",
+      "Line[935] Col[18]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdBitsEnumerationObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'supplementalTypesComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]",
+      "Line[932] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdBitsEnumerationObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'relativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]",
+      "Line[932] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdBitsEnumerationObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'hiresRelativeTimeComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]",
+      "Line[932] Col[12]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdBitsEnumerationObservation|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitsComponent' (discriminator: (code memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1measurement'))",
+    "expression": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]"
+    ],
+    "location": [
+      "Bundle.entry[7].resource/*Observation/BloodPressureStatus.Poul.133527*/.component[0]",
+      "Line[932] Col[12]"
+    ],
+    "severity": "information"
+  }
+]

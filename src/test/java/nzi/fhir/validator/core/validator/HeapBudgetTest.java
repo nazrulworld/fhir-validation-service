@@ -81,19 +81,15 @@ class HeapBudgetTest {
 
     /** Spec 007 SC-009: a terminology context's code cache adds cacheSize × 1 KB (about 5 MB at the default 5000). */
     @Test
-    void aTerminologyContextAddsItsCodeCacheBound() {
-        var none = nzi.fhir.validator.core.terminology.TerminologySettings.NONE;
-        var server = new nzi.fhir.validator.core.terminology.TerminologySettings(
-                nzi.fhir.validator.core.terminology.TerminologyMode.SERVER, "http://tx.fhir.org/r4");
-        var ecosystem = new nzi.fhir.validator.core.terminology.TerminologySettings(
-                nzi.fhir.validator.core.terminology.TerminologyMode.ECOSYSTEM, null);
-        long base = HeapBudget.estimate(10 * MB, none, 5_000);
-        assertEquals(HeapBudget.estimate(10 * MB), base, "mode none adds nothing");
-        assertEquals(base + 5_000 * 1024L, HeapBudget.estimate(10 * MB, server, 5_000));
-        assertEquals(base + 5_000 * 1024L, HeapBudget.estimate(10 * MB, ecosystem, 5_000));
-        assertTrue(5_000 * 1024L <= 5 * MB, "within the SC-009 per-context bound");
+    void theCodeCacheIsReservedOnceForTheInstance() {
+        // Spec 010 FR-024: one fixed reservation (entries x 1 KB), not one per build.
         HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> 0, () -> { });
-        assertEquals(HeapBudget.estimate(10 * MB) + 5_000 * 1024L, budget.reserve(10 * MB, 5_000 * 1024L));
+        long fixed = 50_000L * nzi.fhir.validator.core.terminology.TerminologyCodeCache.ENTRY_BYTES;
+        budget.reserveFixed(fixed);
+        assertEquals(HeapBudget.estimate(10 * MB), budget.reserve(10 * MB), "a build reserves its packages only");
+        HeapBudget tight = new HeapBudget(() -> HeapBudget.estimate(10 * MB) + fixed - 1, () -> 0, () -> { });
+        tight.reserveFixed(fixed);
+        assertThrows(HeapBudget.InsufficientHeapException.class, () -> tight.reserve(10 * MB));
     }
 
     /** Spec 007 SC-009 (T080): the include check counts the code cache bound too, so a build can't fail later. */
@@ -106,5 +102,33 @@ class HeapBudgetTest {
         budget.admitInclude(10 * MB, 20 * MB);
         ProblemException e = assertThrows(ProblemException.class, () -> budget.admitInclude(10 * MB, 100 * MB));
         assertEquals(413, e.status());
+    }
+
+    /** Spec 010 FR-024: a package already shared costs a build its indexes only (1 byte per unpacked byte). */
+    @Test
+    void sharedPackagesCostTheirIndexesOnly() {
+        assertEquals(40 * MB, HeapBudget.sharedBytes(40 * MB));
+        assertEquals(0, HeapBudget.sharedBytes(-1));
+        HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> 0, () -> { });
+        long reserved = budget.reserve(10 * MB, HeapBudget.sharedBytes(100 * MB));
+        assertEquals(HeapBudget.estimate(10 * MB) + 100 * MB, reserved);
+        assertEquals(reserved, budget.reservedBytes(), "held until released");
+        budget.release(reserved);
+        assertEquals(0, budget.reservedBytes());
+        assertTrue(HeapBudget.estimate(110 * MB) > HeapBudget.estimate(10 * MB) + HeapBudget.sharedBytes(100 * MB),
+                "far less than a full reparse");
+    }
+
+    /** Spec 010 edge case: when memory looks short, a full collection runs first, so released entries count as free. */
+    @Test
+    void aCollectionRunsBeforeABuildIsRefused() {
+        long[] used = {4000 * MB};
+        int[] collections = {0};
+        HeapBudget budget = new HeapBudget(() -> 4096 * MB, () -> used[0], () -> {
+            collections[0]++;
+            used[0] = 100 * MB; // the collection freed definitions no context uses any more
+        });
+        assertDoesNotThrow(() -> budget.reserve(10 * MB, HeapBudget.sharedBytes(20 * MB)));
+        assertEquals(1, collections[0]);
     }
 }

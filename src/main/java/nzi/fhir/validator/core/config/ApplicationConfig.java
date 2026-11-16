@@ -102,10 +102,10 @@ public final class ApplicationConfig {
     /** Terminology time budget of one validation request ({@code FV_TX_REQUEST_BUDGET_MS}, spec 007 FR-019a). */
     public long txRequestBudgetMs() { return section("tx").getLong("requestBudgetMs"); }
 
-    /** Code results cached per context ({@code FV_TX_CACHE_SIZE}, spec 007 FR-018). */
+    /** Code results cached per instance ({@code FV_TX_CACHE_SIZE}, spec 010 FR-013; default 50,000). */
     public int txCacheSize() { return section("tx").getInteger("cacheSize"); }
 
-    /** Lifetime of a cached code result ({@code FV_TX_CACHE_TTL_MS}, spec 007 FR-018). */
+    /** Lifetime of a cached code result ({@code FV_TX_CACHE_TTL_MS}, spec 010 FR-013). */
     public long txCacheTtlMs() { return section("tx").getLong("cacheTtlMs"); }
 
     /** Pooled connections per terminology server ({@code FV_TX_MAX_CONNECTIONS_PER_SERVER}). */

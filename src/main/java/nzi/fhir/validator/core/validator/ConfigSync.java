@@ -30,8 +30,8 @@ import java.util.Map;
  *     included IG, each resolved from the catalog view).</li>
  *     <li>{@code IG_ACCESS} (spec 005): re-reads that version's row and swaps the access of its included contexts;
  *     the included set is unchanged, so nothing is rebuilt.</li>
- *     <li>{@code IG_TERMINOLOGY} (spec 007): re-reads that version's row; the context whose terminology setting changed
- *     is rebuilt with it, the old one serving until the new one is ready.</li>
+ *     <li>{@code IG_TERMINOLOGY} (spec 007): re-reads that version's row and swaps the terminology defaults; nothing is
+ *     rebuilt, the next request uses the new setting (spec 010 FR-001).</li>
  *     <li>{@code PACKAGE}: refreshes the catalog view, invalidates contexts and cached packages whose content changed,
  *     then re-applies every version (a changed dependency set rebuilds the affected pinned contexts).</li>
  * </ul>
@@ -65,6 +65,12 @@ public class ConfigSync {
     private volatile PackageCatalogView reconciled = PackageCatalogView.EMPTY;
     /** Access of the included contexts, per version (spec 005): read without a lock on the validation hot path. */
     private final Map<SupportedFhirVersion, PinnedAccess> pinnedAccess = new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * The terminology default of each included context, per version (spec 010 FR-002): read without a lock on the
+     * validation hot path, swapped on every sync. Not part of what a context is built from (FR-001).
+     */
+    private final Map<SupportedFhirVersion, nzi.fhir.validator.core.terminology.TerminologyDefaults> terminologyDefaults =
+            new java.util.concurrent.ConcurrentHashMap<>();
     /** The versions this instance serves (spec 009): notifications and polls for any other version are ignored. */
     private final nzi.fhir.validator.core.enums.ServedVersions served;
     private PgSubscriber subscriber;
@@ -113,6 +119,30 @@ public class ConfigSync {
         return a == null ? PinnedAccess.EMPTY : a;
     }
 
+    /** The terminology default of {@code version}'s included contexts, as last read from the configuration. */
+    public nzi.fhir.validator.core.terminology.TerminologyDefaults terminologyDefaults(SupportedFhirVersion version) {
+        nzi.fhir.validator.core.terminology.TerminologyDefaults d = terminologyDefaults.get(version);
+        return d == null ? nzi.fhir.validator.core.terminology.TerminologyDefaults.EMPTY : d;
+    }
+
+    /** The defaults of {@code row}'s active contexts. */
+    static nzi.fhir.validator.core.terminology.TerminologyDefaults defaultsOf(ConfigRevisionRepository.ConfigRow row) {
+        Map<String, nzi.fhir.validator.core.terminology.TerminologySettings> settings = new LinkedHashMap<>();
+        for (String key : row.active()) {
+            settings.put(key, row.terminologyOf(key));
+        }
+        return new nzi.fhir.validator.core.terminology.TerminologyDefaults(settings);
+    }
+
+    private void publishDefaults(SupportedFhirVersion version, ConfigRevisionRepository.ConfigRow row) {
+        nzi.fhir.validator.core.terminology.TerminologyDefaults next = defaultsOf(row);
+        nzi.fhir.validator.core.terminology.TerminologyDefaults previous = terminologyDefaults.put(version, next);
+        if (previous != null && !previous.equals(next)) {
+            logger.info("Terminology settings of included IG validator contexts for {} changed (revision {}); applied "
+                    + "without a rebuild", version, row.revision());
+        }
+    }
+
     /**
      * Loads the catalog view, builds every context from the current configuration (completes when all are built or
      * failed), then starts listening and polling.
@@ -130,9 +160,10 @@ public class ConfigSync {
                         List<String> included = row == null ? List.of() : row.active();
                         if (row != null) {
                             pinnedAccess.put(version, row.activeAccess());
+                            publishDefaults(version, row);
                         }
                         PinnedAccess access = row == null ? PinnedAccess.EMPTY : row.activeAccess();
-                        builds.add(registry.applyPinned(version, revision, resolveAll(row, included, view, access))
+                        builds.add(registry.applyPinned(version, revision, resolveAll(included, view, access))
                                 .recover(err -> Future.succeededFuture()));
                     }
                     return Future.join(builds).mapEmpty();
@@ -147,19 +178,9 @@ public class ConfigSync {
      * FR-024). The owner comes from the shared configuration, so every instance resolves the same context.
      */
     static Map<String, ResolvedContext> resolveAll(List<String> included, PackageCatalogView view, PinnedAccess access) {
-        return resolveAll(null, included, view, access);
-    }
-
-    /**
-     * As {@link #resolveAll(List, PackageCatalogView, PinnedAccess)}, with each context's terminology setting from
-     * {@code row} (spec 007 FR-004): it is part of what the context is built from, so a changed setting rebuilds it.
-     */
-    static Map<String, ResolvedContext> resolveAll(ConfigRevisionRepository.ConfigRow row, List<String> included,
-                                                   PackageCatalogView view, PinnedAccess access) {
         Map<String, ResolvedContext> contexts = new LinkedHashMap<>();
         for (String key : included) {
-            ResolvedContext ctx = ResolvedContext.forKey(key, view, access);
-            contexts.put(key, row == null ? ctx : ctx.withTerminology(row.terminologyOf(key)));
+            contexts.put(key, ResolvedContext.forKey(key, view, access));
         }
         return contexts;
     }
@@ -303,6 +324,7 @@ public class ConfigSync {
                     }
                     // Access first: it takes effect at once, also while a changed context is still being built.
                     PinnedAccess previous = pinnedAccess.put(version, row.activeAccess());
+                    publishDefaults(version, row);
                     if (previous != null && !previous.equals(row.activeAccess())) {
                         logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
@@ -311,7 +333,7 @@ public class ConfigSync {
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());
                     return view.compose(v -> registry.applyPinned(version, row.revision(),
-                            resolveAll(row, row.active(), v, row.activeAccess())));
+                            resolveAll(row.active(), v, row.activeAccess())));
                 });
     }
 

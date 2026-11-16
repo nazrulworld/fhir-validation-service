@@ -1,0 +1,28 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/v2-0286#not-a-real-code-010'",
+    "expression": [
+      "PractitionerRole.code[0]"
+    ],
+    "location": [
+      "PractitionerRole.code[0]",
+      "Line[23] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://snomed.info/sct/554471000005108/version/20240331 for 'http://snomed.info/sct/554471000005108/version/20240331#408443003'",
+    "expression": [
+      "PractitionerRole.specialty[0]"
+    ],
+    "location": [
+      "PractitionerRole.specialty[0]",
+      "Line[46] Col[6]"
+    ],
+    "severity": "warning"
+  }
+]

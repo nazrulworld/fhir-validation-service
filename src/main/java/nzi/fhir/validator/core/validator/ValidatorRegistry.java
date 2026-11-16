@@ -141,6 +141,33 @@ public class ValidatorRegistry {
         this.buildFailureListener = listener;
     }
 
+    /** The terminology defaults shown in {@link #details()} (spec 010 FR-002): configuration, not build input. */
+    private volatile java.util.function.Function<SupportedFhirVersion, nzi.fhir.validator.core.terminology.TerminologyDefaults>
+            terminologyDefaults = v -> nzi.fhir.validator.core.terminology.TerminologyDefaults.EMPTY;
+
+    /** Told about every snapshot that was replaced or dropped (spec 010: its cached code results are dropped). */
+    private volatile Consumer<ValidatorSnapshot> retiredListener = s -> { };
+
+    public void setTerminologyDefaults(
+            java.util.function.Function<SupportedFhirVersion, nzi.fhir.validator.core.terminology.TerminologyDefaults> defaults) {
+        this.terminologyDefaults = defaults;
+    }
+
+    public void setRetiredSnapshotListener(Consumer<ValidatorSnapshot> listener) {
+        this.retiredListener = listener == null ? s -> { } : listener;
+    }
+
+    private void retired(ValidatorSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        try {
+            retiredListener.accept(snapshot);
+        } catch (RuntimeException e) {
+            logger.warn("Retired-snapshot listener failed", e);
+        }
+    }
+
     /** Source of the current package metadata, used to reconcile contexts with replaced packages. */
     public void setCatalog(Supplier<PackageCatalogView> catalog) {
         this.catalog = catalog;
@@ -262,6 +289,7 @@ public class ValidatorRegistry {
         List<Future<Void>> waits = new ArrayList<>();
         List<Slot> toBuild = new ArrayList<>();
         List<SnapshotKey> evicted = new ArrayList<>();
+        List<ValidatorSnapshot> retired = new ArrayList<>();
         synchronized (lock) {
             VersionState state;
             try {
@@ -284,6 +312,7 @@ public class ValidatorRegistry {
                 Slot s = it.next().getValue();
                 if (s.kind == Kind.PINNED && s.key.fhirVersion() == version && !desired.containsKey(s.key)) {
                     it.remove();
+                    retired.add(s.snapshot);
                     cancelRetryLocked(s);
                     evicted.add(s.key);
                     logger.info("Validator context {} is no longer included; dropped", s.key);
@@ -327,6 +356,7 @@ public class ValidatorRegistry {
             }
         }
         evicted.forEach(k -> emitEviction(k, EVICT_EXCLUDED));
+        retired.forEach(this::retired);
         toBuild.forEach(this::build);
         return Future.join(waits).<Void>mapEmpty().onSuccess(v -> {
             synchronized (lock) {
@@ -387,10 +417,14 @@ public class ValidatorRegistry {
             boolean retry = false;
             Kind kind;
             ValidatorSnapshot built = null;
+            ValidatorSnapshot replaced = null;
             synchronized (lock) {
                 kind = slot.kind;
                 if (ar.succeeded()) {
                     built = ar.result();
+                    if (slot.snapshot != null && slot.snapshot != built) {
+                        replaced = slot.snapshot;
+                    }
                     slot.snapshot = built;
                     slot.activeResolved = resolved;
                     slot.appliedRevision = Math.max(slot.appliedRevision,
@@ -412,6 +446,7 @@ public class ValidatorRegistry {
                     slot.applyWaiters.clear();
                 }
             }
+            retired(replaced);
             if (ar.succeeded()) {
                 emitBuild(slot.key, kind, BUILD_SUCCESS);
             } else {
@@ -561,10 +596,9 @@ public class ValidatorRegistry {
                 int privateCount = 0;
                 for (Slot s : slots) {
                     if (publicLocked(s)) {
-                        // Spec 007 FR-004: the setting the context is built (or being built) with.
-                        ResolvedContext shown = s.building || s.activeResolved == null ? s.wanted : s.activeResolved;
+                        // Spec 010 FR-002: the configured default (applied per request, never built in).
                         contexts.add(describeSlot(s).put("key", s.key.igPackage()).put("kind", "pinned")
-                                .put("terminology", shown.terminology().toJson()));
+                                .put("terminology", terminologyDefaults.apply(version).get(s.key.igPackage()).toJson()));
                     } else {
                         privateCount++;
                         privateStates.put(s.status.name(), privateStates.getInteger(s.status.name()) + 1);

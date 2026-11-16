@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-practitioner|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'officialHealthAuthorization' (discriminator: ('https://autregweb.sst.dk' in identifier.system))",
+    "expression": [
+      "Practitioner.qualification[0]"
+    ],
+    "location": [
+      "Practitioner.qualification[0]",
+      "Line[18] Col[6]"
+    ],
+    "severity": "information"
+  }
+]

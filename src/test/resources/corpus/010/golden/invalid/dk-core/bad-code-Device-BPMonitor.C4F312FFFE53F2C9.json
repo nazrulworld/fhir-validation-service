@@ -1,0 +1,366 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'systemIdIdentifier' (discriminator: ('http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers' in type.coding.system) and ('SYSID' in type.coding.code))",
+    "expression": [
+      "Device.identifier[0]"
+    ],
+    "location": [
+      "Device.identifier[0]",
+      "Line[4] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'btmacAddressIdentifier' (discriminator: ('http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers' in type.coding.system) and ('BTMAC' in type.coding.code))",
+    "expression": [
+      "Device.identifier[0]"
+    ],
+    "location": [
+      "Device.identifier[0]",
+      "Line[4] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'macAddressIdentifier' (discriminator: ('http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers' in type.coding.system) and ('ETHMAC' in type.coding.code))",
+    "expression": [
+      "Device.identifier[0]"
+    ],
+    "location": [
+      "Device.identifier[0]",
+      "Line[4] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Device.property[2]"
+    ],
+    "location": [
+      "Device.property[2]",
+      "Line[86] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Device.property[2]"
+    ],
+    "location": [
+      "Device.property[2]",
+      "Line[86] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Device.property[2]"
+    ],
+    "location": [
+      "Device.property[2]",
+      "Line[86] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[108] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[108] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Device.property[3]"
+    ],
+    "location": [
+      "Device.property[3]",
+      "Line[108] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'bitProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/ASN1attribute'))",
+    "expression": [
+      "Device.property[4]"
+    ],
+    "location": [
+      "Device.property[4]",
+      "Line[130] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'quantitiesProperty' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/Quantity11073MDC'))",
+    "expression": [
+      "Device.property[4]"
+    ],
+    "location": [
+      "Device.property[4]",
+      "Line[130] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'codedListProperties' (discriminator: (type memberOf 'http://hl7.org/fhir/uv/phd/ValueSet/CodeableConcept11073MDC'))",
+    "expression": [
+      "Device.property[4]"
+    ],
+    "location": [
+      "Device.property[4]",
+      "Line[130] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Slice 'Device.identifier:systemIdIdentifier': a matching slice is required, but not found (from http://hl7.org/fhir/uv/phd/StructureDefinition/PhdDevice|1.1.0). Note that other slices are allowed in addition to this required slice",
+    "expression": [
+      "Device"
+    ],
+    "location": [
+      "Device",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#not-a-real-code-010'",
+    "expression": [
+      "Device.identifier[0].type"
+    ],
+    "location": [
+      "Device.identifier[0].type",
+      "Line[6] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#not-a-real-code-010)",
+    "expression": [
+      "Device.identifier[0].type"
+    ],
+    "location": [
+      "Device.identifier[0].type",
+      "Line[6] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://hl7.org/fhir/uv/phd/CodeSystem/ContinuaDeviceIdentifiers#BTMAC)",
+    "expression": [
+      "Device.identifier[1].type"
+    ],
+    "location": [
+      "Device.identifier[1].type",
+      "Line[19] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'A&D Medical '",
+    "expression": [
+      "Device.manufacturer"
+    ],
+    "location": [
+      "Device.manufacturer",
+      "Line[31] Col[33]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'UA-651BLE '",
+    "expression": [
+      "Device.modelNumber"
+    ],
+    "location": [
+      "Device.modelNumber",
+      "Line[37] Col[30]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#65573'",
+    "expression": [
+      "Device.type"
+    ],
+    "location": [
+      "Device.type",
+      "Line[174] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#528391'",
+    "expression": [
+      "Device.specialization[0].systemType"
+    ],
+    "location": [
+      "Device.specialization[0].systemType",
+      "Line[157] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532352'",
+    "expression": [
+      "Device.version[0].type"
+    ],
+    "location": [
+      "Device.version[0].type",
+      "Line[186] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531974'",
+    "expression": [
+      "Device.version[1].type"
+    ],
+    "location": [
+      "Device.version[1].type",
+      "Line[199] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531975'",
+    "expression": [
+      "Device.version[2].type"
+    ],
+    "location": [
+      "Device.version[2].type",
+      "Line[212] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#531976'",
+    "expression": [
+      "Device.version[3].type"
+    ],
+    "location": [
+      "Device.version[3].type",
+      "Line[225] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "value should not start or finish with whitespace 'BLP009_02_005 '",
+    "expression": [
+      "Device.version[3].value"
+    ],
+    "location": [
+      "Device.version[3].value",
+      "Line[235] Col[32]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532353'",
+    "expression": [
+      "Device.property[0].type"
+    ],
+    "location": [
+      "Device.property[0].type",
+      "Line[40] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#68220'",
+    "expression": [
+      "Device.property[1].type"
+    ],
+    "location": [
+      "Device.property[1].type",
+      "Line[63] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#532224'",
+    "expression": [
+      "Device.property[1].valueCode[0]"
+    ],
+    "location": [
+      "Device.property[1].valueCode[0]",
+      "Line[74] Col[10]"
+    ],
+    "severity": "warning"
+  }
+]

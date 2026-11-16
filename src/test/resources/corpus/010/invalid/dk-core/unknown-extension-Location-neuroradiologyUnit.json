@@ -1,0 +1,54 @@
+{
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/unknown-extension",
+      "valueString": "x"
+    }
+  ],
+  "id": "neuroradiologyUnit",
+  "managingOrganization": {
+    "reference": "Organization/CenterForDiabetesTeamKvalitet"
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-location"
+    ]
+  },
+  "mode": "instance",
+  "name": "Neuro unit",
+  "partOf": {
+    "reference": "Location/ambulance"
+  },
+  "physicalType": {
+    "coding": [
+      {
+        "code": "ro",
+        "display": "Room",
+        "system": "http://terminology.hl7.org/CodeSystem/location-physical-type"
+      }
+    ]
+  },
+  "resourceType": "Location",
+  "status": "active",
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "+4523292329"
+    }
+  ],
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Location neuroradiologyUnit</b></p><a name=\"neuroradiologyUnit\"> </a><a name=\"hcneuroradiologyUnit\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-location.html\">Danish Core Location Profile</a></p></div><p><b>status</b>: Active</p><p><b>name</b>: Neuro unit</p><p><b>mode</b>: Instance</p><p><b>type</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/v3-RoleCode RNEU}\">Neuroradiology unit</span></p><p><b>telecom</b>: <a href=\"tel:+4523292329\">+4523292329</a></p><p><b>physicalType</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/location-physical-type ro}\">Room</span></p><p><b>managingOrganization</b>: <a href=\"Organization-CenterForDiabetesTeamKvalitet.html\">Organization: identifier = urn:oid:1.2.208.176.1.1#1133201000016001,http://cvr.dk#64942212; type = sundhedscenter</a></p><p><b>partOf</b>: <a href=\"Location-ambulance.html\">Location: status = active; description = Ambulance provided by Acme Corp; mode = kind; type = Ambulance; telecom = ph: +4523292833(Mobile); physicalType = Vehicle</a></p></div>",
+    "status": "generated"
+  },
+  "type": [
+    {
+      "coding": [
+        {
+          "code": "RNEU",
+          "display": "Neuroradiology unit",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode"
+        }
+      ]
+    }
+  ]
+}

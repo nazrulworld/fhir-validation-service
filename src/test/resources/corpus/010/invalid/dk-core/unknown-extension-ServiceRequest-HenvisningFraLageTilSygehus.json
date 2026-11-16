@@ -1,0 +1,34 @@
+{
+  "authoredOn": "2021-05-01",
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/unknown-extension",
+      "valueString": "x"
+    }
+  ],
+  "id": "HenvisningFraLageTilSygehus",
+  "intent": "proposal",
+  "priority": "asap",
+  "reasonCode": [
+    {
+      "text": "John henvises til onkologisk specialundersøgelse hurtigts muligt pga mistanke om modermærkekræft"
+    }
+  ],
+  "reasonReference": [
+    {
+      "reference": "Condition/JohnMelanoma"
+    }
+  ],
+  "requester": {
+    "reference": "Organization/LaegerneHasserisBymidte"
+  },
+  "resourceType": "ServiceRequest",
+  "status": "active",
+  "subject": {
+    "reference": "Patient/john"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: ServiceRequest HenvisningFraLageTilSygehus</b></p><a name=\"HenvisningFraLageTilSygehus\"> </a><a name=\"hcHenvisningFraLageTilSygehus\"> </a><p><b>status</b>: Aktiv</p><p><b>intent</b>: Proposal</p><p><b>priority</b>: ASAP</p><p><b>subject</b>: <a href=\"Patient-john.html\">Johnny Mand, DoB: 1960-01-02 ( urn:oid:1.2.208.176.1.2#0201609995)</a></p><p><b>authoredOn</b>: 2021-05-01</p><p><b>requester</b>: <a href=\"Organization-LaegerneHasserisBymidte.html\">Organization Lægerne Hasseris Bymidte</a></p><p><b>reasonCode</b>: <span title=\"Codes:\">John henvises til onkologisk specialundersøgelse hurtigts muligt pga mistanke om modermærkekræft</span></p><p><b>reasonReference</b>: <a href=\"Condition-JohnMelanoma.html\">Condition Modermærkekræft i huden</a></p></div>",
+    "status": "generated"
+  }
+}

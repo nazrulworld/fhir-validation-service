@@ -1,0 +1,41 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'official' (discriminator: ('official' in use))",
+    "expression": [
+      "Patient.name[0]"
+    ],
+    "location": [
+      "Patient.name[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Patient.extension[0]"
+    ],
+    "location": [
+      "Patient.extension[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'IdentifierType' (http://hl7.org/fhir/ValueSet/identifier-type|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = http://terminology.hl7.org/CodeSystem/v2-0203#NI)",
+    "expression": [
+      "Patient.identifier[0].type"
+    ],
+    "location": [
+      "Patient.identifier[0].type",
+      "Line[12] Col[8]"
+    ],
+    "severity": "warning"
+  }
+]

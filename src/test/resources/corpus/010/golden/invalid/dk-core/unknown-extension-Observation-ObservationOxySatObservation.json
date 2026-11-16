@@ -1,0 +1,158 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#2708-6'",
+    "expression": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code"
+    ],
+    "location": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code",
+      "Line[32] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150456'",
+    "expression": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code"
+    ],
+    "location": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code",
+      "Line[32] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#2708-6'",
+    "expression": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code.coding[0]"
+    ],
+    "location": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code.coding[0]",
+      "Line[34] Col[12]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:iso:std:iso:11073:10101 for 'urn:iso:std:iso:11073:10101#150456'",
+    "expression": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code.coding[1]"
+    ],
+    "location": [
+      "Observation.contained[0]/*Observation/ObservationOxySatBasicObservationOrg*/.code.coding[1]",
+      "Line[39] Col[12]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Observation.extension[0]"
+    ],
+    "location": [
+      "Observation.extension[0]",
+      "Line[78] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/DocumentReference|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/ImagingStudy|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Media|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/Observation|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to resolve the profile reference 'http://hl7.org/fhir/StructureDefinition/MolecularSequence|4.0.1'",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Invalid Resource target type. Found Observation, but expected one of ([])",
+    "expression": [
+      "Observation.derivedFrom[0]"
+    ],
+    "location": [
+      "Observation.derivedFrom[0]",
+      "Line[72] Col[6]"
+    ],
+    "severity": "error"
+  }
+]

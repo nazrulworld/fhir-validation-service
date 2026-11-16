@@ -1,0 +1,80 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'dueTo' (discriminator: ('http://hl7.org/fhir/StructureDefinition/condition-dueTo' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[31] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'conditionLastAssertedDate' (discriminator: ('http://hl7.dk/fhir/core/StructureDefinition/ConditionLastAssertedDate' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[31] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-condition|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'notFollowedAnymore' (discriminator: ('http://hl7.dk/fhir/core/StructureDefinition/NotFollowedAnymore' in url))",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[31] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "Condition.extension[0]"
+    ],
+    "location": [
+      "Condition.extension[0]",
+      "Line[31] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@5081cd33]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present",
+    "expression": [
+      "Condition.code.coding[0]"
+    ],
+    "location": [
+      "Condition.code.coding[0]",
+      "Line[22] Col[8]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#441509002) was not found in the value set 'Condition/Problem/Diagnosis Codes' (http://hl7.org/fhir/ValueSet/condition-code|4.0.1), and a code is required from this value set.  (error message = Failed to expand ValueSet 'http://hl7.org/fhir/ValueSet/condition-code' (in-memory). Could not validate code http://snomed.info/sct#441509002. Error was: HAPI-2646: Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@5081cd33]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present; Unable to expand ValueSet: cannot apply filters '[org.hl7.fhir.r5.model.ValueSet$ConceptSetFilterComponent@5081cd33]' because CodeSystem 'http://snomed.info/sct' is ignored/not-present)",
+    "expression": [
+      "Condition.code.coding[0]"
+    ],
+    "location": [
+      "Condition.code.coding[0]",
+      "Line[22] Col[8]"
+    ],
+    "severity": "error"
+  }
+]

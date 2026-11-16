@@ -1,0 +1,93 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The pattern [system http://terminology.hl7.org/CodeSystem/observation-category, code vital-signs, and display 'null'] defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 not found. Issues: [ValidationMessage[level=ERROR,type=VALUE,location=Observation.category[0].coding.code,message=Value is 'not-a-real-code-010' but is fixed to 'vital-signs' in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0#Observation]]",
+    "expression": [
+      "Observation.category[0]"
+    ],
+    "location": [
+      "Observation.category[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/observation-category#not-a-real-code-010'",
+    "expression": [
+      "Observation.category[0]"
+    ],
+    "location": [
+      "Observation.category[0]",
+      "Line[3] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Observation.code"
+    ],
+    "location": [
+      "Observation.code",
+      "Line[12] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#9279-1'",
+    "expression": [
+      "Observation.code.coding[0]"
+    ],
+    "location": [
+      "Observation.code.coding[0]",
+      "Line[14] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108",
+    "expression": [
+      "Observation.code.coding[1]"
+    ],
+    "location": [
+      "Observation.code.coding[1]",
+      "Line[18] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://snomed.info/sct#86290005) was not found in the value set 'DK Core SNOMED CT Basic Observation' (http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation|3.5.0), and a code should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable).  (error message = Failed to expand ValueSet 'http://hl7.dk/fhir/core/ValueSet/dk-core-SCTBasicObservation' (in-memory). Could not validate code http://snomed.info/sct#86290005. Error was: HAPI-0702: Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108; Unable to expand ValueSet because CodeSystem could not be found: http://snomed.info/sct|http://snomed.info/sct/554471000005108)",
+    "expression": [
+      "Observation.code.coding[1]"
+    ],
+    "location": [
+      "Observation.code.coding[1]",
+      "Line[18] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'SCTCode' (discriminator: system.where(value = 'http://snomed.info/sct|http://snomed.info/sct/554471000005108').exists())",
+    "expression": [
+      "Observation.method.coding[0]"
+    ],
+    "location": [
+      "Observation.method.coding[0]",
+      "Line[34] Col[8]"
+    ],
+    "severity": "information"
+  }
+]

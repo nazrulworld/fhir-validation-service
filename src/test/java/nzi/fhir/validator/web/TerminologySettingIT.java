@@ -36,7 +36,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Spec 007 US4 and US2 (FR-001 to FR-005, FR-010 a, FR-012, FR-012a, SC-006): the terminology setting of an included
  * context is set on include, changed with PATCH by its owner or the system organisation, checked against the allowlist
- * when saved, and propagated to every instance, which rebuilds the context. Two instances share one database.
+ * when saved, and propagated to every instance, which applies it without a rebuild (spec 010 FR-001). Two instances
+ * share one database.
  * <p>
  * The allowlist comes from rows written to {@code tx_registry_snapshot} before the instances start (the "last good
  * list" the registry left behind): R4 lists {@code https://tx.fhir.ch/r4} and {@code http://tx.fhir.org/r4}; STU3
@@ -237,32 +238,55 @@ class TerminologySettingIT extends BaseTestContainer {
                 })));
     }
 
-    /** US4-1, US4-2, SC-006: a change by the owner reaches the other instance, which rebuilds the context. */
+    /**
+     * US4-1, US4-2, SC-006, amended by spec 010 FR-001 and SC-001: a change by the owner reaches the other instance
+     * within the propagation window, and no instance rebuilds the context (the same snapshot keeps serving).
+     */
     @Test
-    void aChangeByTheOwnerRebuildsTheContextOnEveryInstance(Vertx vertx, VertxTestContext ctx) {
+    void aChangeByTheOwnerReachesEveryInstanceWithoutARebuild(Vertx vertx, VertxTestContext ctx) {
         String ig = "tx.r4#3.0.0";
         long[] revision = new long[1];
+        long[] snapshotIds = new long[2];
         include("R4", "tx.r4", "3.0.0", null, keyA)
-                .compose(r -> Await.until(vertx, PROPAGATION_MS, "B builds it", () -> Future.succeededFuture(shown(b, "R4", ig) != null)))
-                .compose(ms -> patch("R4", ig, new JsonObject().put("terminology", ecosystem()), keyA))
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "B builds it",
+                        () -> Future.succeededFuture("ACTIVE".equals(state(b, "R4", ig)))))
+                .compose(ms -> Future.all(snapshotOf(a, ig), snapshotOf(b, ig)))
+                .compose(cf -> {
+                    snapshotIds[0] = cf.<Long>resultAt(0);
+                    snapshotIds[1] = cf.<Long>resultAt(1);
+                    return patch("R4", ig, new JsonObject().put("terminology", ecosystem()), keyA);
+                })
                 .compose(r -> {
                     ctx.verify(() -> {
                         assertEquals(200, r.statusCode(), r.bodyAsString());
                         assertEquals(ecosystem(), r.bodyAsJsonObject().getJsonObject("terminology"));
+                        assertFalse(r.bodyAsJsonObject().encode().contains("rebuild"), "no build-related warning (FR-001a)");
                     });
                     revision[0] = r.bodyAsJsonObject().getLong("revision");
-                    // The status shows the new setting as soon as the rebuild starts; wait until it has finished.
-                    return Await.until(vertx, PROPAGATION_MS, "B rebuilds with the new setting",
-                            () -> Future.succeededFuture(ecosystem().equals(shown(b, "R4", ig))
-                                    && "ACTIVE".equals(state(b, "R4", ig))));
+                    return Await.until(vertx, PROPAGATION_MS, "B shows the new setting",
+                            () -> Future.succeededFuture(ecosystem().equals(shown(b, "R4", ig))));
                 })
-                .compose(ms -> patch("R4", ig, new JsonObject().put("terminology", ecosystem()), keyA))
+                .compose(ms -> Future.all(snapshotOf(a, ig), snapshotOf(b, ig)))
+                .compose(cf -> {
+                    ctx.verify(() -> {
+                        assertEquals(snapshotIds[0], cf.<Long>resultAt(0), "A did not rebuild");
+                        assertEquals(snapshotIds[1], cf.<Long>resultAt(1), "B did not rebuild");
+                        assertEquals("ACTIVE", state(b, "R4", ig));
+                    });
+                    return patch("R4", ig, new JsonObject().put("terminology", ecosystem()), keyA);
+                })
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     assertEquals(revision[0], r.bodyAsJsonObject().getLong("revision"), "the same value changes nothing");
-                    assertEquals("ACTIVE", state(b, "R4", ig), "no rebuild was started by the unchanged value");
                     ctx.completeNow();
                 })));
+    }
+
+    /** The id of the snapshot an instance serves for {@code ig} (a rebuild gives a new one). */
+    private static Future<Long> snapshotOf(AppHarness on, String ig) {
+        return on.bootstrap().services().validatorRegistry()
+                .snapshot(nzi.fhir.validator.core.validator.SnapshotKey.of(nzi.fhir.validator.core.enums.SupportedFhirVersion.R4, ig))
+                .map(nzi.fhir.validator.core.validator.ValidatorSnapshot::snapshotId);
     }
 
     /** US4-3, contracts §3: other organisations get 404 (even with an unlisted server: 404 comes first). */

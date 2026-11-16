@@ -52,8 +52,12 @@ public class IgPackageService {
     private Function<SupportedFhirVersion, Future<Void>> applyLocally = v -> Future.succeededFuture();
     /** Given (expanded package bytes, additional heap bytes), fails with 413 when the new context can't fit. */
     private java.util.function.BiFunction<Long, Long, Future<Void>> admitBuild = (bytes, extra) -> Future.succeededFuture();
-    /** {@code FV_TX_CACHE_SIZE}: a new terminology context's code cache bound is part of its include check (SC-009). */
-    private volatile int txCacheSize;
+    /** Spec 010 FR-024: whether a package's definitions are already shared on this instance (its build costs less). */
+    private volatile java.util.function.BiPredicate<SupportedFhirVersion, String> sharedPackage = (v, p) -> false;
+
+    public void setSharedPackage(java.util.function.BiPredicate<SupportedFhirVersion, String> sharedPackage) {
+        this.sharedPackage = sharedPackage == null ? (v, p) -> false : sharedPackage;
+    }
     /** Spec 007: the terminology allowlist settings are checked against when saved (FR-010 a, FR-012a). */
     private volatile nzi.fhir.validator.core.terminology.TxServerAllowlistSource txAllowlist =
             nzi.fhir.validator.core.terminology.TxServerAllowlistSource.EMPTY;
@@ -107,11 +111,6 @@ public class IgPackageService {
         this.servedVersions = served;
     }
 
-    /** {@code FV_TX_CACHE_SIZE}, for the include check of a context with a terminology mode (spec 007 SC-009). */
-    public void setTxCacheSize(int txCacheSize) {
-        this.txCacheSize = txCacheSize;
-    }
-
     /** The allowlist a terminology setting is checked against when saved (spec 007). */
     public void setTxAllowlist(nzi.fhir.validator.core.terminology.TxServerAllowlistSource txAllowlist) {
         this.txAllowlist = txAllowlist;
@@ -133,6 +132,11 @@ public class IgPackageService {
      * @return {@code {status, fhirVersion, key {fhirVersion, igPackage}, revision, included, resolved, warnings}}
      */
     static final String NOT_APPLIED_WARNING = "Committed; this instance has not applied it yet, see /health";
+    /**
+     * A change (access, sharing, terminology) that this instance has not applied yet. Never mentions a build: a
+     * terminology change needs none (spec 010 FR-001a).
+     */
+    static final String STILL_PROPAGATING_WARNING = "Committed; this instance has not applied the change yet, see /health";
     static final String STILL_APPLYING_WARNING = "Committed; this instance is still rebuilding its validator, see /health";
 
     public Future<JsonObject> include(SupportedFhirVersion fhirVersion, String name, String requestedVersion) {
@@ -244,10 +248,16 @@ public class IgPackageService {
                         included.add(key);
                         List<String> includedList = List.copyOf(included);
                         Access contextAccess = new Access(caller.orgId(), caller.orgShortName(), share);
-                        // The new context must fit in this instance's heap (after evicting on-demand contexts).
-                        long cacheBytes = nzi.fhir.validator.core.validator.HeapBudget.terminologyCacheBytes(txSettings, txCacheSize);
-                        return PostgresPackageCacheManager.expandedBytes(tx, resolution.resolved())
-                                .compose(bytes -> admitBuild.apply(bytes, cacheBytes))
+                        // The new context must fit in this instance's heap. The code cache is reserved once per
+                        // instance, not per context (spec 010 FR-024).
+                        // Spec 010 FR-024: packages already shared on this instance count for their indexes only.
+                        List<String> sharedNow = resolution.resolved().stream()
+                                .filter(p -> sharedPackage.test(fhirVersion, p)).toList();
+                        List<String> unshared = resolution.resolved().stream().filter(p -> !sharedNow.contains(p)).toList();
+                        return PostgresPackageCacheManager.expandedBytes(tx, unshared)
+                                .compose(bytes -> PostgresPackageCacheManager.expandedBytes(tx, sharedNow)
+                                        .compose(sharedBytes -> admitBuild.apply(bytes,
+                                                nzi.fhir.validator.core.validator.HeapBudget.sharedBytes(sharedBytes))))
                                 .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
                                         ConfigRevisionRepository.KIND_IG, caller.orgId(), share, txSettings))
                                 .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolution.resolved(),
@@ -432,7 +442,7 @@ public class IgPackageService {
                                             .put("revision", revision)));
                 }))
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
-                                () -> warnings.add(STILL_APPLYING_WARNING))
+                                () -> warnings.add(STILL_PROPAGATING_WARNING))
                         .recover(err -> {
                             logger.warn("Access change of IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
                             warnings.add(NOT_APPLIED_WARNING);

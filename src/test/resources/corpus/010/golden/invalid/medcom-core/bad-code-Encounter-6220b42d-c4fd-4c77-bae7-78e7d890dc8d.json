@@ -1,0 +1,40 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown code 'http://terminology.hl7.org/CodeSystem/v3-ActCode#not-a-real-code-010'",
+    "expression": [
+      "Encounter.class"
+    ],
+    "location": [
+      "Encounter.class",
+      "Line[2] Col[4]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (http://terminology.hl7.org/CodeSystem/v3-ActCode#not-a-real-code-010) was not found in the value set 'MedComCoreEncounterClassCodes' (http://medcomfhir.dk/ig/terminology/ValueSet/medcom-core-encounter-class|2.0.0), and a code is required from this value set.  (error message = Unknown code 'http://terminology.hl7.org/CodeSystem/v3-ActCode#not-a-real-code-010'; Unknown code 'http://terminology.hl7.org/CodeSystem/v3-ActCode#not-a-real-code-010' for in-memory expansion of ValueSet 'http://medcomfhir.dk/ig/terminology/ValueSet/medcom-core-encounter-class')",
+    "expression": [
+      "Encounter.class"
+    ],
+    "location": [
+      "Encounter.class",
+      "Line[2] Col[4]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Bundled or contained reference not found within the bundle/resource Patient/733cef33-3626-422b-955d-d506aaa65fe1",
+    "expression": [
+      "Encounter.subject"
+    ],
+    "location": [
+      "Encounter.subject"
+    ],
+    "severity": "error"
+  }
+]

@@ -1,0 +1,27 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Encounter.status: minimum required = 1, but only found 0 (from http://medcomfhir.dk/ig/core/StructureDefinition/medcom-core-encounter|4.0.0)",
+    "expression": [
+      "Encounter"
+    ],
+    "location": [
+      "Encounter",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Bundled or contained reference not found within the bundle/resource Patient/733cef33-3626-422b-955d-d506aaa65fe1",
+    "expression": [
+      "Encounter.subject"
+    ],
+    "location": [
+      "Encounter.subject"
+    ],
+    "severity": "error"
+  }
+]

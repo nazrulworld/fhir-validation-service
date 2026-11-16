@@ -62,8 +62,11 @@ class TerminologyRoutingIT {
 
     static ValidatorSnapshot snapshot(TerminologySettings tx, TerminologyServices services) throws Exception {
         String ig = TestPackages.TX_IG_NAME + "#" + TestPackages.TX_IG_VERSION;
-        return SnapshotBuilder.assemble(SnapshotKey.of(SupportedFhirVersion.R4, ig), 1, List.of(ig), Map.of(),
-                List.of(terminologyIg()), tx, services);
+        // Spec 010: the snapshot holds definitions only; the setting is the default each validation applies.
+        ValidatorSnapshot s = SnapshotBuilder.assemble(SnapshotKey.of(SupportedFhirVersion.R4, ig), 1, List.of(ig), Map.of(),
+                List.of(terminologyIg()), services);
+        s.setDefaultTerminologyForTests(tx);
+        return s;
     }
 
     private TerminologyServices services() {

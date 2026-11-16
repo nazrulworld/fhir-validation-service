@@ -1,0 +1,136 @@
+{
+  "code": {
+    "coding": [
+      {
+        "code": "248241002",
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/554471000005108"
+      }
+    ]
+  },
+  "component": [
+    {
+      "code": {
+        "coding": [
+          {
+            "code": "9268-4",
+            "display": "Glasgow coma score motor",
+            "system": "http://loinc.org"
+          }
+        ]
+      },
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "LA6566-9",
+            "display": "Localizing pain",
+            "system": "http://loinc.org"
+          }
+        ]
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "code": "9270-0",
+            "display": "Glasgow coma score verbal",
+            "system": "http://loinc.org"
+          }
+        ]
+      },
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "LA6560-2",
+            "display": "Confused",
+            "system": "http://loinc.org"
+          }
+        ]
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "code": "9267-6",
+            "display": "Glasgow coma score eye opening",
+            "system": "http://loinc.org"
+          }
+        ]
+      },
+      "valueCodeableConcept": {
+        "coding": [
+          {
+            "code": "LA6556-0",
+            "display": "Eyes open spontaneously",
+            "system": "http://loinc.org"
+          }
+        ]
+      }
+    }
+  ],
+  "effectiveDateTime": "2023-08-08T13:30:00.000Z",
+  "id": "MaxGlasgowComaScale",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
+    ]
+  },
+  "referenceRange": [
+    {
+      "high": {
+        "code": "{score}",
+        "system": "http://unitsofmeasure.org",
+        "unit": "score",
+        "value": 8
+      },
+      "type": {
+        "text": "Severe TBI"
+      }
+    },
+    {
+      "high": {
+        "code": "{score}",
+        "system": "http://unitsofmeasure.org",
+        "unit": "score",
+        "value": 12
+      },
+      "low": {
+        "code": "{score}",
+        "system": "http://unitsofmeasure.org",
+        "unit": "score",
+        "value": 9
+      },
+      "type": {
+        "text": "Moderate TBI"
+      }
+    },
+    {
+      "low": {
+        "code": "{score}",
+        "system": "http://unitsofmeasure.org",
+        "unit": "score",
+        "value": 13
+      },
+      "type": {
+        "text": "Mild TBI"
+      }
+    }
+  ],
+  "resourceType": "Observation",
+  "status": "final",
+  "subject": {
+    "reference": "Patient/Max"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Observation MaxGlasgowComaScale</b></p><a name=\"MaxGlasgowComaScale\"> </a><a name=\"hcMaxGlasgowComaScale\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-observation.html\">Danish Core Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>code</b>: <span title=\"Codes:{http://snomed.info/sct 248241002}\">Glasgow comaskala</span></p><p><b>subject</b>: <a href=\"Patient-Max.html\">Mr. Max Test Berggren(official) Mand, DoB: 1972-07-01 ( urn:oid:1.2.208.176.1.2#0107729995)</a></p><p><b>effective</b>: 2023-08-08 13:30:00+0000</p><p><b>value</b>: 13 score<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code{score} = '{score}')</span></p><blockquote><p><b>referenceRange</b></p><p><b>high</b>: 8 score<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code{score} = '{score}')</span></p><p><b>type</b>: <span title=\"Codes:\">Severe TBI</span></p></blockquote><blockquote><p><b>referenceRange</b></p><p><b>low</b>: 9 score<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code{score} = '{score}')</span></p><p><b>high</b>: 12 score<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code{score} = '{score}')</span></p><p><b>type</b>: <span title=\"Codes:\">Moderate TBI</span></p></blockquote><blockquote><p><b>referenceRange</b></p><p><b>low</b>: 13 score<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code{score} = '{score}')</span></p><p><b>type</b>: <span title=\"Codes:\">Mild TBI</span></p></blockquote><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 9268-4}\">Glasgow coma score motor</span></p><p><b>value</b>: <span title=\"Codes:{http://loinc.org LA6566-9}\">Localizing pain</span></p></blockquote><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 9270-0}\">Glasgow coma score verbal</span></p><p><b>value</b>: <span title=\"Codes:{http://loinc.org LA6560-2}\">Confused</span></p></blockquote><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 9267-6}\">Glasgow coma score eye opening</span></p><p><b>value</b>: <span title=\"Codes:{http://loinc.org LA6556-0}\">Eyes open spontaneously</span></p></blockquote></div>",
+    "status": "generated"
+  },
+  "valueQuantity": {
+    "code": "{score}",
+    "system": "http://unitsofmeasure.org",
+    "unit": "score",
+    "value": 13
+  }
+}

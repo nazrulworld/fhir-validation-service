@@ -1,0 +1,28 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'official' (discriminator: ('official' in use))",
+    "expression": [
+      "Patient.name[0]"
+    ],
+    "location": [
+      "Patient.name[0]",
+      "Line[16] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Constraint failed: d-ecpr: 'Requirement of danish D-eCPR. See https://www.nspop.dk/pages/viewpage.action?pageId=226757583#eCPRFormater(XeCPRogDeCPR)-Formatetfordecentraleerstatningspersonnumre-D-eCPR' (defined in http://hl7.dk/fhir/core/StructureDefinition/dk-core-d-ecpr-identifier)",
+    "expression": [
+      "Patient.identifier[0].value"
+    ],
+    "location": [
+      "Patient.identifier[0].value",
+      "Line[7] Col[21]"
+    ],
+    "severity": "error"
+  }
+]

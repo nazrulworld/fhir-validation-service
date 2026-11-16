@@ -1,0 +1,28 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "PractitionerRole.extension[0]"
+    ],
+    "location": [
+      "PractitionerRole.extension[0]",
+      "Line[14] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://snomed.info/sct/554471000005108/version/20240331 for 'http://snomed.info/sct/554471000005108/version/20240331#408443003'",
+    "expression": [
+      "PractitionerRole.specialty[0]"
+    ],
+    "location": [
+      "PractitionerRole.specialty[0]",
+      "Line[30] Col[6]"
+    ],
+    "severity": "warning"
+  }
+]

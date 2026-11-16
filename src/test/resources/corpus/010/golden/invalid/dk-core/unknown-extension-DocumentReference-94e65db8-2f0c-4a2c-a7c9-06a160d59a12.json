@@ -1,0 +1,158 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Slicing cannot be evaluated: Problem with use of resolve() - profile [CanonicalType[http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version]] on DocumentReference.extension:versionid could not be resolved (@char 1)",
+    "expression": [
+      "DocumentReference.extension[0]"
+    ],
+    "location": [
+      "DocumentReference.extension[0]",
+      "Line[138] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Slicing cannot be evaluated: Problem with use of resolve() - profile [CanonicalType[http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version]] on DocumentReference.extension:versionid could not be resolved (@char 1)",
+    "expression": [
+      "DocumentReference.extension[1]"
+    ],
+    "location": [
+      "DocumentReference.extension[1]",
+      "Line[142] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "DocumentReference.extension:versionid: Found 0 matches, but unable to check minimum required (DocumentReference.extension) due to lack of slicing validation (from http://hl7.dk/fhir/core/StructureDefinition/dk-core-minimaldocumentreference|3.5.0)",
+    "expression": [
+      "DocumentReference"
+    ],
+    "location": [
+      "DocumentReference",
+      "Line[1] Col[2]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Extension url 'http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version' is not valid (invalid Version '5.0')",
+    "expression": [
+      "DocumentReference.extension[0][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version']"
+    ],
+    "location": [
+      "DocumentReference.extension[0][url='http://hl7.org/fhir/5.0/StructureDefinition/extension-DocumentReference.version']",
+      "Line[138] Col[6]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Unknown extension http://example.org/fhir/StructureDefinition/unknown-extension",
+    "expression": [
+      "DocumentReference.extension[1]"
+    ],
+    "location": [
+      "DocumentReference.extension[1]",
+      "Line[142] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://loinc.org for 'http://loinc.org#56446-8'",
+    "expression": [
+      "DocumentReference.type"
+    ],
+    "location": [
+      "DocumentReference.type",
+      "Line[176] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.184.100.9 for 'urn:oid:1.2.208.184.100.9#001'",
+    "expression": [
+      "DocumentReference.category[0]"
+    ],
+    "location": [
+      "DocumentReference.category[0]",
+      "Line[11] Col[6]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Coding has no system. A code with no system has no defined meaning, and it cannot be validated. A system should be provided",
+    "expression": [
+      "DocumentReference.securityLabel[0]"
+    ],
+    "location": [
+      "DocumentReference.securityLabel[0]",
+      "Line[160] Col[6]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "None of the codings provided are in the value set 'SecurityLabels' (http://hl7.org/fhir/ValueSet/security-labels|4.0.1), and a coding should come from this value set unless it has no suitable code (note that the validator cannot judge what is suitable) (codes = null#N)",
+    "expression": [
+      "DocumentReference.securityLabel[0]"
+    ],
+    "location": [
+      "DocumentReference.securityLabel[0]",
+      "Line[160] Col[6]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.184.100.10 for 'urn:oid:1.2.208.184.100.10#urn:ad:dk:medcom:apd-v2.0.1:full'",
+    "expression": [
+      "DocumentReference.content[0].format"
+    ],
+    "location": [
+      "DocumentReference.content[0].format",
+      "Line[94] Col[8]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "The Coding provided (urn:oid:1.2.208.184.100.10#urn:ad:dk:medcom:apd-v2.0.1:full) was not found in the value set 'IHE ValueSet of Format Codes for use with Document Sharing' (http://ihe.net/fhir/ihe.formatcode.fhir/ValueSet/formatcode|1.4.0), and a code is recommended to come from this value set.  (error message = CodeSystem is unknown and can't be validated: urn:oid:1.2.208.184.100.10 for 'urn:oid:1.2.208.184.100.10#urn:ad:dk:medcom:apd-v2.0.1:full'; Unknown code 'urn:oid:1.2.208.184.100.10#urn:ad:dk:medcom:apd-v2.0.1:full' for in-memory expansion of ValueSet 'http://ihe.net/fhir/ihe.formatcode.fhir/ValueSet/formatcode')",
+    "expression": [
+      "DocumentReference.content[0].format"
+    ],
+    "location": [
+      "DocumentReference.content[0].format",
+      "Line[94] Col[8]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: urn:oid:1.2.208.176.2.4 for 'urn:oid:1.2.208.176.2.4#ALAL03'",
+    "expression": [
+      "DocumentReference.context.event[0]"
+    ],
+    "location": [
+      "DocumentReference.context.event[0]",
+      "Line[103] Col[8]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "id": "e9eacb62-666b-11ed-9022-0242ac120002",
+  "meta": {
+    "profile": [
+      "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+    ]
+  },
+  "name": [
+    {
+      "family": "Vestergaard",
+      "given": [
+        "Bo",
+        "Test"
+      ],
+      "use": "official"
+    }
+  ],
+  "resourceType": "Practitioner",
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Practitioner e9eacb62-666b-11ed-9022-0242ac120002</b></p><a name=\"e9eacb62-666b-11ed-9022-0242ac120002\"> </a><a name=\"hce9eacb62-666b-11ed-9022-0242ac120002\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-medcom-core-practitioner.html\">MedComCorePractitioner</a></p></div><p><b>name</b>: Bo Test Vestergaard (Official)</p></div>",
+    "status": "generated"
+  }
+}

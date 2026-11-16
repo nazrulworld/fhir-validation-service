@@ -1,0 +1,27 @@
+{
+  "class": {
+    "code": "AMB",
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+  },
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/unknown-extension",
+      "valueString": "x"
+    }
+  ],
+  "id": "6220b42d-c4fd-4c77-bae7-78e7d890dc8d",
+  "meta": {
+    "profile": [
+      "http://medcomfhir.dk/ig/core/StructureDefinition/medcom-core-encounter"
+    ]
+  },
+  "resourceType": "Encounter",
+  "status": "planned",
+  "subject": {
+    "reference": "Patient/733cef33-3626-422b-955d-d506aaa65fe1"
+  },
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Encounter 6220b42d-c4fd-4c77-bae7-78e7d890dc8d</b></p><a name=\"6220b42d-c4fd-4c77-bae7-78e7d890dc8d\"> </a><a name=\"hc6220b42d-c4fd-4c77-bae7-78e7d890dc8d\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-medcom-core-encounter.html\">MedComCoreEncounter</a></p></div><p><b>status</b>: Planned</p><p><b>class</b>: <a href=\"http://terminology.hl7.org/7.0.1/CodeSystem-v3-ActCode.html#v3-ActCode-AMB\">ActCode AMB</a>: ambulatory</p><p><b>subject</b>: <a href=\"Patient-733cef33-3626-422b-955d-d506aaa65fe1.html\">Elmer (official) (no stated gender), DoB Unknown ( urn:oid:1.2.208.176.1.2#2509479989)</a></p></div>",
+    "status": "generated"
+  }
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "ServiceRequest.status: minimum required = 1, but only found 0 (from http://hl7.org/fhir/StructureDefinition/ServiceRequest|4.0.1)",
+    "expression": [
+      "ServiceRequest"
+    ],
+    "location": [
+      "ServiceRequest",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  }
+]

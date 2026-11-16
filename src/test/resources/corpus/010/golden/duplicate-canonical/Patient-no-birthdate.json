@@ -1,0 +1,54 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'official' (discriminator: ('official' in use))",
+    "expression": [
+      "Patient.name[0]"
+    ],
+    "location": [
+      "Patient.name[0]",
+      "Line[10] Col[6]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Patient.identifier: minimum required = 1, but only found 0 (from http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0)",
+    "expression": [
+      "Patient"
+    ],
+    "location": [
+      "Patient",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Patient.birthDate: minimum required = 1, but only found 0 (from http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient|3.5.0)",
+    "expression": [
+      "Patient"
+    ],
+    "location": [
+      "Patient",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Constraint failed: dom-6: 'A resource should have narrative for robust management' (defined in http://hl7.org/fhir/StructureDefinition/DomainResource) (Best Practice Recommendation)",
+    "expression": [
+      "Patient"
+    ],
+    "location": [
+      "Patient",
+      "Line[1] Col[2]"
+    ],
+    "severity": "warning"
+  }
+]

@@ -236,12 +236,15 @@ public class TerminologyClients {
         }
     }
 
+    /** The source of every "not checked" answer: such an answer is never cached (spec 010 FR-012). */
+    public static final String NOT_CHECKED_SOURCE = "fhir-validation-service terminology";
+
     /** The degraded answer for a code check (research R7): a warning with a fixed text, never an error. */
     public static IValidationSupport.CodeValidationResult notChecked(String reason, String system, String code) {
         return new IValidationSupport.CodeValidationResult()
                 .setSeverity(IValidationSupport.IssueSeverity.WARNING)
                 .setMessage(Reasons.text(reason, system, code))
-                .setSourceDetails("fhir-validation-service terminology");
+                .setSourceDetails(NOT_CHECKED_SOURCE);
     }
 
     /** The fixed reason texts of a "not checked" answer (research R7). */

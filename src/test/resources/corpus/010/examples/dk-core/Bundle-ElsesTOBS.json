@@ -1,0 +1,482 @@
+{
+  "entry": [
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Patient/else",
+      "resource": {
+        "birthDate": "1991-02-02",
+        "gender": "female",
+        "id": "else",
+        "identifier": [
+          {
+            "system": "urn:oid:1.2.208.176.1.2",
+            "value": "0201919990"
+          }
+        ],
+        "maritalStatus": {
+          "coding": [
+            {
+              "code": "M",
+              "display": "Married",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
+            }
+          ]
+        },
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-patient"
+          ]
+        },
+        "name": [
+          {
+            "family": "Lauridsen",
+            "given": [
+              "Else",
+              "Test"
+            ],
+            "text": "Else Test Lauridsen",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient",
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Patient_else\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Patient else</b></p><a name=\"else\"> </a><a name=\"hcelse\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-patient.html\">Danish Core Patient Profile</a></p></div><p style=\"border: 1px #661aff solid; background-color: #e6e6ff; padding: 10px;\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</p><hr/><table class=\"grid\"><tr><td style=\"background-color: #f3f5da\" title=\"Known Marital status of Patient\">Marital Status:</td><td colspan=\"3\"><span title=\"Codes:{http://terminology.hl7.org/CodeSystem/v3-MaritalStatus M}\">Married</span></td></tr></table></div>",
+          "status": "generated"
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElseConsciousness",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "6942003",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElseConsciousness",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+          ]
+        },
+        "method": {
+          "coding": [
+            {
+              "code": "733985002",
+              "display": "Reported (qualifier value)",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElseConsciousness\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseConsciousness</b></p><a name=\"ElseConsciousness\"> </a><a name=\"hcElseConsciousness\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-observation.html\">Danish Core Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>code</b>: <span title=\"Codes:{http://snomed.info/sct 6942003}\">Bevidsthedsniveau</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: <span title=\"Codes:{http://snomed.info/sct 450847001}\">reagerer på smerte</span></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 733985002}\">Reported (qualifier value)</span></p></div>",
+          "status": "generated"
+        },
+        "valueCodeableConcept": {
+          "coding": [
+            {
+              "code": "450847001",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElseBloodPressure",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "85354-9",
+              "system": "http://loinc.org"
+            },
+            {
+              "code": "75367002",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "8480-6",
+                  "system": "http://loinc.org"
+                },
+                {
+                  "code": "407554009",
+                  "system": "http://snomed.info/sct",
+                  "version": "http://snomed.info/sct/554471000005108"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "code": "mm[Hg]",
+              "system": "http://unitsofmeasure.org",
+              "unit": "mmHg",
+              "value": 147
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "8462-4",
+                  "system": "http://loinc.org"
+                },
+                {
+                  "code": "407555005",
+                  "system": "http://snomed.info/sct",
+                  "version": "http://snomed.info/sct/554471000005108"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "code": "mm[Hg]",
+              "system": "http://unitsofmeasure.org",
+              "unit": "mmHg",
+              "value": 95
+            }
+          }
+        ],
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElseBloodPressure",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation"
+          ]
+        },
+        "method": {
+          "coding": [
+            {
+              "code": "272391002",
+              "display": "Measurement technique (qualifier value)",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElseBloodPressure\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseBloodPressure</b></p><a name=\"ElseBloodPressure\"> </a><a name=\"hcElseBloodPressure\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-basic-observation.html\">Danish Core Basic Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 85354-9}, {http://snomed.info/sct 75367002}\">Blood pressure panel with all children optional</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 272391002}\">Measurement technique (qualifier value)</span></p><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8480-6}, {http://snomed.info/sct 407554009}\">Systolic blood pressure</span></p><p><b>value</b>: 147 mmHg<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codemm[Hg] = 'mm[Hg]')</span></p></blockquote><blockquote><p><b>component</b></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8462-4}, {http://snomed.info/sct 407555005}\">Diastolic blood pressure</span></p><p><b>value</b>: 95 mmHg<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codemm[Hg] = 'mm[Hg]')</span></p></blockquote></div>",
+          "status": "generated"
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElseBodyTemperature",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8310-5",
+              "system": "http://loinc.org"
+            },
+            {
+              "code": "276885007",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElseBodyTemperature",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation"
+          ]
+        },
+        "method": {
+          "coding": [
+            {
+              "code": "272391002",
+              "display": "Measurement technique (qualifier value)",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElseBodyTemperature\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseBodyTemperature</b></p><a name=\"ElseBodyTemperature\"> </a><a name=\"hcElseBodyTemperature\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-basic-observation.html\">Danish Core Basic Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8310-5}, {http://snomed.info/sct 276885007}\">Body temperature</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: 38.7 grader celcius<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codeCel = 'Cel')</span></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 272391002}\">Measurement technique (qualifier value)</span></p></div>",
+          "status": "generated"
+        },
+        "valueQuantity": {
+          "code": "Cel",
+          "system": "http://unitsofmeasure.org",
+          "unit": "grader celcius",
+          "value": 38.7
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElseHeartRate",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8867-4",
+              "system": "http://loinc.org"
+            },
+            {
+              "code": "364075005",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElseHeartRate",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation"
+          ]
+        },
+        "method": {
+          "coding": [
+            {
+              "code": "272391002",
+              "display": "Measurement technique (qualifier value)",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElseHeartRate\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseHeartRate</b></p><a name=\"ElseHeartRate\"> </a><a name=\"hcElseHeartRate\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-basic-observation.html\">Danish Core Basic Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8867-4}, {http://snomed.info/sct 364075005}\">Heart rate</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: 92 slag/minut<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code/min = '/min')</span></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 272391002}\">Measurement technique (qualifier value)</span></p></div>",
+          "status": "generated"
+        },
+        "valueQuantity": {
+          "code": "/min",
+          "system": "http://unitsofmeasure.org",
+          "unit": "slag/minut",
+          "value": 92
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElseRespirationRate",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "9279-1",
+              "system": "http://loinc.org"
+            },
+            {
+              "code": "86290005",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElseRespirationRate",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-basic-observation"
+          ]
+        },
+        "method": {
+          "coding": [
+            {
+              "code": "272391002",
+              "display": "Measurement technique (qualifier value)",
+              "system": "http://snomed.info/sct",
+              "version": "http://snomed.info/sct/554471000005108"
+            }
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElseRespirationRate\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElseRespirationRate</b></p><a name=\"ElseRespirationRate\"> </a><a name=\"hcElseRespirationRate\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-basic-observation.html\">Danish Core Basic Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 9279-1}, {http://snomed.info/sct 86290005}\">Respiratory rate</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: 19 /min<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code/min = '/min')</span></p><p><b>method</b>: <span title=\"Codes:{http://snomed.info/sct 272391002}\">Measurement technique (qualifier value)</span></p></div>",
+          "status": "generated"
+        },
+        "valueQuantity": {
+          "code": "/min",
+          "system": "http://unitsofmeasure.org",
+          "unit": "/min",
+          "value": 19
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Observation/ElsesTOBSscore",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "MCS88125",
+              "display": "Pt—Tidlig Opsporing af Begyndende Sygdom (TOBS) score; antal (værdi 0-15) = ?",
+              "system": "http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes"
+            }
+          ]
+        },
+        "effectiveDateTime": "2023-09-12T17:45:00.000Z",
+        "id": "ElsesTOBSscore",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation"
+          ]
+        },
+        "performer": [
+          {
+            "reference": "Practitioner/SidselSygeplejerske"
+          }
+        ],
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/else"
+        },
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Observation_ElsesTOBSscore\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Observation ElsesTOBSscore</b></p><a name=\"ElsesTOBSscore\"> </a><a name=\"hcElsesTOBSscore\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-observation.html\">Danish Core Observation Profile</a></p></div><p><b>status</b>: Final</p><p><b>code</b>: <span title=\"Codes:{http://medcomfhir.dk/ig/terminology/CodeSystem/medcom-observation-codes MCS88125}\">Pt—Tidlig Opsporing af Begyndende Sygdom (TOBS) score; antal (værdi 0-15) = ?</span></p><p><b>subject</b>: <a href=\"Patient-else.html\">Else Test Lauridsen(official) Kvinde, DoB: 1991-02-02 ( urn:oid:1.2.208.176.1.2#0201919990)</a></p><p><b>effective</b>: 2023-09-12 17:45:00+0000</p><p><b>performer</b>: <a href=\"Practitioner-SidselSygeplejerske.html\">Practitioner Sidsel Andersen</a></p><p><b>value</b>: 3 1<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  code1 = '1')</span></p></div>",
+          "status": "generated"
+        },
+        "valueQuantity": {
+          "code": "1",
+          "system": "http://unitsofmeasure.org",
+          "value": 3
+        }
+      }
+    },
+    {
+      "fullUrl": "http://hl7.dk/fhir/core/Practitioner/SidselSygeplejerske",
+      "resource": {
+        "id": "SidselSygeplejerske",
+        "meta": {
+          "profile": [
+            "http://hl7.dk/fhir/core/StructureDefinition/dk-core-practitioner"
+          ]
+        },
+        "name": [
+          {
+            "family": "Andersen",
+            "given": [
+              "Sidsel"
+            ],
+            "text": "Sidsel Andersen"
+          }
+        ],
+        "qualification": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "code": "5166",
+                  "display": "Sygeplejerske",
+                  "system": "http://hl7.dk/fhir/core/CodeSystem/DkCoreProfessionGroupCodes"
+                }
+              ]
+            }
+          }
+        ],
+        "resourceType": "Practitioner",
+        "text": {
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><a name=\"Practitioner_SidselSygeplejerske\"> </a><p class=\"res-header-id\"><b>Generated Narrative: Practitioner SidselSygeplejerske</b></p><a name=\"SidselSygeplejerske\"> </a><a name=\"hcSidselSygeplejerske\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-dk-core-practitioner.html\">Danish Core Practitioner Profile</a></p></div><p><b>name</b>: Sidsel Andersen</p><h3>Qualifications</h3><table class=\"grid\"><tr><td style=\"display: none\">-</td><td><b>Code</b></td></tr><tr><td style=\"display: none\">*</td><td><span title=\"Codes:{http://hl7.dk/fhir/core/CodeSystem/DkCoreProfessionGroupCodes 5166}\">Sygeplejerske</span></td></tr></table></div>",
+          "status": "generated"
+        }
+      }
+    }
+  ],
+  "id": "ElsesTOBS",
+  "resourceType": "Bundle",
+  "timestamp": "2023-09-12T17:45:00.000Z",
+  "type": "collection"
+}

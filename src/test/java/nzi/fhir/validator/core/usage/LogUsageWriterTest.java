@@ -41,7 +41,8 @@ class LogUsageWriterTest {
             JsonObject json = new JsonObject(messages.get(0));
             assertEquals(List.of("requestId", "startedAt", "apiKeyId", "apiKeyName", "orgId", "fhirVersion", "ig", "profiles",
                     "contentType", "requestBytes", "outcome", "httpStatus", "issues", "clientIp", "totalMs", "queueMs",
-                    "contextMs", "validateMs", "cpuTimeNs", "allocatedBytes"), List.copyOf(json.fieldNames()));
+                    "contextMs", "validateMs", "cpuTimeNs", "allocatedBytes", "txMode", "txServer", "txSource"),
+                    List.copyOf(json.fieldNames()), "spec 010 FR-010 adds the terminology setting at the end");
             assertEquals(List.of("fatal", "error", "warning", "information"),
                     List.copyOf(json.getJsonObject("issues").fieldNames()));
             assertEquals("2026-11-11T10:15:02.113Z", json.getString("startedAt"));

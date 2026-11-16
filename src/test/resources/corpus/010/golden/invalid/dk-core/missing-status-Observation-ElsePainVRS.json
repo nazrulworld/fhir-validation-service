@@ -1,0 +1,54 @@
+[
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "This element does not match any known slice defined in the profile http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0 (this may not be a problem, but you should check that it's not intended to match a slice) - Does not match slice 'valueQuantity' (discriminator: ($this is Quantity))",
+    "expression": [
+      "Observation.value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.value.ofType(CodeableConcept)",
+      "Line[27] Col[4]"
+    ],
+    "severity": "information"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Observation.status: minimum required = 1, but only found 0 (from http://hl7.dk/fhir/core/StructureDefinition/dk-core-observation|3.5.0)",
+    "expression": [
+      "Observation"
+    ],
+    "location": [
+      "Observation",
+      "Line[1] Col[2]"
+    ],
+    "severity": "error"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "CodeSystem is unknown and can't be validated: http://localSystem.dk for 'http://localSystem.dk#d253770d-ce0b-4320-9806-b8fbe9e5af8a'",
+    "expression": [
+      "Observation.value.ofType(CodeableConcept)"
+    ],
+    "location": [
+      "Observation.value.ofType(CodeableConcept)",
+      "Line[27] Col[4]"
+    ],
+    "severity": "warning"
+  },
+  {
+    "code": "processing",
+    "details": null,
+    "diagnostics": "Best Practice Recommendation: In general, all observations should have a performer",
+    "expression": [
+      "Observation"
+    ],
+    "location": [
+      "Observation",
+      "Line[1] Col[2]"
+    ],
+    "severity": "warning"
+  }
+]

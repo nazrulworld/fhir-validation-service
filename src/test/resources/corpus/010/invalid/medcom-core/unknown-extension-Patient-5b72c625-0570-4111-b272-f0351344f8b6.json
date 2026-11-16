@@ -1,0 +1,56 @@
+{
+  "address": [
+    {
+      "city": "Hillerød",
+      "line": [
+        "Testpark Allé 48"
+      ],
+      "postalCode": "3400"
+    }
+  ],
+  "deceasedBoolean": false,
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/unknown-extension",
+      "valueString": "x"
+    }
+  ],
+  "id": "5b72c625-0570-4111-b272-f0351344f8b6",
+  "identifier": [
+    {
+      "system": "urn:oid:1.2.208.176.1.2",
+      "value": "1509819996"
+    }
+  ],
+  "meta": {
+    "profile": [
+      "http://medcomfhir.dk/ig/core/StructureDefinition/medcom-core-patient"
+    ]
+  },
+  "name": [
+    {
+      "family": "Berggren",
+      "given": [
+        "Brita Test"
+      ],
+      "use": "official"
+    }
+  ],
+  "resourceType": "Patient",
+  "telecom": [
+    {
+      "system": "phone",
+      "use": "work",
+      "value": "12457812"
+    },
+    {
+      "system": "phone",
+      "use": "home",
+      "value": "98879887"
+    }
+  ],
+  "text": {
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Patient 5b72c625-0570-4111-b272-f0351344f8b6</b></p><a name=\"5b72c625-0570-4111-b272-f0351344f8b6\"> </a><a name=\"hc5b72c625-0570-4111-b272-f0351344f8b6\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\"/><p style=\"margin-bottom: 0px\">Profile: <a href=\"StructureDefinition-medcom-core-patient.html\">MedComCorePatient</a></p></div><p style=\"border: 1px #661aff solid; background-color: #e6e6ff; padding: 10px;\">Brita Test Berggren (official) (no stated gender), DoB Unknown ( urn:oid:1.2.208.176.1.2#1509819996)</p><hr/><table class=\"grid\"><tr><td style=\"background-color: #f3f5da\" title=\"Known status of Patient\">Deceased:</td><td colspan=\"3\">false</td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Ways to contact the Patient\">Contact Detail</td><td colspan=\"3\"><ul><li>ph: 12457812(Work)</li><li>ph: 98879887(Home)</li><li>Testpark Allé 48 Hillerød 3400 </li></ul></td></tr></table></div>",
+    "status": "generated"
+  }
+}

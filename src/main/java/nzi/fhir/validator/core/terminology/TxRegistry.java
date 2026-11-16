@@ -52,6 +52,27 @@ public final class TxRegistry implements TxServerAllowlistSource {
     /** Set only by the test JVM ({@code fv.tx.registry.offline}): never fetch, keep the stored or built-in list. */
     private final boolean offline;
     private volatile TxServerAllowlist allowlist;
+    /** Told when a version's allowed servers change (spec 010 research R4: ecosystem routes may differ then). */
+    private volatile java.util.function.Consumer<SupportedFhirVersion> listChanged = v -> { };
+
+    public void setListChangeListener(java.util.function.Consumer<SupportedFhirVersion> listener) {
+        this.listChanged = listener == null ? v -> { } : listener;
+    }
+
+    /** Notifies the listener for every version whose allowed servers differ between {@code before} and {@code after}. */
+    private void notifyChanges(TxServerAllowlist before, TxServerAllowlist after) {
+        for (SupportedFhirVersion v : SupportedFhirVersion.values()) {
+            java.util.Set<String> a = before.list(v).map(l -> l.entries().keySet()).orElse(java.util.Set.of());
+            java.util.Set<String> b = after.list(v).map(l -> l.entries().keySet()).orElse(java.util.Set.of());
+            if (!a.equals(b)) {
+                try {
+                    listChanged.accept(v);
+                } catch (RuntimeException e) {
+                    logger.warn("Allowlist change listener failed", e);
+                }
+            }
+        }
+    }
     private long timer = -1;
 
     /**
@@ -187,8 +208,10 @@ public final class TxRegistry implements TxServerAllowlistSource {
                     });
                     Instant fetchedAt = Instant.now();
                     Instant lastUpdate = parseInstant(body.getValue("last-update")).orElse(null);
+                    TxServerAllowlist before = allowlist;
                     allowlist = allowlist.withVersion(version, TxServerAllowlist.VersionList.of(kept,
                             TxServerAllowlist.Source.REGISTRY, fetchedAt, lastUpdate));
+                    notifyChanges(before, allowlist);
                     logger.info("Terminology registry lists {} open server(s) for {}", kept.size(), version);
                     return store(version, kept, fetchedAt, lastUpdate);
                 });
@@ -211,6 +234,11 @@ public final class TxRegistry implements TxServerAllowlistSource {
                     logger.warn("Could not store the terminology server list for {}: {}", version, err.getMessage());
                     return Future.succeededFuture();
                 });
+    }
+
+    /** Re-reads the stored lists (tests: an allowlist change without a registry fetch). */
+    Future<Void> reloadStored() {
+        return loadStored();
     }
 
     private Future<Void> loadStored() {
@@ -241,7 +269,9 @@ public final class TxRegistry implements TxServerAllowlistSource {
                             next = next.withVersion(e.getKey(), e.getValue());
                         }
                     }
+                    TxServerAllowlist before = allowlist;
                     allowlist = next;
+                    notifyChanges(before, next);
                     return null;
                 });
     }

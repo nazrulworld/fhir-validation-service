@@ -23,7 +23,7 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
                           String fhirVersion, String ig, int profiles, String contentType, int requestBytes,
                           String outcome, int httpStatus, int issuesFatal, int issuesError, int issuesWarning,
                           int issuesInformation, String clientIp, int totalMs, int queueMs, int contextMs, int validateMs,
-                          long cpuTimeNs, long allocatedBytes) {
+                          long cpuTimeNs, long allocatedBytes, String txMode, String txServer, String txSource) {
 
     /**
      * Strings are cut to their {@code validation_usage} column sizes (V12), so one oversized client value (a long
@@ -36,6 +36,20 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
         ig = cut(ig, 192);
         contentType = cut(contentType, 16);
         outcome = cut(outcome, 32);
+        txMode = cut(txMode, 16);
+        txServer = cut(txServer, 512);
+        txSource = cut(txSource, 8);
+    }
+
+    /** A record without the terminology setting (a request refused before validation, spec 010 FR-010). */
+    public UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, String apiKeyName, UUID orgId,
+                       String fhirVersion, String ig, int profiles, String contentType, int requestBytes,
+                       String outcome, int httpStatus, int issuesFatal, int issuesError, int issuesWarning,
+                       int issuesInformation, String clientIp, int totalMs, int queueMs, int contextMs, int validateMs,
+                       long cpuTimeNs, long allocatedBytes) {
+        this(requestId, startedAt, apiKeyId, apiKeyName, orgId, fhirVersion, ig, profiles, contentType, requestBytes,
+                outcome, httpStatus, issuesFatal, issuesError, issuesWarning, issuesInformation, clientIp, totalMs,
+                queueMs, contextMs, validateMs, cpuTimeNs, allocatedBytes, null, null, null);
     }
 
     private static String cut(String s, int max) {
@@ -65,7 +79,10 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
                 .put("contextMs", contextMs)
                 .put("validateMs", validateMs)
                 .put("cpuTimeNs", cpuTimeNs)
-                .put("allocatedBytes", allocatedBytes);
+                .put("allocatedBytes", allocatedBytes)
+                .put("txMode", txMode)
+                .put("txServer", txServer)
+                .put("txSource", txSource);
     }
 
     /** The parameters of {@link DbUsageWriter#INSERT}, in its column order. */
@@ -93,6 +110,9 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
                 .addValue(contextMs)
                 .addValue(validateMs)
                 .addValue(cpuTimeNs)
-                .addValue(allocatedBytes);
+                .addValue(allocatedBytes)
+                .addValue(txMode)
+                .addValue(txServer)
+                .addValue(txSource);
     }
 }

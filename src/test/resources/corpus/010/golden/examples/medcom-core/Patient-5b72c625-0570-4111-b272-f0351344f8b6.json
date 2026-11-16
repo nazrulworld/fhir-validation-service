@@ -1,0 +1,10 @@
+[
+  {
+    "code": "informational",
+    "details": null,
+    "diagnostics": "No issues detected during validation",
+    "expression": null,
+    "location": null,
+    "severity": "information"
+  }
+]
