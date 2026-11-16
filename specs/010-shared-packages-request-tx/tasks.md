@@ -423,3 +423,14 @@ operation of 1.0.0.
 - Problem details are curated fixed texts; `tx` never appears in a `detail` of `invalid-request` and is logged at
   DEBUG only (spec FR-007).
 - Commit after each task or logical group; plans and scratch notes stay in the git-ignored `var/`.
+
+## Phase 8: Convergence
+
+- [X] T072 Add the `server`-mode variant to `test/core/validator/SharedDefinitionsDifferentialIT.java`: build the three contexts with a `TerminologyServices` whose clients reach a `StubTerminologyServer` with fixed answers, validate the corpus with a `server` scope (sequentially and with 8 threads) on shared and on private (`sharedDefinitions = null`) contexts, and assert identical OperationOutcomes, so sharing is shown not to change results when a server answers per FR-023 (partial)
+- [X] T073 Extend `test/web/endpoint/ValidationApiContractTest.java` for the validate operation's new contract: `tx`/`txMode` accepted, the curated 400 texts, `X-Tx-Mode`/`X-Tx-Server`/`X-Tx-Source` on 200 for `application/json` and `application/fhir+json`, none on 4xx/503, per FR-027 and Constitution V (partial)
+- [X] T074 Add a case to `test/web/TerminologyNoRebuildIT.java` where the context's setting changes from A to B while a request is waiting on a slow stub A: that request completes using A only (B gets no call), the next request uses B, per FR-003 and the spec edge case "a context's setting changes while a request is running" (partial)
+- [X] T075 Run quickstart scenarios A–F of `specs/010-shared-packages-request-tx/quickstart.md` by hand against a local 1.1.0 stack and record the outcome in `perf/results-1.1.0.md`, per T070 (partial)
+- [X] T076 Add a case to `test/web/TerminologyOverrideIT.java` where the context is still building (use `SnapshotBuilder.setBuildHook` to hold the build) and the request names an unlisted `tx`: the answer is 400 `tx-server-not-registered`, not 503 `not-ready`, per FR-008a (partial)
+- [X] T077 Add a test that an allowlist change reaches the code cache: after `TxRegistry` installs a list that differs for R4 (via `TestTerminology.reloadStored`), `ecosystem:*` entries of R4 are gone and other entries stay, per research R4 and FR-011 (partial)
+- [X] T078 Reconcile `TerminologyScope.current()` with data-model §5 and T009: the code treats "no scope open" as mode `none` (fail closed offline) while T009 asked for an `IllegalStateException`; record the chosen behaviour in `research.md` R1 and keep `RequestScopedTerminologySupportTest.noScopeOpenBehavesAsNone` consistent with it, per plan research R1 (contradicts)
+- [X] T079 Review the test-only seams added to production classes (`ServiceRegistry.terminologyGuardForTests`, `ValidatorSnapshot.setDefaultTerminologyForTests`, `TxRegistry.reloadStored`) and record their justification in `plan.md` Complexity Tracking or replace them with test-scoped wiring, per Constitution VIII (unrequested)

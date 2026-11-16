@@ -505,4 +505,74 @@ class ValidationApiContractTest extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    // ---- Spec 010 FR-005 to FR-010, FR-027: tx / txMode and the X-Tx-* headers ------------------------------------
+
+    private Future<HttpResponse<Buffer>> validateWith(String query, String accept) {
+        HttpRequest<Buffer> req = post("/R4/validate?" + query).putHeader("Content-Type", "application/fhir+json");
+        if (accept != null) {
+            req.putHeader("Accept", accept);
+        }
+        return req.sendBuffer(Buffer.buffer(PATIENT));
+    }
+
+    private static void assertNoTxHeaders(HttpResponse<Buffer> r) {
+        assertNull(r.getHeader("X-Tx-Mode"), "refusals carry no X-Tx-* header");
+        assertNull(r.getHeader("X-Tx-Server"));
+        assertNull(r.getHeader("X-Tx-Source"));
+    }
+
+    @Test
+    void everyCompletedValidationNamesItsTerminologySetting(VertxTestContext ctx) {
+        Future.all(validate("R4", "application/fhir+json", "application/json", PATIENT),
+                        validate("R4", "application/fhir+json", "application/fhir+json", PATIENT),
+                        validateWith("txMode=none", "application/fhir+json"))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    for (int i = 0; i < 3; i++) {
+                        HttpResponse<Buffer> r = cf.resultAt(i);
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertEquals("none", r.getHeader("X-Tx-Mode"), "the base context is offline");
+                        assertNull(r.getHeader("X-Tx-Server"), "mode none names no server");
+                        assertEquals(i < 2 ? "context" : "request", r.getHeader("X-Tx-Source"));
+                    }
+                    HttpResponse<Buffer> plain = cf.resultAt(1);
+                    HttpResponse<Buffer> requested = cf.resultAt(2);
+                    assertEquals(plain.bodyAsJsonObject().getJsonArray("issue"), requested.bodyAsJsonObject().getJsonArray("issue"),
+                            "the same setting chosen by the request gives the same issues");
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void malformedTxParametersAre400WithFixedTexts(VertxTestContext ctx) {
+        Future.all(java.util.List.of(
+                        validateWith("txMode=Server", null),
+                        validateWith("txMode=none&tx=https%3A%2F%2Ftx.example.org%2Fr4", null),
+                        validateWith("txMode=server", null),
+                        validateWith("tx=", null)))
+                .onComplete(ctx.succeeding(cf -> ctx.verify(() -> {
+                    String[] texts = {"txMode must be none, server or ecosystem", "tx is not allowed with txMode=none",
+                            "txMode=server needs a tx server; this context has none", "tx and txMode must not be empty"};
+                    for (int i = 0; i < texts.length; i++) {
+                        HttpResponse<Buffer> r = cf.resultAt(i);
+                        JsonObject problem = assertProblem(r, 400, "invalid-request");
+                        assertEquals(texts[i], problem.getString("detail"));
+                        assertFalse(r.bodyAsString().contains("tx.example.org"), "the address is never echoed");
+                        assertNoTxHeaders(r);
+                    }
+                    ctx.completeNow();
+                })));
+    }
+
+    @Test
+    void aServerNotOnTheBuiltInListIs503WhileNoRegistryListExists(VertxTestContext ctx) {
+        // The test JVM never fetches the registry and this database stores no list: only the built-in list applies.
+        validateWith("tx=https%3A%2F%2Ftx.example.org%2Fr4", null)
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertProblem(r, 503, "tx-registry-unavailable");
+                    assertNotNull(r.getHeader("Retry-After"));
+                    assertNoTxHeaders(r);
+                    ctx.completeNow();
+                })));
+    }
 }

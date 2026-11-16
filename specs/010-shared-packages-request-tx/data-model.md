@@ -66,7 +66,8 @@ Allowlist (spec FR-008, research R5):
 | `scopeId` | String | `none`, `denied`, `server:<url>`, `ecosystem:<url or ->`; part of the code cache key |
 
 Lifecycle: opened in `ValidatorSnapshot.validate` (or by the warm-up with `NONE`) and closed in `finally`. Opening a
-second scope on a thread that already has one is an error, the same rule as `TerminologyBudget.open`.
+second scope on a thread that already has one is an error, the same rule as `TerminologyBudget.open`. With no scope
+open, the current scope is the offline one (mode `none`, research R1).
 
 ## 6. TerminologyCodeCache (new, one per instance)
 

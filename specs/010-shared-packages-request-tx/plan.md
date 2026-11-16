@@ -199,3 +199,11 @@ snapshot.
 No constitution violations. The only notable complexity, the copy of HAPI's code-check loop in
 `ScopedValidationSupportChain`, is justified in research R3 and pinned by a test. It is not a constitution
 violation.
+
+Test-only seams in production classes (added during implementation, reviewed in T079; Principle VIII):
+
+| Seam | Why it is needed | Why it is safe | Simpler alternative rejected |
+|---|---|---|---|
+| `ServiceRegistry.terminologyGuardForTests` (static, null in production) | In-process ITs (`TerminologyNoRebuildIT`, `TerminologyOverrideIT`) must reach local stub terminology servers; the production guard refuses loopback (spec 007 FR-011). | No configuration sets it. The only guard that allows loopback is `NetworkGuard.forTests()`, package-private and reached through the test-only `TestTerminology`. | A configuration switch or system property: an operator could set it and open SSRF to internal addresses. |
+| `ValidatorSnapshot.setDefaultTerminologyForTests` (package-private) | The spec 007 routing ITs validate snapshots directly, without `FhirValidationService`; they need a default setting applied with the same allowlist check. | Package-private, never called by production code; the plain `validate` overloads stay offline when it is unset. | Rewriting every spec 007 routing test to build an `EffectiveTerminology` and router by hand: more test code, same coverage. |
+| `TxRegistry.reloadStored` (package-private) | ITs change the allowlist at run time (a server removed, then restored) without a registry fetch. | Package-private, reached through `TestTerminology`; it only re-reads the stored list, which production also reads at start. | A registry stub plus the periodic refresh: slower, and timing-dependent tests. |

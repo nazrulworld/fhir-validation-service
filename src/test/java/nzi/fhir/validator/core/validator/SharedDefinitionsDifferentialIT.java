@@ -165,7 +165,7 @@ class SharedDefinitionsDifferentialIT {
             List<Future<?>> futures = new ArrayList<>();
             for (Case c : rounds) {
                 futures.add(pool.submit(() -> {
-                    check(c);
+                    underLoad(() -> check(c), c);
                     return null;
                 }));
             }
@@ -193,5 +193,132 @@ class SharedDefinitionsDifferentialIT {
         JsonArray sample = GoldenOutcomes.golden(corpus, "duplicate-canonical/Patient-no-birthdate.json");
         assertFalse(sample.isEmpty());
         assertNotNull(new JsonObject().put("x", sample).getJsonArray("x"));
+    }
+
+    /**
+     * FR-023 with a terminology server: given identical server answers (a stub that knows a few SNOMED CT and LOINC
+     * codes and rejects the rest), contexts built on shared definitions give the same OperationOutcomes as contexts
+     * that parse every package for themselves (the 1.0.0 behaviour), sequentially and with 8 threads.
+     */
+    @Test
+    void withATerminologyServerSharedAndPrivateContextsAgree() throws Exception {
+        io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
+        nzi.fhir.validator.testsupport.StubTerminologyServer stub = new nzi.fhir.validator.testsupport.StubTerminologyServer("/r4")
+                .code("http://loinc.org", "8867-4", "Heart rate")
+                .code("http://snomed.info/sct", "399912005", "Pressure ulcer");
+        try {
+            stub.start(vertx).toCompletionStage().toCompletableFuture().get(30, TimeUnit.SECONDS);
+            var allowlist = nzi.fhir.validator.core.terminology.TestTerminology.allowlist(R4, stub.base());
+            var clients = nzi.fhir.validator.core.terminology.TestTerminology.clients(allowlist, 5_000);
+            TerminologyServices services = nzi.fhir.validator.core.terminology.TestTerminology.services(allowlist, clients,
+                    nzi.fhir.validator.core.terminology.RegistryResolver.DISABLED, 60_000);
+            SharedPackageDefinitions sharedDefs = new SharedPackageDefinitions();
+            Map<String, ValidatorSnapshot> sharedCtx = new HashMap<>();
+            Map<String, ValidatorSnapshot> privateCtx = new HashMap<>();
+            for (String root : List.of(Fixtures.DK_CORE_350, Fixtures.MEDCOM_CORE_400, DUP)) {
+                sharedCtx.put(root, buildWith(root, services, sharedDefs));
+                privateCtx.put(root, buildWith(root, services, null));
+            }
+            var effective = nzi.fhir.validator.core.terminology.EffectiveTerminology.resolve(
+                    nzi.fhir.validator.core.terminology.TerminologySettings.NONE,
+                    new nzi.fhir.validator.core.terminology.TerminologyOverride(null, stub.base()));
+            var router = nzi.fhir.validator.core.terminology.TerminologyRouter.server(stub.base());
+            List<Case> all = cases();
+            Map<String, String> expected = new HashMap<>();
+            for (Case c : all) {
+                expected.put(c.relative(), render(privateCtx.get(c.context()), c, effective, router));
+                assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
+                        c.relative() + ": shared and private contexts differ with a terminology server");
+            }
+            assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
+            List<Case> rounds = new ArrayList<>(all);
+            rounds.addAll(all);
+            Collections.shuffle(rounds, new Random(23));
+            ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+            try {
+                List<Future<?>> futures = new ArrayList<>();
+                for (Case c : rounds) {
+                    futures.add(pool.submit(() -> {
+                        underLoad(() -> assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c,
+                                effective, router), c.relative() + ": differs under concurrent load"), c);
+                        return null;
+                    }));
+                }
+                for (Future<?> f : futures) {
+                    try {
+                        f.get(10, TimeUnit.MINUTES);
+                    } catch (java.util.concurrent.ExecutionException e) {
+                        if (e.getCause() instanceof AssertionError a) {
+                            throw a;
+                        }
+                        throw e;
+                    }
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        } finally {
+            stub.stop();
+            vertx.close();
+        }
+    }
+
+    /** One context with the given terminology infrastructure, shared definitions or {@code null} for private parsing. */
+    private ValidatorSnapshot buildWith(String root, TerminologyServices services, SharedPackageDefinitions sharedDefinitions) {
+        Map<String, List<String>> deps = new HashMap<>();
+        for (Map.Entry<String, NpmPackage> e : parsed.entrySet()) {
+            deps.put(e.getKey(), e.getValue().dependencies());
+        }
+        List<String> resolved = DependencyResolver.resolve(List.of(root), DependencyResolver.Catalog.of(deps)).resolved();
+        Map<String, byte[]> h = new HashMap<>();
+        resolved.forEach(p -> h.put(p, hashes.get(p)));
+        return SnapshotBuilder.assemble(SnapshotKey.of(R4, root), 1, resolved, h, resolved.stream().map(parsed::get).toList(),
+                services, sharedDefinitions);
+    }
+
+    /** The comparison projection of one validation in mode server. */
+    private String render(ValidatorSnapshot snapshot, Case c, nzi.fhir.validator.core.terminology.EffectiveTerminology effective,
+                          nzi.fhir.validator.core.terminology.TerminologyRouter router) throws Exception {
+        String body = Files.readString(corpus.resolve(c.relative()), StandardCharsets.UTF_8);
+        ValidatorSnapshot.Outcome outcome = snapshot.validate(body, SupportedContentType.JSON, List.of(), Integer.MAX_VALUE,
+                effective, router);
+        return GoldenOutcomes.project(OutcomeRenderer.render(outcome, MediaTypes.ResponseFormat.FHIR_JSON)).encode();
+    }
+
+    /** A check that may throw (the comparison of one case). */
+    interface Check {
+        void run() throws Exception;
+    }
+
+    /**
+     * Runs {@code check} under concurrent load. HL7 core evaluates every regex on an executor with a fixed 500 ms
+     * timeout ({@code RegexTimeout.DEFAULT_TIMEOUT}); on a small CI runner, 8 validation threads can starve it, and the
+     * validation then reports an extra "Regex evaluation timed out" issue. That is load, not sharing: such a case is
+     * checked again on its own (up to 3 times), where a real difference would show again.
+     */
+    private static void underLoad(Check check, Case c) throws Exception {
+        AssertionError first;
+        try {
+            check.run();
+            return;
+        } catch (AssertionError e) {
+            if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
+                throw e;
+            }
+            first = e;
+        }
+        synchronized (SharedDefinitionsDifferentialIT.class) {
+            for (int attempt = 0; attempt < 3; attempt++) {
+                try {
+                    check.run();
+                    return;
+                } catch (AssertionError e) {
+                    if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
+                        throw e;
+                    }
+                }
+            }
+        }
+        throw new AssertionError(c.relative() + ": a regex timed out on every retry", first);
     }
 }

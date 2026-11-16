@@ -265,4 +265,38 @@ class TerminologyNoRebuildIT extends BaseTestContainer {
                     ctx.completeNow();
                 })));
     }
+
+    /**
+     * FR-003, spec edge case: the setting is fixed when a request starts. While a request waits on slow server A, the
+     * context's setting changes to B; that request still uses A only, and the next request uses B.
+     */
+    @Test
+    @Order(4)
+    void aRunningRequestKeepsTheSettingItStartedWith(Vertx vertx, VertxTestContext ctx) {
+        changeTo(vertx, server(a.base()))
+                .compose(v -> {
+                    a.clear();
+                    b.clear();
+                    a.delay(3_000);
+                    Future<HttpResponse<Buffer>> running = validate("7777-7");
+                    // Change the setting while the first request waits on A.
+                    return vertx.timer(500).compose(t -> changeTo(vertx, server(b.base()))).compose(x -> running);
+                })
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), text(r));
+                        assertTrue(a.hits() >= 1, "the running request used A");
+                        assertEquals(0, b.hits(), "the running request never switched to B");
+                    });
+                    a.normal();
+                    a.clear();
+                    return validate("7777-6");
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertEquals(200, r.statusCode(), text(r));
+                    assertTrue(b.hits() >= 1, "the next request uses B");
+                    assertEquals(0, a.hits());
+                    ctx.completeNow();
+                })));
+    }
 }

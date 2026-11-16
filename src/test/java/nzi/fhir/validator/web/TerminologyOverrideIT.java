@@ -341,4 +341,84 @@ class TerminologyOverrideIT extends BaseTestContainer {
     void theTestSetupMatchesTheAllowlist() {
         assertEquals(TerminologySettings.normaliseUrl(a.base()), a.base(), "stub bases are already normalised");
     }
+
+    /**
+     * FR-008a: the effective setting and the allowlist are checked before context readiness. While a context is still
+     * building, a request naming an unlisted tx gets 400 tx-server-not-registered, not 503 not-ready.
+     */
+    @Test
+    void aRefusedTxComesBeforeNotReady(Vertx vertx, VertxTestContext ctx) {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        var builder = app.bootstrap().services().snapshotBuilder();
+        String building = "tx.building#1.0.0";
+        builder.setBuildHook(() -> {
+            try {
+                release.await(60, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        TestPackages.storePackage(app.bootstrap().services(), TestPackages.profilePackage("tx.building", "1.0.0",
+                        TestPackages.requiredPatientElements("http://example.org/fhir/StructureDefinition/building", "gender")))
+                .compose(v -> AppHarness.asAdmin(app.client().post(app.port(), "localhost", "/R4/validator"))
+                        .putHeader("Content-Type", "application/json")
+                        .sendJsonObject(new JsonObject().put("igPackageId", "tx.building").put("igPackageVersion", "1.0.0")))
+                .compose(included -> {
+                    ctx.verify(() -> assertEquals(200, included.statusCode(), included.bodyAsString()));
+                    return validate("R4", building, "9999-9", null, "application/json");
+                })
+                .compose(notReady -> {
+                    ctx.verify(() -> assertProblem(notReady, 503, "not-ready"));
+                    return validate("R4", building, "9999-9", "tx=" + enc(UNLISTED), "application/json");
+                })
+                .onComplete(ar -> {
+                    builder.setBuildHook(null);
+                    release.countDown();
+                    ctx.verify(() -> {
+                        assertTrue(ar.succeeded(), String.valueOf(ar.cause()));
+                        assertProblem(ar.result(), 400, "tx-server-not-registered");
+                        assertNoTxHeaders(ar.result());
+                    });
+                    ctx.completeNow();
+                });
+    }
+
+    /**
+     * Research R4, FR-011: when the allowlist changes, the code results of ecosystem scopes are dropped (routing may
+     * differ now); results of server scopes stay.
+     */
+    @Test
+    void anAllowlistChangeDropsEcosystemResults(VertxTestContext ctx) {
+        Future<String> metricsBefore = app.client().get(app.port(), "localhost", "/metrics").send().map(HttpResponse::bodyAsString);
+        validate("R4", IG, "6666-1", null, "application/json")                                       // server:A scope
+                .compose(r -> validate("R4", IG, "6666-2", "txMode=ecosystem&tx=" + enc(b.base()), "application/json"))
+                .compose(r -> metricsBefore)
+                .compose(before -> {
+                    storeAllowlist(b.base(), a.base());            // the same servers, but a fresh list for R4 ...
+                    storeAllowlist(b.base());                      // ... then A removed: the R4 list differs
+                    return TestTerminology.reloadStored(app.bootstrap().services().txRegistry())
+                            .compose(v -> app.client().get(app.port(), "localhost", "/metrics").send())
+                            .map(after -> new String[]{before, after.bodyAsString()});
+                })
+                .compose(m -> {
+                    ctx.verify(() -> assertTrue(allowlistDrops(m[1]) > allowlistDrops(m[0]),
+                            "ecosystem results were dropped after the allowlist change"));
+                    storeAllowlist(a.base(), b.base());
+                    return TestTerminology.reloadStored(app.bootstrap().services().txRegistry());
+                })
+                .compose(v -> {
+                    a.clear();
+                    return validate("R4", IG, "6666-1", null, "application/json");
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    assertHeaders(r, "server", a.base(), "context");
+                    assertEquals(0, a.hits(), "the server-scope result stayed cached");
+                    ctx.completeNow();
+                })));
+    }
+
+    private static double allowlistDrops(String metrics) {
+        return metrics.lines().filter(l -> l.startsWith("fv_tx_code_cache_invalidations_total{") && l.contains("reason=\"allowlist\""))
+                .mapToDouble(l -> Double.parseDouble(l.substring(l.lastIndexOf(' ') + 1))).sum();
+    }
 }

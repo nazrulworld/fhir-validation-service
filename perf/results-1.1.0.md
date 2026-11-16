@@ -58,3 +58,17 @@ between the two releases. Every run: 0 failed requests.
 
 Both means are within 5% of 1.0.0. The run-to-run spread on the base context (19.3–23.2 ms for 1.1.0) is larger than
 the difference between releases; a run on CI hardware with longer durations would narrow it.
+
+## Quickstart scenarios (T075)
+
+`perf/quickstart-010.sh` against the 1.1.0 jar, PostgreSQL 16, the official HL7 terminology registry (list fetched at
+start, source `registry`) and `http://tx.fhir.org/r4`:
+
+| Scenario | Checks | Result |
+|---|---|---|
+| A: a setting change does not rebuild | default server reported in `X-Tx-*`; PATCH to `none` used by the next request; no `Built validator` line after the change | PASS |
+| B: per-request choice | no parameters → context's server; `txMode=none` → offline; unlisted `tx` → 400 `tx-server-not-registered`; `txMode=none&tx=…` → 400; `txMode=fast` → 400; base context `txMode=server` → 400, `txMode=ecosystem` → 200; still no build | PASS |
+| C: results identical to 1.0.0 | `SharedDefinitionsDifferentialIT` (offline and with a terminology server) | PASS |
+| D: memory and build time | `perf/measure-010.sh`, above | PASS |
+| E: shared memory released | 12 shared entries with both contexts (the second build reused 10 packages); 0 within 2 s of excluding both | PASS |
+| F: hot-path latency | `perf/latency-010.sh`, above | PASS |
