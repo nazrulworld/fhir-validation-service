@@ -35,6 +35,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
 
+import static nzi.fhir.validator.testsupport.ContractAssertions.assertNoTxHeaders;
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -150,11 +151,6 @@ class TerminologyOverrideIT extends BaseTestContainer {
         assertEquals(source, r.getHeader("X-Tx-Source"));
     }
 
-    private static void assertNoTxHeaders(HttpResponse<Buffer> r) {
-        assertNull(r.getHeader("X-Tx-Mode"), "refusals carry no X-Tx-* header");
-        assertNull(r.getHeader("X-Tx-Server"));
-        assertNull(r.getHeader("X-Tx-Source"));
-    }
 
     private Future<Void> sameSnapshot(VertxTestContext ctx) {
         return snapshot().map(s -> {
@@ -310,11 +306,11 @@ class TerminologyOverrideIT extends BaseTestContainer {
                     ctx.verify(() -> assertTrue(b.hits() >= 1, "the override is used"));
                     return validate("tx=" + enc(a.base()));
                 })
-                .compose(r -> {
+                .map(r -> {
                     ctx.verify(() -> assertProblem(r, 400, "tx-server-not-registered"));
-                    storeAllowlist(a.base(), b.base());
-                    return TestTerminology.reloadStored(app.bootstrap().services().txRegistry());
+                    return (Void) null;
                 })
+                .eventually(this::restoreAllowlist)
                 .onComplete(ctx.succeedingThenComplete());
     }
 
@@ -394,8 +390,7 @@ class TerminologyOverrideIT extends BaseTestContainer {
                 .compose(r -> validate("R4", IG, "6666-2", "txMode=ecosystem&tx=" + enc(b.base()), "application/json"))
                 .compose(r -> metricsBefore)
                 .compose(before -> {
-                    storeAllowlist(b.base(), a.base());            // the same servers, but a fresh list for R4 ...
-                    storeAllowlist(b.base());                      // ... then A removed: the R4 list differs
+                    storeAllowlist(b.base());                      // A removed: the R4 list differs
                     return TestTerminology.reloadStored(app.bootstrap().services().txRegistry())
                             .compose(v -> app.client().get(app.port(), "localhost", "/metrics").send())
                             .map(after -> new String[]{before, after.bodyAsString()});
@@ -403,18 +398,25 @@ class TerminologyOverrideIT extends BaseTestContainer {
                 .compose(m -> {
                     ctx.verify(() -> assertTrue(allowlistDrops(m[1]) > allowlistDrops(m[0]),
                             "ecosystem results were dropped after the allowlist change"));
-                    storeAllowlist(a.base(), b.base());
-                    return TestTerminology.reloadStored(app.bootstrap().services().txRegistry());
+                    return restoreAllowlist();
                 })
                 .compose(v -> {
                     a.clear();
                     return validate("R4", IG, "6666-1", null, "application/json");
                 })
+                // The other tests of the class need A and B allowed, also when this one fails part way.
+                .eventually(this::restoreAllowlist)
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertHeaders(r, "server", a.base(), "context");
                     assertEquals(0, a.hits(), "the server-scope result stayed cached");
                     ctx.completeNow();
                 })));
+    }
+
+    /** The allowlist the class starts with: A and B for R4. */
+    private Future<Void> restoreAllowlist() {
+        storeAllowlist(a.base(), b.base());
+        return TestTerminology.reloadStored(app.bootstrap().services().txRegistry());
     }
 
     private static double allowlistDrops(String metrics) {

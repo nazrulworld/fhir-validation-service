@@ -279,8 +279,12 @@ class TerminologyNoRebuildIT extends BaseTestContainer {
                     b.clear();
                     a.delay(3_000);
                     Future<HttpResponse<Buffer>> running = validate("7777-7");
-                    // Change the setting while the first request waits on A.
-                    return vertx.timer(500).compose(t -> changeTo(vertx, server(b.base()))).compose(x -> running);
+                    // Change the setting once the first request is waiting on A (its setting is fixed by then), not after a
+                    // fixed time: on a slow host the request could otherwise start after the change.
+                    return Await.until(vertx, 30_000, "the first request reached A",
+                                    () -> Future.succeededFuture(a.hits() >= 1))
+                            .compose(ms -> changeTo(vertx, server(b.base())))
+                            .compose(x -> running);
                 })
                 .compose(r -> {
                     ctx.verify(() -> {

@@ -25,10 +25,12 @@ cleanup() {
     docker rm -f "$PG" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Ctrl-C or TERM: stop (the EXIT trap then cleans up) instead of carrying on against a stopped service.
+trap 'exit 130' INT TERM
 
 docker run -d --rm --name "$PG" -e POSTGRES_PASSWORD=measure -p "127.0.0.1:$PG_PORT:5432" postgres:16 >/dev/null
-until docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+until docker exec "$PG" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 
 FV_HTTP_PORT=$PORT FV_PG_HOST=127.0.0.1 FV_PG_PORT=$PG_PORT FV_PG_DATABASE=postgres FV_PG_USER=postgres \
 FV_PG_PASSWORD=measure FV_ADMIN_API_KEY=$KEY FV_ENABLED_FHIR_VERSIONS=R4 FV_HTTP_MAX_BODY_MB=64 \

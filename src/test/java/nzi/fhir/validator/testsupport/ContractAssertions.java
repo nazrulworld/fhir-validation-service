@@ -17,6 +17,13 @@ public final class ContractAssertions {
     /**
      * The response is an RFC 9457 problem with the given status and type, without internal details.
      */
+    /** Spec 010 FR-010: a refusal (4xx, 503) carries none of the X-Tx-* headers; only a 200 reports the setting used. */
+    public static void assertNoTxHeaders(HttpResponse<Buffer> r) {
+        assertNull(r.getHeader("X-Tx-Mode"), "refusals carry no X-Tx-* header");
+        assertNull(r.getHeader("X-Tx-Server"), "refusals carry no X-Tx-* header");
+        assertNull(r.getHeader("X-Tx-Source"), "refusals carry no X-Tx-* header");
+    }
+
     public static JsonObject assertProblem(HttpResponse<Buffer> r, int status, String type) {
         assertEquals(status, r.statusCode(), r.bodyAsString());
         assertNotNull(r.getHeader("Content-Type"), "Content-Type missing");

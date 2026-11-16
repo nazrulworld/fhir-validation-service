@@ -83,12 +83,15 @@ class SharedDefinitionsDifferentialIT {
         }
         shared = new SharedPackageDefinitions();
         for (String root : List.of(Fixtures.DK_CORE_350, Fixtures.MEDCOM_CORE_400, DUP)) {
-            contexts.put(root, build(root, shared));
+            contexts.put(root, build(root, TerminologyServices.OFFLINE, shared));
         }
     }
 
-    /** One context as the service builds it: the resolved package list, in its sorted order. */
-    private ValidatorSnapshot build(String root, SharedPackageDefinitions sharedDefinitions) {
+    /**
+     * One context as the service builds it: the resolved package list, in its sorted order, with the given terminology
+     * infrastructure and shared definitions ({@code null}: every package parsed for this context alone, as on 1.0.0).
+     */
+    private ValidatorSnapshot build(String root, TerminologyServices services, SharedPackageDefinitions sharedDefinitions) {
         Map<String, List<String>> deps = new HashMap<>();
         for (Map.Entry<String, NpmPackage> e : parsed.entrySet()) {
             deps.put(e.getKey(), e.getValue().dependencies());
@@ -101,8 +104,7 @@ class SharedDefinitionsDifferentialIT {
         List<NpmPackage> npm = resolved.stream().map(parsed::get).toList();
         Map<String, byte[]> h = new HashMap<>();
         resolved.forEach(p -> h.put(p, hashes.get(p)));
-        return SnapshotBuilder.assemble(SnapshotKey.of(R4, root), 1, resolved, h, npm, TerminologyServices.OFFLINE,
-                sharedDefinitions);
+        return SnapshotBuilder.assemble(SnapshotKey.of(R4, root), 1, resolved, h, npm, services, sharedDefinitions);
     }
 
     /** A corpus file to validate: its path relative to the corpus root, and the context it belongs to. */
@@ -160,28 +162,7 @@ class SharedDefinitionsDifferentialIT {
             rounds.addAll(cases());
         }
         Collections.shuffle(rounds, new Random(10));
-        ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
-        try {
-            List<Future<?>> futures = new ArrayList<>();
-            for (Case c : rounds) {
-                futures.add(pool.submit(() -> {
-                    underLoad(() -> check(c), c);
-                    return null;
-                }));
-            }
-            for (Future<?> f : futures) {
-                try {
-                    f.get(10, TimeUnit.MINUTES);
-                } catch (java.util.concurrent.ExecutionException e) {
-                    if (e.getCause() instanceof AssertionError a) {
-                        throw a;
-                    }
-                    throw e;
-                }
-            }
-        } finally {
-            pool.shutdownNow();
-        }
+        runConcurrently(rounds, c -> () -> check(c));
     }
 
     /** The corpus root resolves from the test classpath (sanity, independent of the packages). */
@@ -212,12 +193,13 @@ class SharedDefinitionsDifferentialIT {
             var clients = nzi.fhir.validator.core.terminology.TestTerminology.clients(allowlist, 5_000);
             TerminologyServices services = nzi.fhir.validator.core.terminology.TestTerminology.services(allowlist, clients,
                     nzi.fhir.validator.core.terminology.RegistryResolver.DISABLED, 60_000);
-            SharedPackageDefinitions sharedDefs = new SharedPackageDefinitions();
+            // Parsed definitions don't depend on the terminology setting: the shared side reuses the class's shared
+            // definitions (no second parse); only the private baseline parses every package again.
             Map<String, ValidatorSnapshot> sharedCtx = new HashMap<>();
             Map<String, ValidatorSnapshot> privateCtx = new HashMap<>();
             for (String root : List.of(Fixtures.DK_CORE_350, Fixtures.MEDCOM_CORE_400, DUP)) {
-                sharedCtx.put(root, buildWith(root, services, sharedDefs));
-                privateCtx.put(root, buildWith(root, services, null));
+                sharedCtx.put(root, build(root, services, shared));
+                privateCtx.put(root, build(root, services, null));
             }
             var effective = nzi.fhir.validator.core.terminology.EffectiveTerminology.resolve(
                     nzi.fhir.validator.core.terminology.TerminologySettings.NONE,
@@ -231,49 +213,16 @@ class SharedDefinitionsDifferentialIT {
                         c.relative() + ": shared and private contexts differ with a terminology server");
             }
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
+            privateCtx.clear(); // the baseline is recorded; release its contexts before the concurrent phase
             List<Case> rounds = new ArrayList<>(all);
             rounds.addAll(all);
             Collections.shuffle(rounds, new Random(23));
-            ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
-            try {
-                List<Future<?>> futures = new ArrayList<>();
-                for (Case c : rounds) {
-                    futures.add(pool.submit(() -> {
-                        underLoad(() -> assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c,
-                                effective, router), c.relative() + ": differs under concurrent load"), c);
-                        return null;
-                    }));
-                }
-                for (Future<?> f : futures) {
-                    try {
-                        f.get(10, TimeUnit.MINUTES);
-                    } catch (java.util.concurrent.ExecutionException e) {
-                        if (e.getCause() instanceof AssertionError a) {
-                            throw a;
-                        }
-                        throw e;
-                    }
-                }
-            } finally {
-                pool.shutdownNow();
-            }
+            runConcurrently(rounds, c -> () -> assertEquals(expected.get(c.relative()),
+                    render(sharedCtx.get(c.context()), c, effective, router), c.relative() + ": differs under concurrent load"));
         } finally {
             stub.stop();
             vertx.close();
         }
-    }
-
-    /** One context with the given terminology infrastructure, shared definitions or {@code null} for private parsing. */
-    private ValidatorSnapshot buildWith(String root, TerminologyServices services, SharedPackageDefinitions sharedDefinitions) {
-        Map<String, List<String>> deps = new HashMap<>();
-        for (Map.Entry<String, NpmPackage> e : parsed.entrySet()) {
-            deps.put(e.getKey(), e.getValue().dependencies());
-        }
-        List<String> resolved = DependencyResolver.resolve(List.of(root), DependencyResolver.Catalog.of(deps)).resolved();
-        Map<String, byte[]> h = new HashMap<>();
-        resolved.forEach(p -> h.put(p, hashes.get(p)));
-        return SnapshotBuilder.assemble(SnapshotKey.of(R4, root), 1, resolved, h, resolved.stream().map(parsed::get).toList(),
-                services, sharedDefinitions);
     }
 
     /** The comparison projection of one validation in mode server. */
@@ -290,35 +239,56 @@ class SharedDefinitionsDifferentialIT {
         void run() throws Exception;
     }
 
+    /** The two ways HL7 core 6.9.12 reports a regex that ran past its fixed 500 ms timeout. */
+    static final List<String> REGEX_TIMEOUT_TEXTS = List.of(
+            "Regex evaluation timed out",   // RegexTimeout's TimeoutException, reported as an exception
+            "could not be executed");       // REGEX_MATCH_TIMED_OUT: "The regex '{0}' could not be executed"
+
+    static boolean regexTimedOut(Throwable failure) {
+        String message = String.valueOf(failure.getMessage());
+        return REGEX_TIMEOUT_TEXTS.stream().anyMatch(message::contains);
+    }
+
     /**
-     * Runs {@code check} under concurrent load. HL7 core evaluates every regex on an executor with a fixed 500 ms
-     * timeout ({@code RegexTimeout.DEFAULT_TIMEOUT}); on a small CI runner, 8 validation threads can starve it, and the
-     * validation then reports an extra "Regex evaluation timed out" issue. That is load, not sharing: such a case is
-     * checked again on its own (up to 3 times), where a real difference would show again.
+     * Runs every case's check on 8 threads. HL7 core evaluates each regex on an executor with a fixed 500 ms timeout
+     * ({@code RegexTimeout.DEFAULT_TIMEOUT}); on a small CI runner 8 validation threads can starve it, and the
+     * validation then reports an extra regex timeout issue. That is load, not sharing: such a case is deferred and
+     * checked again once every concurrent check has finished, with nothing else running, where a real difference
+     * would show again.
      */
-    private static void underLoad(Check check, Case c) throws Exception {
-        AssertionError first;
+    private static void runConcurrently(List<Case> cases, java.util.function.Function<Case, Check> checkOf) throws Exception {
+        List<Case> deferred = java.util.Collections.synchronizedList(new ArrayList<>());
+        ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
         try {
-            check.run();
-            return;
-        } catch (AssertionError e) {
-            if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
-                throw e;
-            }
-            first = e;
-        }
-        synchronized (SharedDefinitionsDifferentialIT.class) {
-            for (int attempt = 0; attempt < 3; attempt++) {
-                try {
-                    check.run();
-                    return;
-                } catch (AssertionError e) {
-                    if (!String.valueOf(e.getMessage()).contains("Regex evaluation timed out")) {
-                        throw e;
+            List<Future<?>> futures = new ArrayList<>();
+            for (Case c : cases) {
+                futures.add(pool.submit(() -> {
+                    try {
+                        checkOf.apply(c).run();
+                    } catch (AssertionError e) {
+                        if (!regexTimedOut(e)) {
+                            throw e;
+                        }
+                        deferred.add(c);
                     }
+                    return null;
+                }));
+            }
+            for (Future<?> f : futures) {
+                try {
+                    f.get(10, TimeUnit.MINUTES);
+                } catch (java.util.concurrent.ExecutionException e) {
+                    if (e.getCause() instanceof AssertionError a) {
+                        throw a;
+                    }
+                    throw e;
                 }
             }
+        } finally {
+            pool.shutdownNow();
         }
-        throw new AssertionError(c.relative() + ": a regex timed out on every retry", first);
+        for (Case c : deferred) {
+            checkOf.apply(c).run(); // alone: no other validation competes for the regex executor
+        }
     }
 }
