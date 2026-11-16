@@ -30,7 +30,9 @@ cleanup() {
     git -C "$REPO" worktree remove --force "$WORK/src" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Ctrl-C or TERM: stop (the EXIT trap then cleans up) instead of carrying on against a stopped service.
+trap 'exit 130' INT TERM
 
 fail() {
     echo "golden-010: $*" >&2
@@ -50,7 +52,7 @@ JAR=$(ls "$WORK"/src/target/fhir-validation-service-*.jar | grep -v -e sources -
 echo "==> starting PostgreSQL"
 docker run -d --rm --name "$PG" -e POSTGRES_PASSWORD=golden -p "127.0.0.1:$PG_PORT:5432" postgres:16 >/dev/null
 i=0
-until docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1; do
+until docker exec "$PG" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
     i=$((i + 1)); [ "$i" -gt 60 ] && fail "PostgreSQL did not start"; sleep 1
 done
 

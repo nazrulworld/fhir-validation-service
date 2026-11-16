@@ -22,12 +22,24 @@ cleanup() {
     docker rm -f "$PG" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Ctrl-C or TERM: stop (the EXIT trap then cleans up) instead of carrying on against a stopped service.
+trap 'exit 130' INT TERM
 pass() { echo "PASS  $*"; }
-fail() { echo "FAIL  $*"; tail -n 40 "$WORK/service.log"; exit 1; }
+fail() { echo "FAIL  $*"; [ -f "$WORK/service.log" ] && tail -n 40 "$WORK/service.log"; exit 1; }
+# wait_for <seconds> <what> <command...>: runs the command every second until it succeeds, or fails after <seconds>.
+wait_for() {
+    limit=$1; what=$2; shift 2; n=0
+    until "$@"; do
+        n=$((n + 1)); [ "$n" -ge "$limit" ] && fail "timed out after ${limit}s waiting for $what"
+        kill -0 "${PID:-$$}" 2>/dev/null || fail "the service stopped while waiting for $what"
+        sleep 1
+    done
+}
+ready() { [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health/readiness")" = "200" ]; }
 
 docker run -d --rm --name "$PG" -e POSTGRES_PASSWORD=qs -p "127.0.0.1:$PG_PORT:5432" postgres:16 >/dev/null
-until docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+wait_for 60 "PostgreSQL" sh -c "docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1"
 FV_HTTP_PORT=$PORT FV_PG_HOST=127.0.0.1 FV_PG_PORT=$PG_PORT FV_PG_DATABASE=postgres FV_PG_USER=postgres \
 FV_PG_PASSWORD=qs FV_ADMIN_API_KEY=$KEY FV_ENABLED_FHIR_VERSIONS=R4 FV_HTTP_MAX_BODY_MB=64 \
 FV_PACKAGE_REGISTRY_ENABLED=false FV_USAGE_SINK=none \
@@ -35,14 +47,16 @@ FV_PACKAGE_REGISTRY_ENABLED=false FV_USAGE_SINK=none \
 PID=$!
 BASE="http://127.0.0.1:$PORT"
 AUTH="Authorization: Bearer $KEY"
-until [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health/readiness")" = "200" ]; do sleep 2; done
+wait_for 180 "readiness" ready
 # Wait until the registry list is fetched (source "registry"), so tx.fhir.org is on the allowlist.
 i=0
 until curl -s "$BASE/health" | jq -e '.terminology.allowlist.R4.source == "registry"' >/dev/null; do
     i=$((i + 2)); [ "$i" -gt 120 ] && fail "the registry list was not fetched (network?)"; sleep 2
 done
 for id in $(grep -v '^#' "$LOCK" | grep -v '^[[:space:]]*$' | cut -d' ' -f1); do
-    curl -s -o /dev/null -H "$AUTH" -F "file=@$PKGS/$id.tgz;type=application/gzip" "$BASE/igs/upload"
+    [ -f "$PKGS/$id.tgz" ] || fail "$PKGS/$id.tgz is missing: run scripts/fetch-test-packages.sh"
+    code=$(curl -s -o "$WORK/upload" -w '%{http_code}' -H "$AUTH" -F "file=@$PKGS/$id.tgz;type=application/gzip" "$BASE/igs/upload")
+    case "$code" in 200|201) ;; *) fail "upload of $id answered $code: $(cat "$WORK/upload")" ;; esac
 done
 
 OBS='{"resourceType":"Observation","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"8867-4","display":"Heart rate"}]}}'
@@ -54,10 +68,11 @@ validate() { # $1 = ig (or ""), $2 = extra query; prints "status mode server sou
 $(grep -i '^x-tx-server:' "$WORK/h" | tr -d '\r' | cut -d' ' -f2) $(grep -i '^x-tx-source:' "$WORK/h" | tr -d '\r' | cut -d' ' -f2)"
 }
 builds() { grep -c 'Built validator for' "$WORK/service.log" || true; }
-wait_built() {
-    until [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$AUTH" -H 'Content-Type: application/fhir+json' \
-        --data '{"resourceType":"Patient"}' "$BASE/R4/validate?ig=$(printf '%s' "$1" | sed 's/#/%23/')")" = "200" ]; do sleep 1; done
+validates() {
+    [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$AUTH" -H 'Content-Type: application/fhir+json' \
+        --data '{"resourceType":"Patient"}' "$BASE/R4/validate?ig=$(printf '%s' "$1" | sed 's/#/%23/')")" = "200" ]
 }
+wait_built() { wait_for 300 "$1 to be built" validates "$1"; }
 DK=hl7.fhir.dk.core#3.5.0
 MC=medcom.fhir.dk.core#4.0.0
 

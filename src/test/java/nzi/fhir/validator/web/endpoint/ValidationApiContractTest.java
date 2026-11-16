@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.concurrent.TimeUnit;
 
+import static nzi.fhir.validator.testsupport.ContractAssertions.assertNoTxHeaders;
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -516,11 +517,6 @@ class ValidationApiContractTest extends BaseTestContainer {
         return req.sendBuffer(Buffer.buffer(PATIENT));
     }
 
-    private static void assertNoTxHeaders(HttpResponse<Buffer> r) {
-        assertNull(r.getHeader("X-Tx-Mode"), "refusals carry no X-Tx-* header");
-        assertNull(r.getHeader("X-Tx-Server"));
-        assertNull(r.getHeader("X-Tx-Source"));
-    }
 
     @Test
     void everyCompletedValidationNamesItsTerminologySetting(VertxTestContext ctx) {
