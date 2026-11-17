@@ -1,0 +1,17 @@
+{%- comment -%}
+  Spec 011 (FR-017): light/dark switch; the choice is stored per browser (see head_custom.html).
+{%- endcomment -%}
+<button type="button" class="docs-theme-toggle" id="docs-theme-toggle" aria-label="Switch between light and dark colour scheme">
+  <span aria-hidden="true">&#9680;</span><span class="d-none d-md-inline"> Theme</span>
+</button>
+<script>
+  (function () {
+    var button = document.getElementById("docs-theme-toggle");
+    button.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-docs-theme") === "dark" ? "light" : "dark";
+      jtd.setTheme(next);
+      document.documentElement.setAttribute("data-docs-theme", next);
+      try { window.localStorage.setItem("jtd-theme", next); } catch (e) { /* storage unavailable */ }
+    });
+  })();
+</script>

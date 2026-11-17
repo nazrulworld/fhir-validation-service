@@ -1,0 +1,57 @@
+# Spec 011: documentation site generated from the GitHub wiki.
+# This directory holds hand-written scaffolding only. scripts/build-docs-site.py copies it into
+# target/docs-site/src, adds the generated pages and _config.generated.yml (baseurl, build commits, include list).
+# Never commit generated output.
+
+title: FHIR Validation Service
+description: >-
+  User guide for the FHIR Validation Service: installation, API and reference documentation.
+url: https://nazrulworld.github.io
+baseurl: /fhir-validation-service
+lang: en
+
+theme: just-the-docs
+color_scheme: light
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 2
+  preview_words_before: 4
+  preview_words_after: 8
+  button: false
+heading_anchors: true
+back_to_top: true
+back_to_top_text: Back to top
+aux_links:
+  GitHub: https://github.com/nazrulworld/fhir-validation-service
+  Releases: https://github.com/nazrulworld/fhir-validation-service/releases
+aux_links_new_tab: false
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  # Heading ids are written by the converter (GitHub-compatible, research R4).
+  auto_ids: false
+  # Publish text literally: no typographic quotes, dashes or ellipses.
+  smart_quotes: apos,apos,quot,quot
+  typographic_symbols: {hellip: "...", mdash: "---", ndash: "--", laquo: "<<", raquo: ">>", laquo_space: "<< ", raquo_space: " >>"}
+  syntax_highlighter_opts:
+    disable: false
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+sass:
+  quiet_deps: true
+  silence_deprecations: [import, global-builtin, color-functions]
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - _redoc
+  - vendor
+  - .bundle

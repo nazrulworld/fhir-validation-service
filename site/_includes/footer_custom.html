@@ -1,0 +1,14 @@
+{%- comment -%}
+  Spec 011 (FR-015): wiki edit link for guide pages, and the commits the site was built from.
+  site.build comes from _config.generated.yml (scripts/build-docs-site.py).
+{%- endcomment -%}
+<p class="text-small text-grey-dk-100 mb-0">
+  {%- if page.wiki_edit_url %}
+  <a href="{{ page.wiki_edit_url }}">Edit this page in the wiki</a> &middot;
+  {%- endif %}
+  The guide is written in the <a href="https://github.com/nazrulworld/fhir-validation-service/wiki">project wiki</a>.
+  {%- if site.build %}
+  Built from <a href="https://github.com/nazrulworld/fhir-validation-service/commit/{{ site.build.commit }}"><code>{{ site.build.commit_short }}</code></a>
+  (wiki <a href="https://github.com/nazrulworld/fhir-validation-service/wiki/_history"><code>{{ site.build.wiki_commit_short }}</code></a>).
+  {%- endif %}
+</p>

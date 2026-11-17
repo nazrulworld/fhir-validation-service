@@ -1,0 +1,8 @@
+{
+  "name": "fhir-validation-service-docs-redoc",
+  "private": true,
+  "description": "Spec 011: pins the Redocly CLI that renders the API reference page; package-lock.json locks the whole tree.",
+  "dependencies": {
+    "@redocly/cli": "2.79.0"
+  }
+}

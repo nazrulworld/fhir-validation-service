@@ -9,6 +9,10 @@ It validates FHIR resources (STU3, R4, R4B, R5) against the base specification, 
 several versions of one IG, can be offered side by side. Any number of identical instances can run against one
 PostgreSQL database; IG changes reach every instance within seconds, without restarts.
 
+**User guide**: <https://nazrulworld.github.io/fhir-validation-service/> (installation, API documentation, and
+reference pages for configuration, the OpenAPI definition, the changelog and load tests). It is generated from the
+[project wiki](https://github.com/nazrulworld/fhir-validation-service/wiki).
+
 > **1.1.0** adds a terminology setting per request (`tx`, `txMode`), applies terminology changes without rebuilding,
 > and shares the definitions of common packages between contexts (see [CHANGELOG.md](CHANGELOG.md)). Settings, API
 > and behaviour details are below; procedures for operating the service are in [docs/operations.md](docs/operations.md).

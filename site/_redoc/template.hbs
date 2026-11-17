@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Spec 011 (FR-010): Redoc page template for scripts/build-docs-site.py. Based on the Redocly CLI 2.79.0 default
+  template; adds a bar linking back to the site and the YAML download, and the build footer. Built with
+  --inlineBundle, so the page loads nothing from other sites.
+-->
+<head>
+  <meta charset="utf8" />
+  <title>{{title}} · FHIR Validation Service</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { padding: 0; margin: 0; }
+    .docs-bar, .docs-footer {
+      display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center;
+      padding: 0.6rem 1rem; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f6fa; color: #27262b; border-bottom: 1px solid #e6e1e8;
+    }
+    .docs-footer { border-top: 1px solid #e6e1e8; border-bottom: 0; }
+    .docs-bar a, .docs-footer a { color: #5c5962; }
+    .docs-bar strong { margin-right: auto; }
+    @media (prefers-color-scheme: dark) {
+      .docs-bar, .docs-footer { background: #27262b; color: #e6e1e8; border-color: #44434d; }
+      .docs-bar a, .docs-footer a { color: #b8b3bd; }
+    }
+  </style>
+  {{{redocHead}}}
+</head>
+
+<body>
+  <nav class="docs-bar" aria-label="Documentation">
+    <strong>{{title}}</strong>
+    <a href="{{templateOptions.siteHome}}">&larr; User guide</a>
+    <a href="{{templateOptions.yamlUrl}}" download>Download {{templateOptions.yamlName}}</a>
+  </nav>
+  {{{redocHTML}}}
+  <footer class="docs-footer">
+    <span>Built from
+      <a href="{{templateOptions.github}}/commit/{{templateOptions.commit}}"><code>{{templateOptions.commitShort}}</code></a>
+    </span>
+    <a href="{{templateOptions.github}}">GitHub repository</a>
+  </footer>
+</body>
+
+</html>

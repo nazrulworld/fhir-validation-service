@@ -1,0 +1,59 @@
+{
+  "source": "https://github.com/nazrulworld/fhir-validation-service/wiki (live page HTML, wiki revision 45a0f6e, 2026-11-17)",
+  "anchors": {
+    "Home": [
+      "fhir-validation-service-wiki",
+      "key-features",
+      "pages",
+      "reference-in-the-repository",
+      "system-requirements",
+      "quick-start"
+    ],
+    "Installation-Guide": [
+      "installation-guide",
+      "requirements",
+      "installation",
+      "option-a-docker-compose-with-the-published-image",
+      "option-b-docker-compose-from-a-source-checkout",
+      "option-c-jar-with-your-own-postgresql",
+      "maven-artifact-github-packages",
+      "next-steps"
+    ],
+    "API-Documentation": [
+      "api-documentation",
+      "conventions",
+      "authentication",
+      "endpoints",
+      "health-and-metrics",
+      "get-health",
+      "get-healthliveness",
+      "get-healthreadiness",
+      "get-metrics",
+      "validation",
+      "post-versionvalidate",
+      "validator-contexts",
+      "post-versionvalidator",
+      "patch-versionvalidator",
+      "delete-versionvalidator",
+      "ig-packages",
+      "post-igsupload",
+      "post-igsregister",
+      "patch-igsnameversion",
+      "get-igsnameversiondependencies",
+      "get-igsnameversionconformance",
+      "schemas",
+      "validationresponse",
+      "validationmessage",
+      "terminologysettings",
+      "accesschangerequest",
+      "includeresponse",
+      "excluderesponse",
+      "includeaccessresponse",
+      "igregistrationresponse",
+      "igaccessresponse",
+      "healthresponse",
+      "readinessresponse",
+      "problem"
+    ]
+  }
+}
