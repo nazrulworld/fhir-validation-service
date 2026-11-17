@@ -81,3 +81,8 @@ wiki/
 .env
 compose.override.yaml
 .mcp.json
+
+### Documentation site (spec 011) ###
+site/_redoc/node_modules/
+site/.bundle/
+site/vendor/

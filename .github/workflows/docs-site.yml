@@ -1,0 +1,143 @@
+# Spec 011: builds the documentation site from the GitHub wiki and deploys it to GitHub Pages.
+# Contract: specs/011-docs-github-pages/contracts/docs-site-workflow.md. Only main deploys; other refs build and check.
+# Event data reaches scripts only through env: (never inside run: text).
+name: Documentation site
+
+on:
+  gollum:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - site/**
+      - scripts/build-docs-site.py
+      - scripts/docs-site-check-editor.sh
+      - scripts/tests/docs-site/**
+      - .github/workflows/docs-site.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      skip: ${{ steps.relevance.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check out the wiki
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-src
+          persist-credentials: false
+
+      - name: Wiki editor has push access (FR-032)
+        if: github.event_name == 'gollum'
+        env:
+          EDITOR_LOGIN: ${{ github.event.sender.login }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/docs-site-check-editor.sh
+
+      - name: Does this push change anything the site publishes?
+        id: relevance
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -eu
+          build() { echo "skip=false" >> "$GITHUB_OUTPUT"; echo "$1: building"; exit 0; }
+          case $BEFORE in
+            *[!0-9a-f]*|'') build "no usable previous commit" ;;
+            *[!0]*) ;;
+            *) build "new branch" ;;
+          esac
+          git fetch --no-tags --depth=1 origin "$BEFORE" || build "previous commit not fetchable"
+          git diff --name-only "$BEFORE" "$GITHUB_SHA" > "$RUNNER_TEMP/changed.txt"
+          # fails (on purpose) while the wiki has an unresolved link, surfacing the broken wiki
+          python3 -I scripts/build-docs-site.py --wiki wiki-src --list-sources > "$RUNNER_TEMP/sources.txt"
+          if grep -Eq '^(site/|scripts/build-docs-site\.py$|scripts/docs-site-check-editor\.sh$|scripts/tests/docs-site/|\.github/workflows/docs-site\.yml$)' "$RUNNER_TEMP/changed.txt" \
+            || { [ -s "$RUNNER_TEMP/sources.txt" ] && grep -qxF -f "$RUNNER_TEMP/sources.txt" "$RUNNER_TEMP/changed.txt"; }; then
+            build "published files or site sources changed"
+          fi
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "nothing the site publishes changed: not building"
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.relevance.outputs.skip != 'true'
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: site
+
+      - uses: actions/setup-node@v7
+        if: steps.relevance.outputs.skip != 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/_redoc/package-lock.json
+
+      - name: Converter and editor-check tests
+        if: steps.relevance.outputs.skip != 'true'
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/site/Gemfile
+          DOCS_SITE_JEKYLL_TESTS: "1"
+          DOCS_SITE_REDOC_TESTS: "1"
+        run: |
+          python3 -I -m unittest discover -s scripts/tests/docs-site
+          sh scripts/tests/docs-site/test_editor_check.sh
+
+      - name: Convert the wiki (fails on unresolved wiki links)
+        if: steps.relevance.outputs.skip != 'true'
+        run: python3 -I scripts/build-docs-site.py --wiki wiki-src
+
+      - name: Configure Pages
+        if: steps.relevance.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+
+      - name: Build with Jekyll
+        if: steps.relevance.outputs.skip != 'true'
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/site/Gemfile
+          JEKYLL_ENV: production
+        run: >-
+          bundle exec jekyll build -s target/docs-site/src -d target/docs-site/_site
+          --config target/docs-site/src/_config.yml,target/docs-site/src/_config.generated.yml
+
+      - name: Check internal links and anchors
+        if: steps.relevance.outputs.skip != 'true'
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/site/Gemfile
+        # The Redoc page resolves its own #operation/... links in the browser (research R6).
+        run: >-
+          bundle exec htmlproofer target/docs-site/_site --disable-external --assume-extension .html
+          --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/'
+
+      - name: Upload the site
+        if: steps.relevance.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: target/docs-site/_site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

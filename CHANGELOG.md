@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- The user guide is published at <https://nazrulworld.github.io/fhir-validation-service/>, generated from the project
+  wiki on every wiki edit (spec 011). It has search, a dark mode and a phone layout, and publishes the repository
+  files the wiki links to as reference pages: the configuration contract, a rendered OpenAPI reference, the changelog
+  and the load-test results. No change to the service.
+
 ## [1.1.0] - 2026-11-16
 
 Shared package definitions and a terminology setting per request (spec 010). No path, payload or status code of an

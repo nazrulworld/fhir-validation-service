@@ -1,0 +1,22 @@
+{%- comment -%}
+  Spec 011 (FR-017): apply the reader's colour scheme before the page paints: the stored choice, else the system
+  preference. jtd.setTheme swaps the theme stylesheet (just-the-docs-light.css / just-the-docs-dark.css).
+{%- endcomment -%}
+<script>
+  (function () {
+    var theme = null;
+    try { theme = window.localStorage.getItem("jtd-theme"); } catch (e) { theme = null; }
+    if (theme !== "light" && theme !== "dark") {
+      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    if (theme === "dark" && window.jtd) { jtd.setTheme("dark"); }
+    document.documentElement.setAttribute("data-docs-theme", theme);
+  })();
+</script>
+<style>
+  .docs-theme-toggle { background: none; border: 0; cursor: pointer; color: inherit; padding: 0 1rem; font: inherit; }
+  .docs-theme-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  /* phone width (FR-018): wide tables and code scroll inside their own box */
+  .main-content table { display: block; overflow-x: auto; }
+  .main-content pre { overflow-x: auto; }
+</style>
