@@ -33,7 +33,7 @@ Top-level `permissions: contents: read`.
 | configure | `actions/configure-pages@v6` (on `main` only; supplies nothing the converter needs — `baseurl` is fixed) |
 | jekyll | `bundle exec jekyll build -s target/docs-site/src -d target/docs-site/_site --config …/_config.yml,…/_config.generated.yml`, `JEKYLL_ENV=production` |
 | link check | `bundle exec htmlproofer target/docs-site/_site --disable-external --assume-extension .html --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/'` (FR-023; the Redoc page resolves its own `#operation/…` links in the browser, research R6) |
-| upload | `actions/upload-pages-artifact@v5` with `path: target/docs-site/_site` (main only) |
+| upload | `actions/upload-pages-artifact@v5` with `path: target/docs-site/_site` and `include-hidden-files: true` (main only; the action drops dot-files such as `reference/.env.example` by default) |
 
 No wiki-derived value (page name, sender, commit message) appears inside a `run:` script; event data reaches scripts
 only through `env:` (FR-033).

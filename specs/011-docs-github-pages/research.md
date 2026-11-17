@@ -80,6 +80,8 @@ Versions were checked on 2026-11-17 against rubygems.org, the npm registry and t
     *Implementation note*: this replaces the planned `include:` list. Jekyll skips dot-files (`.env.example`) and
     reads any file that starts with `---` (common in YAML) as front matter, which would alter a download; the
     generator avoids both.
+    *Go-live note (2026-11-17)*: `actions/upload-pages-artifact@v5` also drops dot-files unless
+    `include-hidden-files: true` is set; the first deployment served 404 for `/reference/.env.example` until it was.
   - Generated page sources live in `pages/` (`guide-NNN.md`, `ref-NNN.md|html`, `reference.md`); their addresses come
     only from `permalink`, so a wiki page name can never collide with scaffolding files.
 - **Rationale**: one mechanical rule each; repository paths are unique, so no two sources collide (the converter
@@ -136,7 +138,9 @@ Versions were checked on 2026-11-17 against rubygems.org, the npm registry and t
   workflow token and fails unless the permission is `admin`, `maintain` or `write`. The login is passed through
   `env:` (`SENDER: ${{ github.event.sender.login }}`), never interpolated into `run:` text (FR-033). If the call itself
   fails (e.g. 404 for a non-collaborator), the check fails closed. To verify during implementation: the endpoint is
-  readable with the default `GITHUB_TOKEN` (needs repository metadata read only).
+  readable with the default `GITHUB_TOKEN` (needs repository metadata read only). *Verified 2026-11-17*: the first `gollum` run
+  (run 44044938408) read the permission with the workflow token (`wiki edit by nazrulworld (admin): allowed to
+  deploy`); no fallback needed. A git push to the wiki did raise `gollum`, and the edit was live in under a minute.
 - **Untrusted input**: page names come from wiki file names; the converter only uses them as data (paths are
   validated against `^[^/\\\x00]+$`, written with `os.path.join` under the output root, and rejected when they
   resolve outside it). No wiki-derived value appears in a `run:` line.

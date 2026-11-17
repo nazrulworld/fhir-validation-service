@@ -123,6 +123,8 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: target/docs-site/_site
+          # publish dot-files such as /reference/.env.example (the action drops them by default)
+          include-hidden-files: true
 
   deploy:
     needs: build
