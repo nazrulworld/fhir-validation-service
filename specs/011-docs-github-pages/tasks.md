@@ -213,7 +213,7 @@ dispatch; failures and non-collaborator edits never deploy.
   `permissions: {pages: write, id-token: write}`, `environment: github-pages`,
   `concurrency: {group: pages, cancel-in-progress: false}`, `actions/deploy-pages@v5` (FR-020–FR-023, FR-032,
   FR-033). No `${{ … }}` expression of event data inside any `run:` block.
-- [ ] T023 [US2] Verify the editor-check assumption (research R8): from a workflow run on the branch (temporary
+- [X] T023 [US2] Verify the editor-check assumption (research R8): from a workflow run on the branch (temporary
   `workflow_dispatch` input or a test step), confirm `GET repos/{repo}/collaborators/{login}/permission` works with the
   default `GITHUB_TOKEN`; if it does not, switch `scripts/docs-site-check-editor.sh` to the plan's fallback
   (collaborator list lookup, fail closed) and note the outcome in research.md R8.
@@ -324,12 +324,12 @@ exists after the next build.
   (FR-030).
 - [X] T035 [P] [US5] Add an entry under `## [Unreleased]` in `CHANGELOG.md` ("Documentation" / "Added": the user guide
   is published at https://nazrulworld.github.io/fhir-validation-service/, generated from the wiki) (FR-031).
-- [ ] T036 [US5] Wiki repository (separate clone, `wiki/`): in `Home.md` add the site URL near the top and an
+- [X] T036 [US5] Wiki repository (separate clone, `wiki/`): in `Home.md` add the site URL near the top and an
   "Operations" link to `https://github.com/nazrulworld/fhir-validation-service/blob/main/docs/operations.md` in the
   "Reference (in the repository)" list (FR-016, FR-030). Commit and push to the wiki only after the workflow is merged
   and Pages is enabled, then run `workflow_dispatch` (git pushes may not raise `gollum`). **Confirm with the
   maintainer before pushing** (outward-facing).
-- [ ] T037 [US5] With the maintainer's confirmation and admin rights, run the one-time setup from T033 and verify
+- [X] T037 [US5] With the maintainer's confirmation and admin rights, run the one-time setup from T033 and verify
   `gh api repos/nazrulworld/fhir-validation-service/pages --jq .build_type` → `workflow` and the repository homepage
   (FR-029).
 
