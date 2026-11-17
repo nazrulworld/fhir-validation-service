@@ -80,6 +80,8 @@ Versions were checked on 2026-11-17 against rubygems.org, the npm registry and t
     *Implementation note*: this replaces the planned `include:` list. Jekyll skips dot-files (`.env.example`) and
     reads any file that starts with `---` (common in YAML) as front matter, which would alter a download; the
     generator avoids both.
+    *Go-live note (2026-11-17)*: `actions/upload-pages-artifact@v5` also drops dot-files unless
+    `include-hidden-files: true` is set; the first deployment served 404 for `/reference/.env.example` until it was.
   - Generated page sources live in `pages/` (`guide-NNN.md`, `ref-NNN.md|html`, `reference.md`); their addresses come
     only from `permalink`, so a wiki page name can never collide with scaffolding files.
 - **Rationale**: one mechanical rule each; repository paths are unique, so no two sources collide (the converter
