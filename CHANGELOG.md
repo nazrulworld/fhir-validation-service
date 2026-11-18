@@ -12,6 +12,10 @@ uses [Semantic Versioning](https://semver.org/).
   wiki on every wiki edit (spec 011). It has search, a dark mode and a phone layout, and publishes the repository
   files the wiki links to as reference pages: the configuration contract, a rendered OpenAPI reference, the changelog
   and the load-test results. No change to the service.
+- The problem `type` URIs in error responses
+  (`https://nazrulworld.github.io/fhir-validation-service/problems/<type>`) now resolve: each redirects to its row in
+  the API Documentation's problem-type table, which says what the problem means and what to do. Before, they
+  answered 404. No change to the service.
 
 ## [1.1.0] - 2026-11-16
 

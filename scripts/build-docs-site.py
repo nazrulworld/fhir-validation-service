@@ -11,7 +11,9 @@ What it does:
   - repository files linked as https://github.com/<repo>/(blob|raw)/<ref>/<path> are published from the checkout
     given by --repo: Markdown as Reference pages (followed transitively), the OpenAPI definition as a Redoc page,
     other text files as downloads with a code view; other links stay external;
-  - headings get GitHub-compatible ids, and Liquid is disabled on every generated page, so content is literal.
+  - headings get GitHub-compatible ids, and Liquid is disabled on every generated page, so content is literal;
+  - a wiki table row that starts with `<a id="<type>"></a>`<type>`` documents an RFC 9457 problem type: the site
+    gets a redirect page at /problems/<type> to that anchor, so the `type` URIs the service returns resolve.
 
 Exit codes: 0 success (warnings allowed), 1 build error, 2 usage error. The output is deterministic.
 """
@@ -55,6 +57,7 @@ INLINE_LINK = re.compile(r"(!?)\[((?:[^\[\]\n]|\[[^\[\]\n]*\])*)\]\([ \t]*(<[^<>
 AUTOLINK = re.compile(r"<(https?://[^<>\s]+)>")
 REFERENCE_DEF = re.compile(r"^( {0,3}\[[^\]\n]+\]:[ \t]*)(<[^<>\n]*>|\S+)", re.M)
 SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+PROBLEM_ROW = re.compile(r'^\|[ \t]*<a id="([a-z][a-z0-9-]*)"></a>`\1`', re.M)
 GITHUB_URL = re.compile(r"^https?://github\.com/nazrulworld/fhir-validation-service(?:/(.*))?$")
 
 
@@ -321,6 +324,7 @@ class Build:
         self.references = {}       # repo path -> Reference
         self.queue = deque()
         self.addresses = {}        # canonical address -> source label
+        self.problems = {}         # problem type -> WikiPage documenting it
         self.links_rewritten = 0
 
     # -- addresses ----------------------------------------------------------------------------------------------
@@ -583,7 +587,22 @@ class Build:
         self.collect_pages()
         for page in self.ordered:
             page.body = self.rewrite(page.text, page)
+        self.collect_problems()
         self.process_queue()
+
+    def collect_problems(self):
+        for page in self.ordered:
+            lines = page.text.splitlines(keepends=True)
+            for line, in_fence in zip(lines, fence_flags(lines)):
+                match = None if in_fence else PROBLEM_ROW.match(line)
+                if not match:
+                    continue
+                kind = match.group(1)
+                if kind in self.problems:
+                    self.diag.error(page, "problem type %s is documented on %s and %s"
+                                    % (kind, self.problems[kind].label, page.label))
+                elif self.claim("/problems/" + kind, "problem type " + kind, page):
+                    self.problems[kind] = page
 
     # -- output -------------------------------------------------------------------------------------------------
 
@@ -642,6 +661,12 @@ class Build:
                 else:
                     fields["layout"] = None
                     write_file("pages/ref-%03d.html" % nav, front_matter(fields) + html_page)
+
+        for kind in sorted(self.problems):
+            target = self.page_url(self.problems[kind], "#" + kind)
+            fields = {"title": "Problem type " + kind, "permalink": "/problems/" + kind, "layout": None,
+                      "search_exclude": True, "nav_exclude": True, "render_with_liquid": False}
+            write_file("pages/problem-%s.html" % kind, front_matter(fields) + problem_redirect(kind, target))
 
         config = {
             "baseurl": self.base,
@@ -705,6 +730,16 @@ class Build:
               file=stream)
         print("links rewritten: %d" % self.links_rewritten, file=stream)
         print("warnings: %d" % len(self.diag.warnings), file=stream)
+
+
+def problem_redirect(kind, target):
+    """A minimal page that sends a problem type URI to its row in the API documentation."""
+    href = html.escape(target, quote=True)
+    return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+            "<title>Problem type %s</title>\n<meta name=\"robots\" content=\"noindex\">\n"
+            "<link rel=\"canonical\" href=\"%s\">\n<meta http-equiv=\"refresh\" content=\"0; url=%s\">\n"
+            "</head>\n<body>\n<p>Problem type <code>%s</code>: see <a href=\"%s\">%s</a>.</p>\n</body>\n</html>\n"
+            % (html.escape(kind), href, href, html.escape(kind), href, href))
 
 
 def split_anchor(dest):
