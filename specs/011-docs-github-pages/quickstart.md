@@ -21,7 +21,7 @@ bundle install
 bundle exec jekyll build -s target/docs-site/src -d target/docs-site/_site \
   --config target/docs-site/src/_config.yml,target/docs-site/src/_config.generated.yml
 bundle exec htmlproofer target/docs-site/_site --disable-external \
-  --assume-extension .html --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/'
+  --assume-extension .html --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/' --allow-missing-href
 bundle exec jekyll serve -s target/docs-site/src \
   --config target/docs-site/src/_config.yml,target/docs-site/src/_config.generated.yml
 # open http://localhost:4000/fhir-validation-service/

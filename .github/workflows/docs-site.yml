@@ -114,9 +114,11 @@ jobs:
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/site/Gemfile
         # The Redoc page resolves its own #operation/... links in the browser (research R6).
+        # --allow-missing-href: the API Documentation's problem-type rows are anchored with <a id=...></a> (valid
+        # HTML5; GitHub's wiki keeps it), and /problems/<type> redirects to them.
         run: >-
           bundle exec htmlproofer target/docs-site/_site --disable-external --assume-extension .html
-          --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/'
+          --swap-urls '^/fhir-validation-service:' --ignore-files '/openapi\.yaml\.html$/' --allow-missing-href
 
       - name: Upload the site
         if: steps.relevance.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
