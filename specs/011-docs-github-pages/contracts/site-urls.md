@@ -13,6 +13,7 @@ permanent once published (FR-019a). Rules are mechanical; the converter fails on
 | repo text file | page `<site>/reference/<path>.html`, download `<site>/reference/<path>` | `<site>/reference/.env.example.html` |
 | image used by a reference page | `<site>/reference/<path>` | — |
 | Reference section index | `<site>/reference/` | — |
+| wiki table row `<a id="<type>"></a>`<type>`` (an RFC 9457 problem type) | `<site>/problems/<type>`: a redirect page to `<site>/<Page>#<type>`, so the `type` URIs the service returns resolve | `<site>/problems/package-not-found` |
 
 Expected set for the current wiki (2026-11-17), once the wiki links `docs/operations.md` (FR-016):
 
@@ -27,6 +28,7 @@ Expected set for the current wiki (2026-11-17), once the wiki links `docs/operat
 /reference/perf/README
 /reference/docs/operations
 /reference/.env.example.html        (+ /reference/.env.example)
+/problems/<type>                    one redirect per row of the API Documentation's "Problem types" table (24)
 ```
 
 Mapping a wiki URL by hand: replace `https://github.com/nazrulworld/fhir-validation-service/wiki/` with `<site>/`
