@@ -267,6 +267,37 @@ public class ServiceMetrics {
                 k -> Counter.builder(name).tags(tags).description(description).register(registry));
     }
 
+    /** Spec 013: a regex re-check started ({@code kind} plain or quiet). */
+    public void recordRegexRecheck(SupportedFhirVersion version, String kind) {
+        counter("fv.validation.regex.rechecks", "Validations re-checked because the previous attempt reported a regex timeout",
+                "fhir_version", version.name(), "kind", kind).increment();
+    }
+
+    /** Spec 013: how a validation whose first attempt reported a regex timeout ended. */
+    public void recordRegexTimeout(SupportedFhirVersion version, String outcome, String reason) {
+        counter("fv.validation.regex.timeouts", "Validations whose first attempt reported a regex timeout, by final outcome",
+                "fhir_version", version.name(), "outcome", outcome, "reason", reason).increment();
+    }
+
+    /** Spec 013: reports this instance's regex re-checks to these metrics. */
+    public nzi.fhir.validator.core.validator.RegexRecheck.Listener regexRecheckListener() {
+        return new nzi.fhir.validator.core.validator.RegexRecheck.Listener() {
+            @Override
+            public void onRecheck(SupportedFhirVersion version, String kind) {
+                if (version != null) {
+                    recordRegexRecheck(version, kind);
+                }
+            }
+
+            @Override
+            public void onOutcome(SupportedFhirVersion version, String contextKey, String outcome, String reason, int attempts) {
+                if (version != null) {
+                    recordRegexTimeout(version, outcome, reason);
+                }
+            }
+        };
+    }
+
     public void recordBuildFailure(SupportedFhirVersion version) {
         Counter.builder("fv.snapshot.build.failures").tag("version", version.name())
                 .description("Failed validator builds").register(registry).increment();

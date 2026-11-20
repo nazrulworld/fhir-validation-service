@@ -140,6 +140,13 @@ public final class ValidatorSnapshot {
         this.txServices = txServices;
     }
 
+    /** Spec 013: re-checks a result that reports a regex timeout; the service instance's own (budget, metrics). */
+    private volatile RegexRecheck regexRecheck = RegexRecheck.DEFAULT;
+
+    void setRegexRecheck(RegexRecheck regexRecheck) {
+        this.regexRecheck = regexRecheck == null ? RegexRecheck.DEFAULT : regexRecheck;
+    }
+
     /**
      * Test hook: the context default the plain {@code validate} overloads apply, as {@code FhirValidationService} would
      * (with the same allowlist check). Never set in production, where the service passes each request's setting.
@@ -189,6 +196,15 @@ public final class ValidatorSnapshot {
      */
     public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries,
                             EffectiveTerminology effective, TerminologyRouter router) {
+        return validate(body, contentType, profiles, maxBundleEntries, effective, router, java.util.OptionalLong.empty());
+    }
+
+    /**
+     * @param requestDeadlineNanos when the request must be answered ({@link System#nanoTime()} scale), if any: regex
+     *                             re-checks never run past it (spec 013 FR-006)
+     */
+    public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries,
+                            EffectiveTerminology effective, TerminologyRouter router, java.util.OptionalLong requestDeadlineNanos) {
         IParser parser = (contentType == SupportedContentType.XML || contentType == SupportedContentType.FHIR_XML)
                 ? fhirContext.newXmlParser() : fhirContext.newJsonParser();
         parser.setParserErrorHandler(new LenientErrorHandler(false).setErrorOnInvalidValue(false));
@@ -241,7 +257,10 @@ public final class ValidatorSnapshot {
             TerminologyBudget.open(TerminologyScope.current().offline() ? 0 : txServices.requestBudgetMs());
         }
         try {
-            ValidationResult result = validator.validateWithResult(body, options);
+            // Spec 013: a result that reports a regex timeout (HL7 core's fixed 500 ms, which load alone can exceed) is
+            // validated again, at most twice, inside this scope and budget; the answer is one attempt's whole result.
+            ValidationResult result = regexRecheck.run(() -> validator.validateWithResult(body, options),
+                    requestDeadlineNanos, version, key.igPackage() == null ? "base" : key.igPackage()).result();
             if (TerminologyBudget.degraded()) {
                 txServices.codeCache().invalidateScope(TerminologyScope.current().scopeId());
             }

@@ -66,6 +66,8 @@ public class SnapshotBuilder {
     private final TerminologyServices txServices;
     /** Spec 010: parsed package definitions shared by every context of this instance. */
     private final SharedPackageDefinitions sharedDefinitions;
+    /** Spec 013: given to every snapshot this builder makes (the service instance's budget and metrics). */
+    private volatile RegexRecheck regexRecheck = RegexRecheck.DEFAULT;
     private volatile Runnable buildHook;
 
     /**
@@ -155,6 +157,7 @@ public class SnapshotBuilder {
                 ValidatorSnapshot snapshot = assemble(key, revision, resolvedPackages, resolved.hashes(), npmPackages,
                         txServices, sharedDefinitions);
                 snapshot.setPackageArchiveBytes(archiveBytes);
+                snapshot.setRegexRecheck(regexRecheck);
                 // Warm caches so the first real request does not pay HAPI's lazy initialisation. Mode none and a budget
                 // of 0: the warm-up never calls a terminology server (spec 010 FR-004, spec 007 research R5).
                 snapshot.validate(WARM_UP_RESOURCE, SupportedContentType.JSON, List.of());
@@ -210,6 +213,11 @@ public class SnapshotBuilder {
         byte[] hash = hashes == null ? null : hashes.get(id);
         return sharedDefinitions != null && hash != null
                 && sharedDefinitions.contains(new nzi.fhir.validator.core.npm.SharedPackage.Key(version, id, hash));
+    }
+
+    /** The regex re-check (spec 013) of the snapshots built from now on; set once at startup. */
+    public void setRegexRecheck(RegexRecheck regexRecheck) {
+        this.regexRecheck = regexRecheck == null ? RegexRecheck.DEFAULT : regexRecheck;
     }
 
     /**

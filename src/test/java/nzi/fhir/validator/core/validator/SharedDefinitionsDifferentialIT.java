@@ -16,7 +16,6 @@ import nzi.fhir.validator.core.terminology.TerminologySettings;
 import nzi.fhir.validator.core.terminology.TestTerminology;
 import nzi.fhir.validator.testsupport.Fixtures;
 import nzi.fhir.validator.testsupport.GoldenOutcomes;
-import nzi.fhir.validator.testsupport.RegexTimeouts;
 import org.hl7.fhir.utilities.npm.NpmPackage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -158,7 +157,7 @@ class SharedDefinitionsDifferentialIT {
         List<Case> all = cases();
         assertTrue(all.size() >= 84 + 50, "the corpus has every example and at least 50 invalid variants");
         for (Case c : all) {
-            RegexTimeouts.retry(() -> check(c));
+            check(c);
         }
     }
 
@@ -170,6 +169,46 @@ class SharedDefinitionsDifferentialIT {
         }
         Collections.shuffle(rounds, new Random(10));
         runConcurrently(rounds, c -> () -> check(c));
+    }
+
+    /**
+     * Spec 013 SC-001 (opt-in: {@code FV_LOAD_ROUNDS=75}, on a 4-CPU machine): the corpus validated {@code rounds} times
+     * on 8 threads, at least 10,000 validations, and every result equal to the one recorded alone (the golden file, which
+     * {@link #resultsAreIdenticalTo100Sequentially} checks the resource gives alone). Prints the re-checks needed.
+     */
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "FV_LOAD_ROUNDS", matches = "[1-9][0-9]*")
+    void theSameVerdictUnderSustainedLoad() throws Exception {
+        int rounds = Integer.parseInt(System.getenv("FV_LOAD_ROUNDS"));
+        java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.LongAdder> counts = new java.util.concurrent.ConcurrentHashMap<>();
+        RegexRecheck.Listener counting = new RegexRecheck.Listener() {
+            @Override
+            public void onRecheck(SupportedFhirVersion version, String kind) {
+                counts.computeIfAbsent("recheck " + kind, k -> new java.util.concurrent.atomic.LongAdder()).increment();
+            }
+
+            @Override
+            public void onOutcome(SupportedFhirVersion version, String contextKey, String outcome, String reason, int attempts) {
+                counts.computeIfAbsent(outcome + (reason.isEmpty() ? "" : " " + reason),
+                        k -> new java.util.concurrent.atomic.LongAdder()).increment();
+            }
+        };
+        RegexRecheck.resetSharedStateForTests();
+        contexts.values().forEach(s -> s.setRegexRecheck(new RegexRecheck(30_000, counting)));
+        try {
+            List<Case> load = new ArrayList<>();
+            for (int i = 0; i < rounds; i++) {
+                load.addAll(cases());
+            }
+            Collections.shuffle(load, new Random(13));
+            long started = System.nanoTime();
+            runConcurrently(load, c -> () -> check(c));
+            System.out.printf("SC-001: %d validations on 8 threads in %d s, 0 differences; re-checks %s%n", load.size(),
+                    TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started), new java.util.TreeMap<>(counts));
+            assertTrue(load.size() >= 10_000 || rounds < 75, "FV_LOAD_ROUNDS=75 gives at least 10,000 validations");
+        } finally {
+            contexts.values().forEach(s -> s.setRegexRecheck(RegexRecheck.DEFAULT));
+        }
     }
 
     /** The corpus root resolves from the test classpath (sanity, independent of the packages). */
@@ -215,15 +254,9 @@ class SharedDefinitionsDifferentialIT {
             List<Case> all = cases();
             Map<String, String> expected = new HashMap<>();
             for (Case c : all) {
-                // Baseline and shared result are rendered together and retried together: a load-induced regex timeout in
-                // either is rendered again, while an outcome both contexts give every time (even one with a regex
-                // timeout) is accepted as it is.
-                RegexTimeouts.retry(() -> {
-                    String baseline = render(privateCtx.get(c.context()), c, effective, router);
-                    expected.put(c.relative(), baseline);
-                    assertEquals(baseline, render(sharedCtx.get(c.context()), c, effective, router),
-                            c.relative() + ": shared and private contexts differ with a terminology server");
-                });
+                expected.put(c.relative(), render(privateCtx.get(c.context()), c, effective, router));
+                assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
+                        c.relative() + ": shared and private contexts differ with a terminology server");
             }
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
             privateCtx.clear(); // the baseline is recorded; release its contexts before the concurrent phase
@@ -247,28 +280,23 @@ class SharedDefinitionsDifferentialIT {
         return GoldenOutcomes.project(OutcomeRenderer.render(outcome, MediaTypes.ResponseFormat.FHIR_JSON)).encode();
     }
 
+    /** A check that may throw (the comparison of one case). */
+    interface Check {
+        void run() throws Exception;
+    }
+
     /**
-     * Runs every case's check on 8 threads. HL7 core evaluates each regex on an executor with a fixed 500 ms timeout
-     * ({@code RegexTimeout.DEFAULT_TIMEOUT}); on a small CI runner 8 validation threads can starve it, and the
-     * validation then reports an extra regex timeout issue. That is load, not sharing: such a case is deferred and
-     * checked again once every concurrent check has finished, with nothing else running, where a real difference
-     * would show again.
+     * Runs every case's check on 8 threads. No retry for regex timeouts (spec 013 SC-002): a validation whose regex
+     * check times out under this load is re-checked by the snapshot itself ({@link RegexRecheck}), so any difference
+     * here is a real one.
      */
-    private static void runConcurrently(List<Case> cases, java.util.function.Function<Case, RegexTimeouts.Check> checkOf) throws Exception {
-        List<Case> deferred = java.util.Collections.synchronizedList(new ArrayList<>());
+    private static void runConcurrently(List<Case> cases, java.util.function.Function<Case, Check> checkOf) throws Exception {
         ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
         try {
             List<Future<?>> futures = new ArrayList<>();
             for (Case c : cases) {
                 futures.add(pool.submit(() -> {
-                    try {
-                        checkOf.apply(c).run();
-                    } catch (AssertionError e) {
-                        if (!RegexTimeouts.timedOut(e)) {
-                            throw e;
-                        }
-                        deferred.add(c);
-                    }
+                    checkOf.apply(c).run();
                     return null;
                 }));
             }
@@ -284,9 +312,6 @@ class SharedDefinitionsDifferentialIT {
             }
         } finally {
             pool.shutdownNow();
-        }
-        for (Case c : deferred) {
-            RegexTimeouts.retry(checkOf.apply(c)); // alone: no other validation competes for the regex executor
         }
     }
 }

@@ -423,6 +423,21 @@ and `dependencies`, plus the `.json` resources under `package/`), then upload it
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
+### Regex checks under load
+
+The validation engine stops any single regex check after 500 ms of wall time. On a busy instance a cheap regex can
+miss that limit before it even runs, and a valid resource would get a false error. When a result reports such a
+timeout, the service validates the resource again before answering: once at once, and if the timeout is still there,
+once more with no other validation running on the instance (waiting at most one second for the others to finish). The
+response is the complete result of the first attempt without a regex timeout.
+
+When the timeout persists, the input itself makes the regex run too long (or the instance is too busy, or the request
+has no time left). The response is then the last attempt's result as the engine reports it: status 200, the timeout as
+an issue with the engine's severity. Nothing is filtered or downgraded. Quiet re-checks are limited to 6 per minute per
+instance, and a result with more than 3 regex timeouts gets no quiet re-check, so a hostile input can't pause the
+instance. `fv_validation_regex_rechecks_total` and `fv_validation_regex_timeouts_total` (by `outcome` and `reason`)
+show how often this happens; a persistent timeout is also logged at WARN without the resource's content.
+
 ### Validating against two IGs
 
 Some exchanges are governed by two IGs at once, for example a national base IG and a project IG that doesn't declare
@@ -698,7 +713,7 @@ bundled compose database runs on a private compose network. When the database is
 | `GET /health/liveness`  | the process is alive (use for liveness probes)                                                                           |
 | `GET /health/readiness` | 200 when the database is reachable, every core and included-IG validator is usable, and the instance is not draining      |
 | `GET /health`           | detailed report                                                                                                          |
-| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_cpu_seconds`, `fv_validation_allocated_bytes`, `fv_usage_*`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, `fv_acl_security_disabled`, `fv_validator_contexts_inactive`, ...) |
+| `GET /metrics`          | Prometheus metrics (`fv_validations_total`, `fv_validation_seconds`, `fv_validation_cpu_seconds`, `fv_validation_allocated_bytes`, `fv_usage_*`, `fv_validation_pending`, `fv_config_revision`, `fv_tx_*`, `fv_acl_security_disabled`, `fv_validator_contexts_inactive`, `fv_validation_regex_rechecks_total`, `fv_validation_regex_timeouts_total`, ...) |
 
 On SIGTERM an instance reports not-ready, waits `FV_SHUTDOWN_PRE_DRAIN_MS`, finishes in-flight requests (up to
 `FV_SHUTDOWN_GRACE_MS`), then exits.

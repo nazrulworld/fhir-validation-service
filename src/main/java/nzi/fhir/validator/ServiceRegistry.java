@@ -182,6 +182,10 @@ public final class ServiceRegistry {
         metrics.bindSpec010(builder.sharedDefinitions(), codeCache, HeapBudget.SHARED_RETAINED_PER_EXPANDED_BYTE);
         metrics.bindSpec009(config.aclMode(), healthService::inactiveCount);
         services.validationService.setMetrics(metrics);
+        // Spec 013: regex re-checks within this instance's budgets, reported to its own metrics (never JVM-wide).
+        services.validationService.setHttpRequestTimeoutMs(config.httpRequestTimeoutMs());
+        builder.setRegexRecheck(new nzi.fhir.validator.core.validator.RegexRecheck(config.validationTimeoutMs(),
+                metrics.regexRecheckListener()));
         registry.setBuildFailureListener(metrics::recordBuildFailure);
         services.metrics = metrics;
         // Spec 008: usage accounting (FV_USAGE_SINK); closed by Bootstrap.stop() after the drain.

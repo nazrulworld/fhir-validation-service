@@ -98,6 +98,17 @@ public class FhirValidationService {
     }
 
     /** The access of each version's included contexts (spec 005), read without a lock. */
+    /** {@code FV_HTTP_REQUEST_TIMEOUT_MS}; 0 = no request deadline for regex re-checks (tests). */
+    private volatile long httpRequestTimeoutMs;
+
+    /**
+     * Spec 013 FR-006: regex re-checks never run past the request's deadline, counted from when the request reached the
+     * service (admission wait included), less 1 s to write the answer.
+     */
+    public void setHttpRequestTimeoutMs(long httpRequestTimeoutMs) {
+        this.httpRequestTimeoutMs = httpRequestTimeoutMs;
+    }
+
     public void setPinnedAccess(Function<SupportedFhirVersion, PinnedAccess> pinnedAccess) {
         this.pinnedAccess = pinnedAccess;
     }
@@ -154,6 +165,10 @@ public class FhirValidationService {
         java.util.Objects.requireNonNull(who, "caller");
         java.util.concurrent.atomic.AtomicReference<EffectiveTerminology> effective = new java.util.concurrent.atomic.AtomicReference<>();
         long started = System.nanoTime();
+        long timeoutMs = httpRequestTimeoutMs;
+        java.util.OptionalLong requestDeadline = timeoutMs > 0
+                ? java.util.OptionalLong.of(started + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(Math.max(0, timeoutMs - 1_000)))
+                : java.util.OptionalLong.empty();
         // Steps may complete on another context (a joined catalog refresh, a joined build): return to the caller's
         // context after each, so its request id stays on every log line (Principle VII).
         io.vertx.core.Context caller = io.vertx.core.Vertx.currentContext();
@@ -189,7 +204,7 @@ public class FhirValidationService {
                                     EffectiveTerminology tx = effective.get();
                                     ValidatorSnapshot.Outcome outcome = snapshot.validate(body, contentType, profiles,
                                                     maxBundleEntries, tx, TerminologyRouter.of(tx, version,
-                                                            txServices.resolver(), txServices.allowlist()))
+                                                            txServices.resolver(), txServices.allowlist()), requestDeadline)
                                             .withContextAccess(contextAccess.get());
                                     meter.ig(outcome.contextLabel());
                                     countIssues(outcome, issues);

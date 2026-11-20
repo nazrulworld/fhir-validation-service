@@ -6,6 +6,30 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+No spurious regex timeout errors under load (spec 013). No path, payload or status code changes.
+
+### Fixed
+
+- A valid resource could be reported invalid because a regex check ran past the validation engine's fixed 500 ms limit
+  while the instance was busy ("Exception evaluating regex … Regex evaluation timed out", "The regex … could not be
+  executed", or a constraint failing with "Timeout evaluating regex"). The result depended on load, not on the
+  resource. The service now validates such a resource again before answering: at once, then, if needed, with no other
+  validation running on the instance. The answer is one attempt's complete result; nothing is filtered or downgraded.
+- When the timeout persists (the input makes the regex run too long), the response is the last attempt's result as the
+  engine reports it, with status 200. Re-checks stay within the request timeout and the validation budget, wait at most
+  one second for other validations, are limited to 6 quiet re-checks per minute per instance, and are skipped for a
+  result with more than 3 regex timeouts, so a hostile input can't pause the instance.
+
+### Added
+
+- Metrics `fv_validation_regex_rechecks_total{fhir_version, kind}` and
+  `fv_validation_regex_timeouts_total{fhir_version, outcome, reason}`, and a WARN log line per persistent timeout
+  (context key and request id, never the resource content).
+
+### Upgrading from 1.2.0
+
+- No migration and no new setting.
+
 ## [1.2.0] - 2026-11-20
 
 Validator contexts built from two IGs (spec 012). No path, payload or status code of an existing request changes.
