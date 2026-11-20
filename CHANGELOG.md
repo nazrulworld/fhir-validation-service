@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-20
+
 No spurious regex timeout errors under load (spec 013). No path, payload or status code changes.
 
 ### Fixed
