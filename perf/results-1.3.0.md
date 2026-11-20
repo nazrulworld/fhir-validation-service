@@ -35,7 +35,9 @@ IG='hl7.fhir.dk.core#3.4.0' IG_REGISTER='hl7.fhir.dk.core#3.4.0' perf/compare-ru
 
 ## Same verdict under sustained load (SC-001) — PASS, with a caveat
 
-`FV_LOAD_ROUNDS=75 ./mvnw -B test -Dtest='SharedDefinitionsDifferentialIT#theSameVerdictUnderSustainedLoad'` validates the
+`FV_LOAD_ROUNDS=75 ./mvnw -B verify -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false
+-Dit.test='SharedDefinitionsDifferentialIT#theSameVerdictUnderSustainedLoad'` (the release gate runs under failsafe since
+#94, in its own JVM with a fixed 3 GB heap) validates the
 release-gate corpus 75 times in random order on 8 threads and compares every result with the golden file recorded from
 1.0.0 (the result each resource gives alone):
 

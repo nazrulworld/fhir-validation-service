@@ -32,6 +32,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -252,14 +254,15 @@ class SharedDefinitionsDifferentialIT {
             var router = TerminologyRouter.server(stub.base());
             List<Case> all = cases();
             Map<String, String> expected = new HashMap<>();
-            Map<String, List<Case>> byContext = all.stream().collect(java.util.stream.Collectors.groupingBy(Case::context));
-            assertEquals(new java.util.HashSet<>(roots), byContext.keySet(), "every context has cases, and only these");
+            Map<String, List<Case>> byContext = all.stream().collect(Collectors.groupingBy(Case::context));
+            assertEquals(new HashSet<>(roots), byContext.keySet(), "every context has cases, and only these");
             // One private baseline at a time: each parses every package of its context again, and three of them at
             // once ran the test JVM out of heap. recordBaseline builds it, records its cases and returns, so it is
             // unreachable before the next one is built.
             for (String root : roots) {
                 recordBaseline(root, byContext.get(root), services, sharedCtx.get(root), effective, router, expected);
             }
+            assertEquals(all.size(), expected.size(), "one baseline per case (no two cases share a path)");
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
             List<Case> rounds = new ArrayList<>(all);
             rounds.addAll(all);
@@ -276,13 +279,13 @@ class SharedDefinitionsDifferentialIT {
      * Builds the private baseline of {@code root} (every package parsed for this context alone, as on 1.0.0), records
      * the expected outcome of each of its cases and checks the shared context gives the same.
      */
-    private void recordBaseline(String root, List<Case> cases, TerminologyServices services, ValidatorSnapshot shared,
+    private void recordBaseline(String root, List<Case> cases, TerminologyServices services, ValidatorSnapshot sharedSnapshot,
                                 EffectiveTerminology effective, TerminologyRouter router, Map<String, String> expected)
             throws Exception {
         ValidatorSnapshot privateCtx = build(root, services, null);
         for (Case c : cases) {
             expected.put(c.relative(), render(privateCtx, c, effective, router));
-            assertEquals(expected.get(c.relative()), render(shared, c, effective, router),
+            assertEquals(expected.get(c.relative()), render(sharedSnapshot, c, effective, router),
                     c.relative() + ": shared and private contexts differ with a terminology server");
         }
     }

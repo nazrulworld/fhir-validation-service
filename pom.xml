@@ -43,8 +43,18 @@
         <netty.version>4.1.139.Final</netty.version>
         <!-- Must match the SCRAM client vertx-pg-client is built against. -->
         <scram.version>3.3</scram.version>
-        <!-- Extra test JVM options (-DargLine=..., or a coverage agent); the surefire and failsafe argLines add theirs
-             to it through @{argLine}. -->
+        <!-- Test JVMs (surefire and the failsafe release gate) share these; each can be set on the command line, e.g.
+             ./mvnw verify -Dtest.heap=-Xmx6g or -Dtest.jvm.extra=-agentlib:jdwp=transport=dt_socket,server=y,address=5005.
+             test.jvm.args: English, because HL7 core localises its messages and tests compare them (the default locale
+             is fixed at JVM start); and spec 007 research R14: the production registry client never contacts
+             ecosystem.hl7.org from tests (tests that need a registry use a local stub).
+             Heaps are fixed, so whether a test fits never depends on the machine's RAM. -->
+        <test.jvm.args>-Duser.language=en -Duser.country=US -Dfv.tx.registry.offline=true</test.jvm.args>
+        <test.heap>-Xmx4g</test.heap>
+        <release-gate.heap>-Xmx3g</release-gate.heap>
+        <test.jvm.extra></test.jvm.extra>
+        <!-- Set by plugins that add a JVM agent (e.g. JaCoCo prepare-agent); a -DargLine on the command line does not
+             reach it (surefire reads @{argLine} from the project's properties). Use test.jvm.extra instead. -->
         <argLine></argLine>
         <micrometer.version>1.12.13</micrometer.version>
         <contextual-logging.version>1.2.1</contextual-logging.version>
@@ -500,10 +510,8 @@ in /NOTICE.
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0-M7</version>
                 <configuration>
-                    <!-- English: HL7 core localises its messages, and tests that compare them need stable texts (the
-                         default locale is fixed at JVM start, so this is a JVM option, not a system property below).
-                         The heap is the JVM default: the one heavy class runs on its own (failsafe, below). -->
-                    <argLine>@{argLine} -Duser.language=en -Duser.country=US</argLine>
+                    <!-- See the test.* properties. The release gate runs on its own (failsafe, below). -->
+                    <argLine>@{argLine} ${test.jvm.args} ${test.heap} ${test.jvm.extra}</argLine>
                     <includes>
                         <include>**/*Test.java</include>
                         <include>**/*IT.java</include>
@@ -511,32 +519,24 @@ in /NOTICE.
                     <excludes>
                         <exclude>**/SharedDefinitionsDifferentialIT.java</exclude>
                     </excludes>
-                    <systemPropertyVariables>
-                        <!-- Spec 007 research R14: the production registry client never contacts ecosystem.hl7.org from
-                             tests (it stays on the stored or built-in list). Tests that need a registry use a local
-                             stub through the test-only constructor. -->
-                        <fv.tx.registry.offline>true</fv.tx.registry.offline>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
                 <!-- The release-gate differential test (spec 010) builds several large validation contexts. It runs in
-                     its own JVM in the verify phase, with a fixed heap, so its result never depends on the machine's
-                     RAM or on what the other test classes left in memory (it needs 2-2.5 GB). Run it alone with
+                     its own JVM in the verify phase, with a fixed heap, so its result never depends on what the other
+                     test classes left in memory (it needs 2-2.5 GB). ./mvnw test does not run it; ./mvnw verify does
+                     (-DskipITs skips it). Alone:
                      ./mvnw verify -Dit.test=SharedDefinitionsDifferentialIT -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false -->
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.0.0-M7</version>
                 <configuration>
-                    <argLine>@{argLine} -Duser.language=en -Duser.country=US -Xmx3g</argLine>
+                    <argLine>@{argLine} ${test.jvm.args} ${release-gate.heap} ${test.jvm.extra}</argLine>
                     <includes>
                         <include>**/SharedDefinitionsDifferentialIT.java</include>
                     </includes>
                     <!-- The test classes and target/classes, never the shaded jar (it bundles every dependency). -->
                     <classesDirectory>${project.build.outputDirectory}</classesDirectory>
-                    <systemPropertyVariables>
-                        <fv.tx.registry.offline>true</fv.tx.registry.offline>
-                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
