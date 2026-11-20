@@ -199,6 +199,53 @@ class RegexRecheckTest {
     }
 
     @Test
+    void theValidationBudgetCountsFromValidationStartNotFromTheFirstEngineCall() {
+        Script early = new Script(1, 0); // parsing took 500 ms: 500 + 100 ms spent + 2 x 100 ms <= 1,000 ms
+        RegexRecheck.Result r = recheck(1_000).run(early, now.get() - 500 * MS, OptionalLong.empty(), SupportedFhirVersion.R4,
+                "test.ig#1.0.0");
+        assertEquals(RegexRecheck.OUTCOME_RESOLVED, r.outcome());
+        Script late = new Script(1);
+        RegexRecheck.Result stopped = recheck(1_000).run(late, now.get() - 750 * MS, OptionalLong.empty(),
+                SupportedFhirVersion.R4, "test.ig#1.0.0"); // 750 + 100 ms spent + 2 x 100 ms > 1,000 ms
+        assertEquals(1, stopped.attempts(), "counted from the engine call alone, 300 ms would have fitted");
+        assertEquals(RegexRecheck.REASON_BUDGET, stopped.reason());
+    }
+
+    @Test
+    void theExclusiveWaitComesOutOfTheDeadline() throws Exception {
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        java.util.concurrent.CountDownLatch holding = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        try {
+            pool.submit(() -> gate.shared(() -> {
+                holding.countDown();
+                try {
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return null;
+            }));
+            assertTrue(holding.await(5, TimeUnit.SECONDS));
+            // After plain: 200 ms spent, 2 x 100 ms reserved for the quiet attempt, so at most 100 ms left to wait.
+            Script script = new Script(1, 1);
+            long t0 = System.nanoTime();
+            RegexRecheck.Result r = recheck(500).run(script, OptionalLong.empty(), SupportedFhirVersion.R4, "test.ig#1.0.0");
+            long waitedMs = (System.nanoTime() - t0) / 1_000_000;
+            assertEquals(RegexRecheck.REASON_BUSY, r.reason());
+            assertTrue(waitedMs < 600, "waited only what the deadline leaves, not 1 s: " + waitedMs + " ms");
+
+            Script none = new Script(1, 1); // 200 ms spent + 2 x 100 ms reserved > 350 ms: no wait at all
+            RegexRecheck.Result noRoom = recheck(350).run(none, OptionalLong.empty(), SupportedFhirVersion.R4, "test.ig#1.0.0");
+            assertEquals(RegexRecheck.REASON_BUDGET, noRoom.reason());
+            assertEquals(2, noRoom.attempts());
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void anExclusivePermitNotGrantedWithinOneSecondIsBusyAndQueuedValidationsProceed() throws Exception {
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
         try {

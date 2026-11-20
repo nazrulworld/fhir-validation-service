@@ -428,8 +428,8 @@ checked for size, entry count, expansion ratio and unsafe paths before they are 
 The validation engine stops any single regex check after 500 ms of wall time. On a busy instance a cheap regex can
 miss that limit before it even runs, and a valid resource would get a false error. When a result reports such a
 timeout, the service validates the resource again before answering: once at once, and if the timeout is still there,
-once more with no other validation running on the instance (waiting at most one second for the others to finish). The
-response is the complete result of the first attempt without a regex timeout.
+once more with no other validation running on the instance (waiting at most one second for the others to finish, and
+keeping them out for at most one second: a longer re-check goes on beside them). The response is the complete result of the first attempt without a regex timeout.
 
 When the timeout persists, the input itself makes the regex run too long (or the instance is too busy, or the request
 has no time left). The response is then the last attempt's result as the engine reports it: status 200, the timeout as

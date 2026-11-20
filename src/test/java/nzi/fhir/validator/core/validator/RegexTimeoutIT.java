@@ -157,6 +157,34 @@ class RegexTimeoutIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Spec 013 T029 (FR-006, US2 scenario 3): a quiet re-check of a resource with 3 genuine timeouts runs about 1.5 s;
+     * its exclusive permit is a 1 s lease, so normal requests sent all along are each held back about 1 s at most.
+     */
+    @Test
+    void aSlowQuietRecheckHoldsOtherRequestsBackForAtMostItsLease(Vertx vertx, VertxTestContext ctx) {
+        Future<Timed> trap = validate(TestPackages.regexTrapPatient(3));
+        List<Future<Timed>> normal = new java.util.concurrent.CopyOnWriteArrayList<>();
+        long timer = vertx.setPeriodic(200, id -> { // at most about 6 pile up in a 1 s hold: within admission
+            if (!trap.isComplete()) {
+                normal.add(validate(TestPackages.minimalPatient()));
+            }
+        });
+        trap.compose(t -> {
+                    vertx.cancelTimer(timer);
+                    return Future.all(new ArrayList<Future<?>>(normal)).map(t);
+                })
+                .onComplete(ctx.succeeding(t -> ctx.verify(() -> {
+                    assertEquals(3, timeouts(t.outcome()), "persistent after three attempts");
+                    assertTrue(t.ms() >= 4_000, "three attempts of 3 x 0.5 s, the last one quiet: " + t.ms() + " ms");
+                    assertTrue(normal.size() >= 15, "normal requests sent during the trap: " + normal.size());
+                    long worst = normal.stream().mapToLong(f -> f.result().ms()).max().orElse(0);
+                    // Without the lease the request arriving as the quiet re-check starts waits its whole ~1.5 s.
+                    assertTrue(worst < 1_250, "a normal request was held back " + worst + " ms (lease 1 s)");
+                    ctx.completeNow();
+                })));
+    }
+
     /** No validation is refused with 503 because of a re-check (edge case "Admission"). */
     @Test
     void aRecheckIsNeverRefusedForAdmission(VertxTestContext ctx) {

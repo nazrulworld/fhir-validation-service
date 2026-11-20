@@ -62,7 +62,7 @@ a small token bucket), edits to `ValidatorSnapshot`, `ServiceMetrics`, `ServiceR
 | V. Test-First with Real Dependencies | PASS | Failing tests first: detection and decision rules (unit), a real runaway regex against a real context (IT), the release gate without retries (SC-002), the load IT (SC-001). |
 | VI. Performance and Capacity Budgets | PASS | The spec states latency, throughput and memory impact. The hot path gains one uncontended permit and a message scan; k6 comparison with 1.2.0 recorded in `perf/results-1.3.0.md`. Re-check cost is bounded by the budget, the 3-timeout rule and the rate limit. |
 | VII. Observability and Operability | PASS | Two counters (contracts §2) and one WARN log per persistent timeout with the request id; no resource content logged. No new configuration (fixed constants; existing `FV_VALIDATION_TIMEOUT_MS` reused). |
-| VIII. Simplicity and Dependency Discipline | PASS | JDK `ReentrantReadWriteLock` and a few lines of token bucket; no dependency, no infrastructure, no migration. Shadowing the engine's `RegexTimeout` was rejected (research R1). |
+| VIII. Simplicity and Dependency Discipline | PASS | A small JDK-only gate (`ReentrantLock` + condition, with a 1 s exclusive lease since T029) and a few lines of token bucket; no dependency, no infrastructure, no migration. Shadowing the engine's `RegexTimeout` was rejected (research R1). |
 
 Post-design re-check (after Phase 1): unchanged, all PASS. No Complexity Tracking entries.
 

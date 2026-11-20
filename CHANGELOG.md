@@ -19,7 +19,7 @@ No spurious regex timeout errors under load (spec 013). No path, payload or stat
   validation running on the instance. The answer is one attempt's complete result; nothing is filtered or downgraded.
 - When the timeout persists (the input makes the regex run too long), the response is the last attempt's result as the
   engine reports it, with status 200. Re-checks stay within the request timeout and the validation budget, wait at most
-  one second for other validations, are limited to 6 quiet re-checks per minute per instance, and are skipped for a
+  one second for other validations and hold them back for at most one second, are limited to 6 quiet re-checks per minute per instance, and are skipped for a
   result with more than 3 regex timeouts, so a hostile input can't pause the instance.
 
 ### Added

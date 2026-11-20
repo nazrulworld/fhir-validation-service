@@ -9,7 +9,8 @@ Append to the operation's `description`:
 
 > Regex checks: the validation engine stops any single regex check after 500 ms. When a result reports such a timeout,
 > the service validates the resource again before answering: once at once, and if the timeout is still there, once
-> more with no other validation running on the instance. The response is the complete result of the first attempt
+> more with no other validation running on the instance (for at most one second; a longer re-check goes on beside
+> them). The response is the complete result of the first attempt
 > without a regex timeout. When the timeout persists (the input makes the regex run too long, the re-checks would not
 > fit in the request's time, or the instance is too busy to run the quiet re-check within one second), the response is
 > the last attempt's result as the engine reports it: the timeout stays an issue with the engine's severity, the status

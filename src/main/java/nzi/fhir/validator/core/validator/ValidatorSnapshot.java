@@ -205,6 +205,8 @@ public final class ValidatorSnapshot {
      */
     public Outcome validate(String body, SupportedContentType contentType, List<String> profiles, int maxBundleEntries,
                             EffectiveTerminology effective, TerminologyRouter router, java.util.OptionalLong requestDeadlineNanos) {
+        // Spec 013 FR-006: the validation budget of the regex re-checks counts from here, before parsing.
+        long validationStart = System.nanoTime();
         IParser parser = (contentType == SupportedContentType.XML || contentType == SupportedContentType.FHIR_XML)
                 ? fhirContext.newXmlParser() : fhirContext.newJsonParser();
         parser.setParserErrorHandler(new LenientErrorHandler(false).setErrorOnInvalidValue(false));
@@ -260,7 +262,7 @@ public final class ValidatorSnapshot {
             // Spec 013: a result that reports a regex timeout (HL7 core's fixed 500 ms, which load alone can exceed) is
             // validated again, at most twice, inside this scope and budget; the answer is one attempt's whole result.
             ValidationResult result = regexRecheck.run(() -> validator.validateWithResult(body, options),
-                    requestDeadlineNanos, version, key.igPackage() == null ? "base" : key.igPackage()).result();
+                    validationStart, requestDeadlineNanos, version, key.igPackage() == null ? "base" : key.igPackage()).result();
             if (TerminologyBudget.degraded()) {
                 txServices.codeCache().invalidateScope(TerminologyScope.current().scopeId());
             }

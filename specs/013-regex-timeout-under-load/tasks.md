@@ -177,3 +177,10 @@ US1 alone is not releasable: without US2's safeguards a hostile input could paus
 4. US2: budget, many-timeouts rule and rate limit; the runaway fixture is answered in bounded time.
 5. US3: counters and the log line.
 6. Polish: README, CHANGELOG, 1.3.0, perf results, full verify.
+
+---
+
+## Phase 7: Convergence
+
+- [X] T029 [US2] Bound how long a quiet re-check holds every other validation back, not only how long it waits for the exclusive permit: in `main/core/validator/RegexRecheck.java` skip the quiet re-check (outcome `persistent`, an existing reason such as `busy`, or a new reason documented in contracts/http-api.md §2, README and `openapi.yaml`) when the previous attempt's duration shows the exclusive engine call would hold other validations for more than about one second; extend `test/core/validator/RegexRecheckTest.java` (a slow injected attempt → no exclusive permit taken) and `test/core/validator/RegexTimeoutIT.java` (normal requests sent while a quiet re-check of a slow resource with ≤ 3 timeouts would run are answered within about 1 s plus their own time) per FR-006, US2/AC3 (partial)
+- [X] T030 [US2] Keep every attempt within `FV_VALIDATION_TIMEOUT_MS` counted from validation start on the worker: pass the worker start (taken at `meter.workerStart()` in `main/core/service/FhirValidationService.java`, or at the start of `ValidatorSnapshot.validate`) into `RegexRecheck.run` instead of using the time `run` is called (after parsing and profile resolution), and include the exclusive wait (`min(QUIET_WAIT_MAX, …)`) in the quiet re-check's "fits before the deadline" check so wait + attempt cannot pass the deadline; add `RegexRecheckTest` cases for both per FR-006, plan: constraints "a validation stays within FV_VALIDATION_TIMEOUT_MS", data-model "Deadline" (partial)
