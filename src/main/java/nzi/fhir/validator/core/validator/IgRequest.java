@@ -5,6 +5,7 @@ import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
 import nzi.fhir.validator.core.security.Caller;
+import nzi.fhir.validator.web.ProblemException;
 
 import java.util.Optional;
 import java.util.Set;
@@ -32,14 +33,40 @@ public sealed interface IgRequest permits IgReference, IgPair {
     String label();
 
     /**
-     * The included context this request names, as {@code caller} may use it; one rate-limited catalog refresh on a
-     * miss, then 404 {@code package-not-found}. 400 {@code invalid-request} for another FHIR version or "not included".
+     * The included context this request names, as {@code caller} may use it. A package the view doesn't know (or doesn't
+     * let the caller see) triggers one rate-limited catalog refresh before the request is rejected with
+     * {@link #notStored()} (spec 004 research R4), so the timing matches "not stored". 400 {@code invalid-request} for
+     * another FHIR version or "not included".
      *
      * @param included the included keys of {@code fhirVersion}
      * @param aliases  their alias index
      */
-    Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
-                                Set<String> included, ContextAliases aliases);
+    default Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
+                                        Set<String> included, ContextAliases aliases) {
+        Optional<SnapshotKey> known;
+        try {
+            known = resolveIn(fhirVersion, catalog.current(), caller, included, aliases);
+        } catch (ProblemException e) {
+            return Future.failedFuture(e);
+        }
+        if (known.isPresent()) {
+            return Future.succeededFuture(known.get());
+        }
+        return catalog.refreshOnMiss()
+                .recover(err -> Future.succeededFuture(catalog.current()))
+                .compose(view -> {
+                    try {
+                        return resolveIn(fhirVersion, view, caller, included, aliases)
+                                .map(Future::succeededFuture)
+                                .orElseGet(() -> Future.failedFuture(notStored()));
+                    } catch (ProblemException e) {
+                        return Future.failedFuture(e);
+                    }
+                });
+    }
+
+    /** 404 {@code package-not-found} for this request, in its own wording (one IG or two). */
+    ProblemException notStored();
 
     /** {@link #resolve} against one catalog view: empty when a package is not stored or not usable by {@code caller}. */
     Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller,

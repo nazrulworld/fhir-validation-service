@@ -170,9 +170,7 @@ public class ValidatorApi {
             }
             entries.add(new IgPackageService.IgEntry(id, entry.getString("igPackageVersion")));
         }
-        if (entries.size() == 2 && entries.get(0).igPackageId().equals(entries.get(1).igPackageId())) {
-            throw new ProblemException(400, "invalid-request", "The two igPackages entries must name different packages");
-        }
+        // Two entries for the same package are refused by IgPackageService.includePair, for every caller (FR-002).
         return List.copyOf(entries);
     }
 
