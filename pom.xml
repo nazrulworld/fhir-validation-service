@@ -497,9 +497,13 @@ in /NOTICE.
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0-M7</version>
                 <configuration>
-                    <!-- HL7 core localises its messages; tests that recognise them (RegexTimeouts) need English. The
-                         default locale is fixed at JVM start, so this is a JVM option, not a system property below. -->
-                    <argLine>-Duser.language=en -Duser.country=US</argLine>
+                    <!-- English: HL7 core localises its messages, and tests that compare them need stable texts (the
+                         default locale is fixed at JVM start, so this is a JVM option, not a system property below).
+                         Heap: every test class runs in this one JVM, and the release-gate differential test builds
+                         several large validation contexts; the JVM default (a quarter of RAM, 4 GB on a 16 GB CI
+                         runner) once ran out (v1.3.0 release run). Half of RAM keeps headroom and scales down on
+                         smaller machines. -->
+                    <argLine>-Duser.language=en -Duser.country=US -XX:MaxRAMPercentage=50</argLine>
                     <includes>
                         <include>**/*Test.java</include>
                         <include>**/*IT.java</include>

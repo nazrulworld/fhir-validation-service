@@ -241,11 +241,10 @@ class SharedDefinitionsDifferentialIT {
                     RegistryResolver.DISABLED, 60_000);
             // Parsed definitions don't depend on the terminology setting: the shared side reuses the class's shared
             // definitions (no second parse); only the private baseline parses every package again.
+            List<String> roots = List.of(Fixtures.DK_CORE_350, Fixtures.MEDCOM_CORE_400, DUP);
             Map<String, ValidatorSnapshot> sharedCtx = new HashMap<>();
-            Map<String, ValidatorSnapshot> privateCtx = new HashMap<>();
-            for (String root : List.of(Fixtures.DK_CORE_350, Fixtures.MEDCOM_CORE_400, DUP)) {
+            for (String root : roots) {
                 sharedCtx.put(root, build(root, services, shared));
-                privateCtx.put(root, build(root, services, null));
             }
             var effective = EffectiveTerminology.resolve(
                     TerminologySettings.NONE,
@@ -253,13 +252,21 @@ class SharedDefinitionsDifferentialIT {
             var router = TerminologyRouter.server(stub.base());
             List<Case> all = cases();
             Map<String, String> expected = new HashMap<>();
-            for (Case c : all) {
-                expected.put(c.relative(), render(privateCtx.get(c.context()), c, effective, router));
-                assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
-                        c.relative() + ": shared and private contexts differ with a terminology server");
+            // One private baseline at a time: each parses every package of its context again, and three of them at
+            // once ran the CI test JVM out of heap. Its cases are recorded, then it is dropped before the next.
+            for (String root : roots) {
+                ValidatorSnapshot privateCtx = build(root, services, null);
+                for (Case c : all) {
+                    if (!c.context().equals(root)) {
+                        continue;
+                    }
+                    expected.put(c.relative(), render(privateCtx, c, effective, router));
+                    assertEquals(expected.get(c.relative()), render(sharedCtx.get(root), c, effective, router),
+                            c.relative() + ": shared and private contexts differ with a terminology server");
+                }
             }
+            assertEquals(all.size(), expected.size(), "every case has a baseline");
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
-            privateCtx.clear(); // the baseline is recorded; release its contexts before the concurrent phase
             List<Case> rounds = new ArrayList<>(all);
             rounds.addAll(all);
             Collections.shuffle(rounds, new Random(23));
