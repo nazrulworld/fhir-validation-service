@@ -41,10 +41,39 @@ IG='hl7.fhir.dk.core#3.4.0' IG_TGZ=$PWD/src/test/resources/fhir/hl7.fhir.dk.core
   without a two-IG context are identical to 1.0.0/1.1.0 (spec 012 SC-004).
 - Full `mvn verify` on the branch: 936 tests, 0 failures, no blocked-thread warnings.
 
+## Comparison with the validator CLI (SC-006) — PASS
+
+The US2 fixture packages (`TestPackages.multiA()` = `test.multi.a#1.0.0`, a Patient profile requiring `birthDate`;
+`TestPackages.multiB()` = `test.multi.b#2.0.0`, a Patient profile requiring `gender`) were written to `.tgz` files
+and five Patients validated with both reference CLI releases: 6.9.12 (the core version this service ships) and 7.0.3
+(the latest release), downloaded from the `hapifhir/org.hl7.fhir.core` GitHub releases.
+
+```bash
+java -jar validator_cli.jar <patient>.json -version 4.0.1 \
+  -ig test.multi.a-1.0.0.tgz -ig test.multi.b-2.0.0.tgz -tx n/a -jurisdiction uv -output out.json
+```
+
+The service (an image built from commit `eca8fa3` of this branch, with PostgreSQL 16.8) stored both packages with
+`POST /igs/upload`, included them with `{"igPackages":[A#1.0.0, B#2.0.0], "terminology":{"mode":"none"}}`, and
+validated each Patient three times: by the key `ig=A#1.0.0|B#2.0.0`, the reversed pair and the first-IG alias
+`ig=A#1.0.0`. Every request was served by the two-IG context (`X-Validation-Context`).
+
+The projection compared is the sorted set of (severity, location, message text) without `information` issues, plus
+`valid` against "the CLI reported no error".
+
+| Patient | CLI errors | 6.9.12 = 7.0.3 | key | reversed pair | first-IG alias |
+|---------|-----------:|:--------------:|:---:|:-------------:|:--------------:|
+| claims A and B, no `birthDate`, no `gender` | 2 | yes | match | match | match |
+| claims A and B, no `gender` | 1 | yes | match | match | match |
+| claims A and B, both present | 0 | yes | match | match | match |
+| claims A only, no `birthDate` | 1 | yes | match | match | match |
+| claims B only, no `gender` | 1 | yes | match | match | match |
+
+Each run also has the `dom-6` best-practice warning, identical on both sides. Terminology was off on both sides, so
+the comparison covers profile and structure rules, not code validation.
+
 ## Not measured here
 
-- Comparison with `validator_cli.jar -ig A -ig B` (spec 012 SC-006, task T044) needs the validator CLI jar, which was
-  not available on this machine.
 - Build time and heap of a production-sized two-IG context (for example DK Core with MedCom Core). The heap budget
   admits it with the same rule as any include, and packages shared with already included contexts count for their
   indexes only (spec 010).
