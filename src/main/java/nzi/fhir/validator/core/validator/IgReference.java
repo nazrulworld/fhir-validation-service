@@ -50,13 +50,18 @@ public record IgReference(String name, String version) implements IgRequest {
             } else if (VersionSeries.isSeries(version)) {
                 // Spec 006 FR-018: a series is resolved by include (POST /{version}/validator) and register only; validation needs the concrete
                 // version, so `1.2.x` is a client error here, not a literal version that is answered 404.
-                throw new ProblemException(400, "invalid-request", "The ig parameter needs an exact version (for example "
-                        + "the version reported when it was included), not a version series");
+                throw seriesRefused();
             } else if (!VERSION.matcher(version).matches()) {
                 throw invalid();
             }
         }
         return new IgReference(name, version);
+    }
+
+    /** 400 for a version series in {@code ig}: validation needs the exact version a context was included with. */
+    static ProblemException seriesRefused() {
+        return new ProblemException(400, "invalid-request", "The ig parameter needs an exact version (for example "
+                + "the version reported when it was included), not a version series");
     }
 
     /** The parsed value, or {@code null} when the parameter is absent. */
@@ -76,64 +81,17 @@ public record IgReference(String name, String version) implements IgRequest {
         return version == null ? name : name + "#" + version;
     }
 
-    /**
-     * The validator context for this reference and {@code fhirVersion}, as {@code caller} may use it (spec 005 research
-     * R5, spec 007 FR-021 to FR-023). Only included contexts serve validation: a versionless reference becomes the
-     * highest <em>included</em> version the caller may use; a stored, usable version that isn't included is refused
-     * with 400 (nothing is built on demand). An exact version the caller may not use is
-     * treated exactly like one that isn't stored, and the declared FHIR versions are checked before "not included"
-     * (FR-024), so no 400 ever reveals a package the caller can't see. A package the view doesn't know (or doesn't let
-     * the caller see) triggers one rate-limited catalog refresh before the request is rejected (spec 004 research R4),
-     * so the timing matches "not stored".
-     *
-     * @param included the {@code name#version} keys included for {@code fhirVersion} (pinned contexts)
-     * @return fails with 404 {@code package-not-found} or 400 {@code invalid-request}
-     */
-    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
-                                       Set<String> included) {
-        return resolve(fhirVersion, catalog, caller, included, ContextAliases.of(included));
-    }
-
-    /** As {@link #resolve(SupportedFhirVersion, PackageCatalog, Caller, Set)}, with the version's alias index (spec 012). */
     @Override
-    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
-                                       Set<String> included, ContextAliases aliases) {
-        Optional<SnapshotKey> known;
-        try {
-            known = resolveIn(fhirVersion, catalog.current(), caller, included, aliases);
-        } catch (ProblemException e) {
-            return Future.failedFuture(e);
-        }
-        if (known.isPresent()) {
-            return Future.succeededFuture(known.get());
-        }
-        return catalog.refreshOnMiss()
-                .recover(err -> Future.succeededFuture(catalog.current()))
-                .compose(view -> {
-                    try {
-                        return resolveIn(fhirVersion, view, caller, included, aliases)
-                                .map(Future::succeededFuture)
-                                .orElseGet(() -> Future.failedFuture(ProblemException.igNotStored(label())));
-                    } catch (ProblemException e) {
-                        return Future.failedFuture(e);
-                    }
-                });
+    public ProblemException notStored() {
+        return ProblemException.igNotStored(label());
     }
 
     /**
-     * @param included the {@code name#version} keys included for {@code fhirVersion}
-     * @return empty when the package (or, versionless, any version of it) is not in {@code view} or {@code caller}
-     * may not use it
-     * @throws ProblemException 400 when the resolved package does not support {@code fhirVersion}, or (spec 007
-     *                          FR-022) when it is stored and usable but not included
-     */
-    Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller,
-                                    Set<String> included) {
-        return resolveIn(fhirVersion, view, caller, included, ContextAliases.of(included));
-    }
-
-    /**
-     * As {@link #resolveIn(SupportedFhirVersion, PackageCatalogView, Caller, Set)}. Spec 012: an exact version that has
+     * Only included contexts serve validation (spec 005 research R5, spec 007 FR-021 to FR-024): a versionless
+     * reference becomes the highest <em>included</em> version the caller may use; a stored, usable version that isn't
+     * included is refused with 400 (nothing is built on demand). An exact version the caller may not use is treated
+     * exactly like one that isn't stored, and the declared FHIR versions are checked before "not included", so no 400
+     * ever reveals a package the caller can't see. Spec 012: an exact version that has
      * no single-IG context but is the first IG of an included two-IG context resolves to that context (FR-012); a
      * versionless reference considers single-IG contexts only (FR-012a).
      */

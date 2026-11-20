@@ -169,37 +169,19 @@ public class IgPackageService {
         if (!servedVersions.contains(fhirVersion)) {
             return Future.failedFuture(ProblemException.fhirVersionDisabled(fhirVersion, servedVersions));
         }
-        if (name == null || name.isBlank()) {
-            return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
-        }
-        // Spec 006 FR-001, FR-002: a series is parsed before anything is read; a malformed one is 400.
+        IgEntry entry = new IgEntry(name, requestedVersion);
         VersionSeries series;
         try {
-            series = VersionSeries.isSeries(requestedVersion) ? VersionSeries.parse(requestedVersion) : null;
+            series = checkedSeries(entry);
         } catch (ProblemException e) {
             return Future.failedFuture(e);
-        }
-        if (requestedVersion != null && !requestedVersion.isBlank() && !"latest".equalsIgnoreCase(requestedVersion)
-                && !PostgresPackageCacheManager.isValidVersionLabel(requestedVersion)) {
-            return Future.failedFuture(new ProblemException(400, "invalid-request",
-                    "igPackageVersion must be 1-64 characters without whitespace"));
         }
         List<String> warnings = new ArrayList<>();
         // Visibility is decided from data read in this transaction, never from the in-memory view, which may lag.
         return pgPool.withTransaction(tx -> loadCatalogWithAccess(tx).compose(catalog -> {
-                    boolean latest = requestedVersion == null || requestedVersion.isBlank()
-                            || "latest".equalsIgnoreCase(requestedVersion);
-                    List<String> visible = catalog.catalog().versions(name).stream()
-                            .filter(v -> AccessPolicy.canUse(caller, catalog.access().get(name + "#" + v)))
-                            .toList();
-                    // Spec 006 FR-011: a series picks the highest stored match the caller may use; no registry.
-                    Optional<String> concrete = series != null ? series.highest(visible)
-                            : latest ? PackageVersionComparator.max(visible)
-                            : visible.contains(requestedVersion) ? Optional.of(requestedVersion) : Optional.empty();
+                    Optional<String> concrete = concreteFor(catalog, caller, entry, series);
                     if (concrete.isEmpty()) {
-                        String label = latest ? name : name + "#" + requestedVersion;
-                        return Future.failedFuture(new ProblemException(404, "package-not-found",
-                                "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
+                        return Future.failedFuture(notStoredEntry(entry));
                     }
                     String key = name + "#" + concrete.get();
                     Access packageAccess = catalog.access().get(key);
@@ -345,17 +327,10 @@ public class IgPackageService {
         List<IgEntry> entries = List.of(first, second);
         List<VersionSeries> series = new ArrayList<>();
         for (IgEntry e : entries) {
-            if (e.igPackageId() == null || e.igPackageId().isBlank()) {
-                return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
-            }
             try {
-                series.add(VersionSeries.isSeries(e.igPackageVersion()) ? VersionSeries.parse(e.igPackageVersion()) : null);
+                series.add(checkedSeries(e));
             } catch (ProblemException ex) {
                 return Future.failedFuture(ex);
-            }
-            if (!e.latest() && !PostgresPackageCacheManager.isValidVersionLabel(e.igPackageVersion())) {
-                return Future.failedFuture(new ProblemException(400, "invalid-request",
-                        "igPackageVersion must be 1-64 characters without whitespace"));
             }
         }
         if (first.igPackageId().equals(second.igPackageId())) {
@@ -368,9 +343,7 @@ public class IgPackageService {
                         IgEntry e = entries.get(i);
                         Optional<String> concrete = concreteFor(catalog, caller, e, series.get(i));
                         if (concrete.isEmpty()) {
-                            String label = e.latest() ? e.igPackageId() : e.igPackageId() + "#" + e.igPackageVersion();
-                            return Future.failedFuture(new ProblemException(404, "package-not-found",
-                                    "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
+                            return Future.failedFuture(notStoredEntry(e));
                         }
                         keys.add(e.igPackageId() + "#" + concrete.get());
                     }
@@ -545,6 +518,31 @@ public class IgPackageService {
      * The concrete version of {@code entry} among the stored versions {@code caller} may use: an exact version, the
      * highest ({@code latest} or absent), or the highest match of a version series (spec 006 FR-011). No registry.
      */
+    /**
+     * The checks of one requested IG before anything is read (single and two-IG includes alike): a package name, a
+     * well-formed version label, and (spec 006 FR-001, FR-002) a parsed version series.
+     *
+     * @return the entry's version series, or {@code null} for an exact version or {@code latest}
+     * @throws ProblemException 400 {@code invalid-request}
+     */
+    private static VersionSeries checkedSeries(IgEntry entry) {
+        if (entry.igPackageId() == null || entry.igPackageId().isBlank()) {
+            throw new ProblemException(400, "invalid-request", "igPackageId is required");
+        }
+        VersionSeries series = VersionSeries.isSeries(entry.igPackageVersion()) ? VersionSeries.parse(entry.igPackageVersion()) : null;
+        if (!entry.latest() && !PostgresPackageCacheManager.isValidVersionLabel(entry.igPackageVersion())) {
+            throw new ProblemException(400, "invalid-request", "igPackageVersion must be 1-64 characters without whitespace");
+        }
+        return series;
+    }
+
+    /** 404 for a requested IG with no stored version the caller may use. */
+    private static ProblemException notStoredEntry(IgEntry entry) {
+        String label = entry.latest() ? entry.igPackageId() : entry.igPackageId() + "#" + entry.igPackageVersion();
+        return new ProblemException(404, "package-not-found",
+                "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register");
+    }
+
     private static Optional<String> concreteFor(CatalogWithAccess catalog, Caller caller, IgEntry entry, VersionSeries series) {
         String name = entry.igPackageId();
         List<String> visible = catalog.catalog().versions(name).stream()

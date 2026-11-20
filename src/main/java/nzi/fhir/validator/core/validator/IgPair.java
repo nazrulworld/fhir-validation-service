@@ -1,9 +1,8 @@
 package nzi.fhir.validator.core.validator;
 
-import io.vertx.core.Future;
 import nzi.fhir.validator.core.enums.SupportedFhirVersion;
-import nzi.fhir.validator.core.npm.PackageCatalog;
 import nzi.fhir.validator.core.npm.PackageCatalogView;
+import nzi.fhir.validator.core.npm.VersionSeries;
 import nzi.fhir.validator.core.security.AccessPolicy;
 import nzi.fhir.validator.core.security.Caller;
 import nzi.fhir.validator.web.ProblemException;
@@ -42,14 +41,15 @@ public record IgPair(IgReference first, IgReference second) implements IgRequest
     }
 
     private static IgReference member(String raw) {
+        // A version series keeps its own explanation; anything else malformed gets the pair form's.
+        int hash = raw.indexOf('#');
+        if (hash >= 0 && VersionSeries.isSeries(raw.substring(hash + 1))) {
+            throw IgReference.seriesRefused();
+        }
         IgReference ref;
         try {
             ref = IgReference.parse(raw);
         } catch (ProblemException e) {
-            // A version series keeps its own explanation; anything else gets the pair form's.
-            if (e.detail().contains("version series")) {
-                throw e;
-            }
             throw invalid();
         }
         if (ref.version() == null) {
@@ -71,31 +71,7 @@ public record IgPair(IgReference first, IgReference second) implements IgRequest
     }
 
     @Override
-    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
-                                       Set<String> included, ContextAliases aliases) {
-        Optional<SnapshotKey> known;
-        try {
-            known = resolveIn(fhirVersion, catalog.current(), caller, included, aliases);
-        } catch (ProblemException e) {
-            return Future.failedFuture(e);
-        }
-        if (known.isPresent()) {
-            return Future.succeededFuture(known.get());
-        }
-        return catalog.refreshOnMiss()
-                .recover(err -> Future.succeededFuture(catalog.current()))
-                .compose(view -> {
-                    try {
-                        return resolveIn(fhirVersion, view, caller, included, aliases)
-                                .map(Future::succeededFuture)
-                                .orElseGet(() -> Future.failedFuture(notStored()));
-                    } catch (ProblemException e) {
-                        return Future.failedFuture(e);
-                    }
-                });
-    }
-
-    private ProblemException notStored() {
+    public ProblemException notStored() {
         return new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND, "IG packages " + label()
                 + " are not stored. Register or upload them first via /igs/register or /igs/upload");
     }
