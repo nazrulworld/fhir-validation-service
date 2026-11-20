@@ -463,9 +463,6 @@ curl -H "$AUTH" -X DELETE \
 - **Access.** Every IG and every dependency must be usable by the caller, exactly as for one IG. A private two-IG
   context (`"shareable": false`) needs ownership of both IG packages.
 - Including the same two IG versions again, in either order, changes nothing. At most two IGs per context.
-- **Upgrading from 1.1.0:** include two-IG contexts only once every instance runs 1.2.0. A 1.1.0 instance cannot
-  build them and reports not ready while one is included; before rolling back to 1.1.0, exclude every two-IG
-  context.
 
 ### Terminology servers
 
