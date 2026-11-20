@@ -359,4 +359,39 @@ public final class TestPackages {
     public static String minimalPatient() {
         return new JsonObject().put("resourceType", "Patient").put("id", "p1").put("active", true).encode();
     }
+
+    // ---- Spec 013: a regex that runs away on purpose ----
+
+    public static final String REGEX_TRAP = "test.regex.trap";
+    public static final String REGEX_TRAP_PROFILE = "http://example.org/fhir/StructureDefinition/regex-trap-patient";
+    /** Backtracks catastrophically on {@link #REGEX_TRAP_VALUE}: every check runs past HL7 core's 500 ms limit. */
+    public static final String RUNAWAY_REGEX = "^(.*?,){20}P$";
+    public static final String REGEX_TRAP_VALUE = "a,".repeat(30);
+
+    /**
+     * {@code test.regex.trap#1.0.0} (R4): a Patient profile whose {@code Patient.name.family} must match
+     * {@link #RUNAWAY_REGEX}, through a FHIRPath {@code matches()} constraint (research R7: reported as
+     * {@code REGEX_MATCH_TIMED_OUT} when it times out).
+     */
+    public static byte[] regexTrapPackage() {
+        JsonObject profile = requiredPatientElements(REGEX_TRAP_PROFILE);
+        profile.getJsonObject("differential").getJsonArray("element").add(new JsonObject()
+                .put("id", "Patient.name.family").put("path", "Patient.name.family")
+                .put("constraint", new JsonArray().add(new JsonObject()
+                        .put("key", "trap-1").put("severity", "error").put("human", "family matches a runaway regex")
+                        .put("expression", "matches('" + RUNAWAY_REGEX + "')")
+                        .put("source", REGEX_TRAP_PROFILE))));
+        return npmPackage(REGEX_TRAP, "1.0.0", Map.of(), List.of(profile));
+    }
+
+    /** A Patient claiming {@link #REGEX_TRAP_PROFILE} with {@code values} names whose family is {@link #REGEX_TRAP_VALUE}. */
+    public static String regexTrapPatient(int values) {
+        JsonArray names = new JsonArray();
+        for (int i = 0; i < values; i++) {
+            names.add(new JsonObject().put("family", REGEX_TRAP_VALUE));
+        }
+        return new JsonObject().put("resourceType", "Patient").put("id", "trap")
+                .put("meta", new JsonObject().put("profile", new JsonArray().add(REGEX_TRAP_PROFILE)))
+                .put("name", names).encode();
+    }
 }

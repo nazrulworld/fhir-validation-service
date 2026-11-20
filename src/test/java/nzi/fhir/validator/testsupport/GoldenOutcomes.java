@@ -77,8 +77,7 @@ public final class GoldenOutcomes {
         if (expected.equals(actual)) {
             return;
         }
-        // Every difference, not only the first: a load-induced regex timeout in the list must not hide a real
-        // difference further on (RegexTimeouts retries on the message).
+        // Every difference, not only the first, so one difference never hides another further on.
         java.util.List<Object> missing = new java.util.ArrayList<>(expected.getList());
         java.util.List<Object> extra = new java.util.ArrayList<>();
         for (Object a : actual.getList()) {
