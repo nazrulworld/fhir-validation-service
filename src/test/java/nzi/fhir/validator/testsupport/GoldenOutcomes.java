@@ -77,15 +77,22 @@ public final class GoldenOutcomes {
         if (expected.equals(actual)) {
             return;
         }
-        int n = Math.max(expected.size(), actual.size());
-        for (int i = 0; i < n; i++) {
-            Object e = i < expected.size() ? expected.getValue(i) : null;
-            Object a = i < actual.size() ? actual.getValue(i) : null;
-            if (e == null ? a != null : !e.equals(a)) {
-                fail(label + ": issue " + i + " differs from 1.0.0 (" + expected.size() + " vs " + actual.size()
-                        + " issues)\n  expected: " + e + "\n  actual:   " + a);
+        // Every difference, not only the first: a load-induced regex timeout in the list must not hide a real
+        // difference further on (RegexTimeouts retries on the message).
+        java.util.List<Object> missing = new java.util.ArrayList<>(expected.getList());
+        java.util.List<Object> extra = new java.util.ArrayList<>();
+        for (Object a : actual.getList()) {
+            if (!missing.remove(a)) {
+                extra.add(a);
             }
         }
-        fail(label + ": outcome differs from 1.0.0");
+        StringBuilder message = new StringBuilder(label).append(": outcome differs from 1.0.0 (").append(expected.size())
+                .append(" vs ").append(actual.size()).append(" issues)");
+        if (missing.isEmpty() && extra.isEmpty()) {
+            message.append("\n  the same issues in another order");
+        }
+        missing.forEach(m -> message.append("\n  missing: ").append(m));
+        extra.forEach(x -> message.append("\n  extra:   ").append(x));
+        fail(message.toString());
     }
 }

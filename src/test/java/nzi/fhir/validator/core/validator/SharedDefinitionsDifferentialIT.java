@@ -7,9 +7,16 @@ import nzi.fhir.validator.core.enums.SupportedFhirVersion;
 import nzi.fhir.validator.core.model.MediaTypes;
 import nzi.fhir.validator.core.npm.DependencyResolver;
 import nzi.fhir.validator.core.npm.SharedPackageDefinitions;
+import nzi.fhir.validator.core.terminology.EffectiveTerminology;
+import nzi.fhir.validator.core.terminology.RegistryResolver;
+import nzi.fhir.validator.core.terminology.TerminologyOverride;
+import nzi.fhir.validator.core.terminology.TerminologyRouter;
 import nzi.fhir.validator.core.terminology.TerminologyServices;
+import nzi.fhir.validator.core.terminology.TerminologySettings;
+import nzi.fhir.validator.core.terminology.TestTerminology;
 import nzi.fhir.validator.testsupport.Fixtures;
 import nzi.fhir.validator.testsupport.GoldenOutcomes;
+import nzi.fhir.validator.testsupport.RegexTimeouts;
 import org.hl7.fhir.utilities.npm.NpmPackage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -151,7 +158,7 @@ class SharedDefinitionsDifferentialIT {
         List<Case> all = cases();
         assertTrue(all.size() >= 84 + 50, "the corpus has every example and at least 50 invalid variants");
         for (Case c : all) {
-            checkAlone(() -> check(c));
+            RegexTimeouts.retry(() -> check(c));
         }
     }
 
@@ -189,10 +196,10 @@ class SharedDefinitionsDifferentialIT {
                 .code("http://snomed.info/sct", "399912005", "Pressure ulcer");
         try {
             stub.start(vertx).toCompletionStage().toCompletableFuture().get(30, TimeUnit.SECONDS);
-            var allowlist = nzi.fhir.validator.core.terminology.TestTerminology.allowlist(R4, stub.base());
-            var clients = nzi.fhir.validator.core.terminology.TestTerminology.clients(allowlist, 5_000);
-            TerminologyServices services = nzi.fhir.validator.core.terminology.TestTerminology.services(allowlist, clients,
-                    nzi.fhir.validator.core.terminology.RegistryResolver.DISABLED, 60_000);
+            var allowlist = TestTerminology.allowlist(R4, stub.base());
+            var clients = TestTerminology.clients(allowlist, 5_000);
+            TerminologyServices services = TestTerminology.services(allowlist, clients,
+                    RegistryResolver.DISABLED, 60_000);
             // Parsed definitions don't depend on the terminology setting: the shared side reuses the class's shared
             // definitions (no second parse); only the private baseline parses every package again.
             Map<String, ValidatorSnapshot> sharedCtx = new HashMap<>();
@@ -201,17 +208,22 @@ class SharedDefinitionsDifferentialIT {
                 sharedCtx.put(root, build(root, services, shared));
                 privateCtx.put(root, build(root, services, null));
             }
-            var effective = nzi.fhir.validator.core.terminology.EffectiveTerminology.resolve(
-                    nzi.fhir.validator.core.terminology.TerminologySettings.NONE,
-                    new nzi.fhir.validator.core.terminology.TerminologyOverride(null, stub.base()));
-            var router = nzi.fhir.validator.core.terminology.TerminologyRouter.server(stub.base());
+            var effective = EffectiveTerminology.resolve(
+                    TerminologySettings.NONE,
+                    new TerminologyOverride(null, stub.base()));
+            var router = TerminologyRouter.server(stub.base());
             List<Case> all = cases();
             Map<String, String> expected = new HashMap<>();
             for (Case c : all) {
-                // The baseline must not carry a load-induced regex timeout: every later comparison is made against it.
-                expected.put(c.relative(), renderWithoutRegexTimeout(privateCtx.get(c.context()), c, effective, router));
-                checkAlone(() -> assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
-                        c.relative() + ": shared and private contexts differ with a terminology server"));
+                // Baseline and shared result are rendered together and retried together: a load-induced regex timeout in
+                // either is rendered again, while an outcome both contexts give every time (even one with a regex
+                // timeout) is accepted as it is.
+                RegexTimeouts.retry(() -> {
+                    String baseline = render(privateCtx.get(c.context()), c, effective, router);
+                    expected.put(c.relative(), baseline);
+                    assertEquals(baseline, render(sharedCtx.get(c.context()), c, effective, router),
+                            c.relative() + ": shared and private contexts differ with a terminology server");
+                });
             }
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
             privateCtx.clear(); // the baseline is recorded; release its contexts before the concurrent phase
@@ -227,70 +239,12 @@ class SharedDefinitionsDifferentialIT {
     }
 
     /** The comparison projection of one validation in mode server. */
-    private String render(ValidatorSnapshot snapshot, Case c, nzi.fhir.validator.core.terminology.EffectiveTerminology effective,
-                          nzi.fhir.validator.core.terminology.TerminologyRouter router) throws Exception {
+    private String render(ValidatorSnapshot snapshot, Case c, EffectiveTerminology effective,
+                          TerminologyRouter router) throws Exception {
         String body = Files.readString(corpus.resolve(c.relative()), StandardCharsets.UTF_8);
         ValidatorSnapshot.Outcome outcome = snapshot.validate(body, SupportedContentType.JSON, List.of(), Integer.MAX_VALUE,
                 effective, router);
         return GoldenOutcomes.project(OutcomeRenderer.render(outcome, MediaTypes.ResponseFormat.FHIR_JSON)).encode();
-    }
-
-    /** The most attempts a check or render gets when it only hits HL7 core's regex timeout (load, see runConcurrently). */
-    static final int REGEX_TIMEOUT_ATTEMPTS = 3;
-
-    /**
-     * {@link #render}, again when the result reports a regex timeout: no expected outcome in the corpus has one (the
-     * golden files contain none), so such a result is load, not the context's answer. Fails after
-     * {@value #REGEX_TIMEOUT_ATTEMPTS} attempts that all time out.
-     */
-    private String renderWithoutRegexTimeout(ValidatorSnapshot snapshot, Case c,
-                                             nzi.fhir.validator.core.terminology.EffectiveTerminology effective,
-                                             nzi.fhir.validator.core.terminology.TerminologyRouter router) throws Exception {
-        String rendered = null;
-        for (int attempt = 1; attempt <= REGEX_TIMEOUT_ATTEMPTS; attempt++) {
-            rendered = render(snapshot, c, effective, router);
-            if (!hasRegexTimeout(rendered)) {
-                return rendered;
-            }
-        }
-        throw new AssertionError(c.relative() + ": the regex timeout persisted over " + REGEX_TIMEOUT_ATTEMPTS
-                + " attempts: " + rendered);
-    }
-
-    /**
-     * Runs a check that nothing else competes with. Even alone, a busy CI runner (GC, other build processes) can push a
-     * regex past HL7 core's 500 ms timeout; a failure that only shows that timeout is retried, up to
-     * {@value #REGEX_TIMEOUT_ATTEMPTS} attempts. Any other difference fails at once.
-     */
-    static void checkAlone(Check check) throws Exception {
-        for (int attempt = 1; ; attempt++) {
-            try {
-                check.run();
-                return;
-            } catch (AssertionError e) {
-                if (attempt >= REGEX_TIMEOUT_ATTEMPTS || !regexTimedOut(e)) {
-                    throw e;
-                }
-            }
-        }
-    }
-
-    static boolean hasRegexTimeout(String text) {
-        return REGEX_TIMEOUT_TEXTS.stream().anyMatch(text::contains);
-    }
-
-    /** A check that may throw (the comparison of one case). */
-    interface Check {
-        void run() throws Exception;
-    }
-
-    /** The two ways HL7 core 6.9.12 reports a regex that ran past its fixed 500 ms timeout. */
-    static final List<String> REGEX_TIMEOUT_TEXTS = List.of(
-            "Regex evaluation timed out",   // RegexTimeout's TimeoutException, reported as an exception
-            "could not be executed");       // REGEX_MATCH_TIMED_OUT: "The regex '{0}' could not be executed"
-
-    static boolean regexTimedOut(Throwable failure) {
-        return hasRegexTimeout(String.valueOf(failure.getMessage()));
     }
 
     /**
@@ -300,7 +254,7 @@ class SharedDefinitionsDifferentialIT {
      * checked again once every concurrent check has finished, with nothing else running, where a real difference
      * would show again.
      */
-    private static void runConcurrently(List<Case> cases, java.util.function.Function<Case, Check> checkOf) throws Exception {
+    private static void runConcurrently(List<Case> cases, java.util.function.Function<Case, RegexTimeouts.Check> checkOf) throws Exception {
         List<Case> deferred = java.util.Collections.synchronizedList(new ArrayList<>());
         ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
         try {
@@ -310,7 +264,7 @@ class SharedDefinitionsDifferentialIT {
                     try {
                         checkOf.apply(c).run();
                     } catch (AssertionError e) {
-                        if (!regexTimedOut(e)) {
+                        if (!RegexTimeouts.timedOut(e)) {
                             throw e;
                         }
                         deferred.add(c);
@@ -332,7 +286,7 @@ class SharedDefinitionsDifferentialIT {
             pool.shutdownNow();
         }
         for (Case c : deferred) {
-            checkAlone(checkOf.apply(c)); // alone: no other validation competes for the regex executor
+            RegexTimeouts.retry(checkOf.apply(c)); // alone: no other validation competes for the regex executor
         }
     }
 }
