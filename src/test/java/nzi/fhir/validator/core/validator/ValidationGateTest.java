@@ -134,6 +134,79 @@ class ValidationGateTest {
         assertEquals(Optional.of("free"), gate.exclusive(() -> "free", TimeUnit.SECONDS.toNanos(1)));
     }
 
+    /** Spec 013 T029 (FR-006): the exclusive permit keeps shared requests out for at most its lease. */
+    @Test
+    void aLongExclusiveWorkLetsSharedRequestsInOnceItsLeaseEnds() throws Exception {
+        ValidationGate leased = new ValidationGate(TimeUnit.MILLISECONDS.toNanos(300), System::nanoTime);
+        CountDownLatch exclusiveRunning = new CountDownLatch(1);
+        CountDownLatch releaseExclusive = new CountDownLatch(1);
+        Future<Optional<String>> exclusive = pool.submit(() -> leased.exclusive(() -> {
+            exclusiveRunning.countDown();
+            try {
+                releaseExclusive.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "long";
+        }, TimeUnit.SECONDS.toNanos(1)));
+        assertTrue(exclusiveRunning.await(5, TimeUnit.SECONDS));
+        long t0 = System.nanoTime();
+        assertEquals("in", pool.submit(() -> leased.shared(() -> "in")).get(5, TimeUnit.SECONDS),
+                "admitted while the exclusive work still runs");
+        long heldMs = (System.nanoTime() - t0) / 1_000_000;
+        assertTrue(heldMs >= 150 && heldMs < 1_500, "held back about the lease: " + heldMs + " ms");
+        assertFalse(exclusive.isDone());
+        releaseExclusive.countDown();
+        assertEquals(Optional.of("long"), exclusive.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void withinItsLeaseTheExclusiveWorkRunsAlone() throws Exception {
+        CountDownLatch exclusiveRunning = new CountDownLatch(1);
+        CountDownLatch releaseExclusive = new CountDownLatch(1);
+        List<String> order = new CopyOnWriteArrayList<>();
+        Future<?> exclusive = pool.submit(() -> gate.exclusive(() -> {
+            exclusiveRunning.countDown();
+            try {
+                releaseExclusive.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            order.add("exclusive end");
+            return null;
+        }, TimeUnit.SECONDS.toNanos(1)));
+        assertTrue(exclusiveRunning.await(5, TimeUnit.SECONDS));
+        Future<?> shared = pool.submit(() -> gate.shared(() -> order.add("shared")));
+        Thread.sleep(200); // well within the 1 s lease
+        assertEquals(List.of(), order, "the shared request waits while the lease runs");
+        releaseExclusive.countDown();
+        exclusive.get(5, TimeUnit.SECONDS);
+        shared.get(5, TimeUnit.SECONDS);
+        assertEquals(List.of("exclusive end", "shared"), order);
+    }
+
+    /** After its lease, the exclusive holder still blocks another exclusive request (one quiet re-check at a time). */
+    @Test
+    void aSecondExclusiveRequestWaitsForAnExpiredLeaseHolder() throws Exception {
+        ValidationGate leased = new ValidationGate(TimeUnit.MILLISECONDS.toNanos(100), System::nanoTime);
+        CountDownLatch exclusiveRunning = new CountDownLatch(1);
+        CountDownLatch releaseExclusive = new CountDownLatch(1);
+        pool.submit(() -> leased.exclusive(() -> {
+            exclusiveRunning.countDown();
+            try {
+                releaseExclusive.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }, TimeUnit.SECONDS.toNanos(1)));
+        assertTrue(exclusiveRunning.await(5, TimeUnit.SECONDS));
+        Thread.sleep(200); // the lease has ended
+        assertTrue(leased.exclusive(() -> "second", TimeUnit.MILLISECONDS.toNanos(300)).isEmpty());
+        assertEquals("ok", pool.submit(() -> leased.shared(() -> "ok")).get(1, TimeUnit.SECONDS));
+        releaseExclusive.countDown();
+    }
+
     @Test
     void theExclusiveHolderIsVisibleToTheWork() {
         assertFalse(gate.shared(gate::exclusiveHeldByCurrentThread));

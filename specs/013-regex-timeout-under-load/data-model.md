@@ -63,7 +63,7 @@ first ──timeouts>0──▶ budget allows? ──no──▶ answer (persist
 
 ## ValidationGate (one per JVM)
 
-A fair read/write lock.
+A fair shared/exclusive permit; the exclusive one is a lease of 1 s (`EXCLUSIVE_LEASE_NANOS`, T029).
 
 | Permit | Held by | While |
 |---|---|---|
@@ -71,6 +71,8 @@ A fair read/write lock.
 | exclusive | a `quiet` attempt | the engine call |
 
 - An attempt never holds a permit while it asks for another (no upgrade).
+- The exclusive permit keeps shared requests out for at most its 1 s lease; a quiet attempt still running after it goes
+  on beside them, and another exclusive request still waits for it to end (FR-006).
 - Asking for the exclusive permit waits at most `QUIET_WAIT_MAX` = 1,000 ms and never past the deadline. While it
   waits, new shared requests queue behind it (fair), so this cap bounds how long other validations are held up.
 

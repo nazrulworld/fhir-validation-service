@@ -35,7 +35,10 @@ public final class RegexRecheck {
     public static final String REASON_BUSY = "busy";
     /** More regex timeouts than this in one result point at the input, not at load: no quiet re-check (research R4). */
     static final int MAX_TIMEOUTS_FOR_QUIET = 3;
-    /** The longest a quiet re-check waits for the exclusive permit; validations queued behind it wait as long. */
+    /**
+     * The longest a quiet re-check waits for the exclusive permit; validations queued behind it wait as long. Once
+     * granted, the permit keeps them out for at most {@link ValidationGate#EXCLUSIVE_LEASE_NANOS} (FR-006).
+     */
     public static final long QUIET_WAIT_MAX_NANOS = TimeUnit.SECONDS.toNanos(1);
     public static final String KIND_PLAIN = "plain";
     public static final String KIND_QUIET = "quiet";
@@ -100,12 +103,21 @@ public final class RegexRecheck {
      */
     public Result run(Supplier<ValidationResult> engineCall, OptionalLong requestDeadlineNanos, SupportedFhirVersion version,
                       String contextKey) {
-        long start = nanoClock.getAsLong();
-        long deadline = start + validationBudgetNanos;
+        return run(engineCall, nanoClock.getAsLong(), requestDeadlineNanos, version, contextKey);
+    }
+
+    /**
+     * As {@link #run(Supplier, OptionalLong, SupportedFhirVersion, String)}, with the validation budget counted from
+     * {@code validationStartNanos}: when the validation started on the worker, before parsing (FR-006; the worker
+     * pool's {@code FV_VALIDATION_TIMEOUT_MS} counts from there too).
+     */
+    public Result run(Supplier<ValidationResult> engineCall, long validationStartNanos, OptionalLong requestDeadlineNanos,
+                      SupportedFhirVersion version, String contextKey) {
+        long deadline = validationStartNanos + validationBudgetNanos;
         if (requestDeadlineNanos.isPresent() && requestDeadlineNanos.getAsLong() - deadline < 0) {
             deadline = requestDeadlineNanos.getAsLong();
         }
-        long attemptStart = start;
+        long attemptStart = nanoClock.getAsLong();
         ValidationResult result = gate.shared(engineCall);
         if (RegexTimeoutIssue.count(result) == 0) {
             return new Result(result, 1, OUTCOME_NONE, "");
@@ -128,13 +140,14 @@ public final class RegexRecheck {
         if (!limiter.available()) {
             return finish(version, contextKey, new Result(result, 2, OUTCOME_PERSISTENT, REASON_QUIET_LIMIT));
         }
-        if (!fits(deadline, lastDuration)) {
+        // The wait for the exclusive permit comes out of the same deadline: wait + 2 x the last attempt fits (FR-006).
+        long wait = Math.min(QUIET_WAIT_MAX_NANOS, deadline - (nanoClock.getAsLong() + 2 * lastDuration));
+        if (wait < 0) {
             return finish(version, contextKey, new Result(result, 2, OUTCOME_PERSISTENT, REASON_BUDGET));
         }
         if (!limiter.tryTake()) {
             return finish(version, contextKey, new Result(result, 2, OUTCOME_PERSISTENT, REASON_QUIET_LIMIT));
         }
-        long wait = Math.min(QUIET_WAIT_MAX_NANOS, deadline - nanoClock.getAsLong());
         Optional<ValidationResult> quiet = gate.exclusive(() -> {
             listener.onRecheck(version, KIND_QUIET);
             return engineCall.get();
