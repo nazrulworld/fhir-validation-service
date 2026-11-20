@@ -151,7 +151,7 @@ class SharedDefinitionsDifferentialIT {
         List<Case> all = cases();
         assertTrue(all.size() >= 84 + 50, "the corpus has every example and at least 50 invalid variants");
         for (Case c : all) {
-            check(c);
+            checkAlone(() -> check(c));
         }
     }
 
@@ -208,9 +208,10 @@ class SharedDefinitionsDifferentialIT {
             List<Case> all = cases();
             Map<String, String> expected = new HashMap<>();
             for (Case c : all) {
-                expected.put(c.relative(), render(privateCtx.get(c.context()), c, effective, router));
-                assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
-                        c.relative() + ": shared and private contexts differ with a terminology server");
+                // The baseline must not carry a load-induced regex timeout: every later comparison is made against it.
+                expected.put(c.relative(), renderWithoutRegexTimeout(privateCtx.get(c.context()), c, effective, router));
+                checkAlone(() -> assertEquals(expected.get(c.relative()), render(sharedCtx.get(c.context()), c, effective, router),
+                        c.relative() + ": shared and private contexts differ with a terminology server"));
             }
             assertTrue(stub.hits() > 0, "the corpus reached the terminology server");
             privateCtx.clear(); // the baseline is recorded; release its contexts before the concurrent phase
@@ -234,6 +235,50 @@ class SharedDefinitionsDifferentialIT {
         return GoldenOutcomes.project(OutcomeRenderer.render(outcome, MediaTypes.ResponseFormat.FHIR_JSON)).encode();
     }
 
+    /** The most attempts a check or render gets when it only hits HL7 core's regex timeout (load, see runConcurrently). */
+    static final int REGEX_TIMEOUT_ATTEMPTS = 3;
+
+    /**
+     * {@link #render}, again when the result reports a regex timeout: no expected outcome in the corpus has one (the
+     * golden files contain none), so such a result is load, not the context's answer. Fails after
+     * {@value #REGEX_TIMEOUT_ATTEMPTS} attempts that all time out.
+     */
+    private String renderWithoutRegexTimeout(ValidatorSnapshot snapshot, Case c,
+                                             nzi.fhir.validator.core.terminology.EffectiveTerminology effective,
+                                             nzi.fhir.validator.core.terminology.TerminologyRouter router) throws Exception {
+        String rendered = null;
+        for (int attempt = 1; attempt <= REGEX_TIMEOUT_ATTEMPTS; attempt++) {
+            rendered = render(snapshot, c, effective, router);
+            if (!hasRegexTimeout(rendered)) {
+                return rendered;
+            }
+        }
+        throw new AssertionError(c.relative() + ": the regex timeout persisted over " + REGEX_TIMEOUT_ATTEMPTS
+                + " attempts: " + rendered);
+    }
+
+    /**
+     * Runs a check that nothing else competes with. Even alone, a busy CI runner (GC, other build processes) can push a
+     * regex past HL7 core's 500 ms timeout; a failure that only shows that timeout is retried, up to
+     * {@value #REGEX_TIMEOUT_ATTEMPTS} attempts. Any other difference fails at once.
+     */
+    static void checkAlone(Check check) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                check.run();
+                return;
+            } catch (AssertionError e) {
+                if (attempt >= REGEX_TIMEOUT_ATTEMPTS || !regexTimedOut(e)) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    static boolean hasRegexTimeout(String text) {
+        return REGEX_TIMEOUT_TEXTS.stream().anyMatch(text::contains);
+    }
+
     /** A check that may throw (the comparison of one case). */
     interface Check {
         void run() throws Exception;
@@ -245,8 +290,7 @@ class SharedDefinitionsDifferentialIT {
             "could not be executed");       // REGEX_MATCH_TIMED_OUT: "The regex '{0}' could not be executed"
 
     static boolean regexTimedOut(Throwable failure) {
-        String message = String.valueOf(failure.getMessage());
-        return REGEX_TIMEOUT_TEXTS.stream().anyMatch(message::contains);
+        return hasRegexTimeout(String.valueOf(failure.getMessage()));
     }
 
     /**
@@ -288,7 +332,7 @@ class SharedDefinitionsDifferentialIT {
             pool.shutdownNow();
         }
         for (Case c : deferred) {
-            checkOf.apply(c).run(); // alone: no other validation competes for the regex executor
+            checkAlone(checkOf.apply(c)); // alone: no other validation competes for the regex executor
         }
     }
 }
