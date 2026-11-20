@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
 Validator contexts built from two IGs (spec 012). No path, payload or status code of an existing request changes.
 
 ### Added
@@ -43,6 +45,11 @@ Validator contexts built from two IGs (spec 012). No path, payload or status cod
   (`https://nazrulworld.github.io/fhir-validation-service/problems/<type>`) now resolve: each redirects to its row in
   the API Documentation's problem-type table, which says what the problem means and what to do. Before, they
   answered 404. No change to the service.
+
+### Upgrading from 1.1.0
+
+- Migration V17 runs at start: it widens two `VARCHAR` columns (no table rewrite) and adds two partial unique indexes
+  on `fhir_validator_snapshots`.
 
 ## [1.1.0] - 2026-11-16
 

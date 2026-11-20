@@ -13,8 +13,8 @@ PostgreSQL database; IG changes reach every instance within seconds, without res
 reference pages for configuration, the OpenAPI definition, the changelog and load tests). It is generated from the
 [project wiki](https://github.com/nazrulworld/fhir-validation-service/wiki).
 
-> **1.1.0** adds a terminology setting per request (`tx`, `txMode`), applies terminology changes without rebuilding,
-> and shares the definitions of common packages between contexts (see [CHANGELOG.md](CHANGELOG.md)). Settings, API
+> **1.2.0** adds validator contexts built from two IGs (`igPackages` on include, `ig=A#a|B#b` on validate), with
+> aliases and dependency-conflict checks (see [CHANGELOG.md](CHANGELOG.md)). Settings, API
 > and behaviour details are below; procedures for operating the service are in [docs/operations.md](docs/operations.md).
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
@@ -65,8 +65,8 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `1.1.0`        | an exact release (recommended for production: pin it)      |
-| `1.1`          | the newest patch release of 1.1                            |
+| `1.2.0`        | an exact release (recommended for production: pin it)      |
+| `1.2`          | the newest patch release of 1.2                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
@@ -78,7 +78,7 @@ Pin `FV_TAG` to an exact release in production, so a pull never upgrades without
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=1.1.0
+FV_TAG=1.2.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
 # Every validation needs a key: this shared trial key, or keys created per client with 'fv-admin key create'.
@@ -220,7 +220,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=1.1.0
+VERSION=1.2.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -241,7 +241,7 @@ export FV_VALIDATOR_API_KEY='<another output of openssl rand -hex 32>'   # optio
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-1.1.0.jar
+  -jar fhir-validation-service-1.2.0.jar
 ```
 
 ```bash
@@ -289,7 +289,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-1.1.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-1.2.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
@@ -308,7 +308,7 @@ does not need to be running) and applies pending migrations first.
 In the shell from step 4, with the variables still exported:
 
 ```bash
-java -jar fhir-validation-service-1.1.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
+java -jar fhir-validation-service-1.2.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
 ```
 
 For a systemd installation, a small wrapper gives the same `fv-admin` command the container image has, reading the
