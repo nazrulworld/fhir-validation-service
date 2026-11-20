@@ -755,11 +755,17 @@ and [`.env.example`](.env.example). The most important ones:
 ## Development
 
 ```bash
-./mvnw verify        # unit, Testcontainers integration and contract tests (needs Docker)
+./mvnw verify        # unit, Testcontainers integration and contract tests, then the release gate (needs Docker)
 make run-postgres    # PostgreSQL on 127.0.0.1:54329 for IDE runs (export FV_PG_PASSWORD first)
 FV_PROFILE=dev FV_PG_PORT=54329 FV_PG_PASSWORD=... java -jar target/fhir-validation-service-*.jar
 ```
 
+- Tests run in two JVMs with fixed heaps: every test class except the release-gate differential test
+  (`SharedDefinitionsDifferentialIT`) runs under surefire in `test` (`-Xmx4g`); the release gate runs on its own under
+  failsafe in `verify` (`-Xmx3g`). `./mvnw test` therefore skips the release gate and `-DskipITs` skips it in `verify`;
+  `-Dit.test=SharedDefinitionsDifferentialIT -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false` runs it alone. Change
+  a heap with `-Dtest.heap=-Xmx6g` or `-Drelease-gate.heap=-Xmx4g`, and add JVM options with `-Dtest.jvm.extra=...`
+  (`-DargLine` does not reach the test JVMs).
 - Load tests: [`perf/README.md`](perf/README.md)
 - Design and decisions: [`specs/001-service-hardening/`](specs/001-service-hardening/)
 - Project principles: [`.specify/memory/constitution.md`](.specify/memory/constitution.md)

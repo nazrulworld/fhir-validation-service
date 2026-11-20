@@ -35,7 +35,7 @@ With a long hostile validation in flight, a request needing a quiet re-check giv
 ## 3. The release gate needs no retry (SC-002)
 
 ```bash
-./mvnw -B test -Dtest='SharedDefinitionsDifferentialIT'
+./mvnw -B verify -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false -Dit.test='SharedDefinitionsDifferentialIT'
 ```
 
 Expected: passes with `RegexTimeouts.retry` removed from its sequential, terminology and concurrent phases.
@@ -43,7 +43,7 @@ Expected: passes with `RegexTimeouts.retry` removed from its sequential, termino
 ## 4. Same verdict under full load (SC-001)
 
 ```bash
-FV_LOAD_ROUNDS=75 ./mvnw -B test -Dtest='SharedDefinitionsDifferentialIT#theSameVerdictUnderSustainedLoad'
+FV_LOAD_ROUNDS=75 ./mvnw -B verify -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false -Dit.test='SharedDefinitionsDifferentialIT#theSameVerdictUnderSustainedLoad'
 ```
 
 Expected: the golden corpus (about 134 resources) validated 75 times on 8 threads (at least 10,000 validations), every
