@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
 Validator contexts built from two IGs (spec 012). No path, payload or status code of an existing request changes.
 
 ### Added
@@ -43,6 +45,16 @@ Validator contexts built from two IGs (spec 012). No path, payload or status cod
   (`https://nazrulworld.github.io/fhir-validation-service/problems/<type>`) now resolve: each redirects to its row in
   the API Documentation's problem-type table, which says what the problem means and what to do. Before, they
   answered 404. No change to the service.
+
+### Upgrading from 1.1.0
+
+- Migration V17 runs at start: it widens two `VARCHAR` columns (no table rewrite) and adds two partial unique indexes
+  on `fhir_validator_snapshots`. A 1.1.0 instance still starts against the migrated schema.
+- **Include two-IG contexts only once every instance runs 1.2.0.** A 1.1.0 instance reads a two-IG key as one package
+  that isn't stored: it keeps serving base and single-IG validation, but its readiness stays `DOWN` while any two-IG
+  context is included for a FHIR version it serves, so orchestrators stop routing to it.
+- **Rolling back to 1.1.0:** first exclude every two-IG context (`DELETE /{version}/validator?ig=A%23a%7CB%23b`). No
+  database restore is needed.
 
 ## [1.1.0] - 2026-11-16
 
