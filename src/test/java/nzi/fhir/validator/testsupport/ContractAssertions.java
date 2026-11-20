@@ -54,6 +54,30 @@ public final class ContractAssertions {
         }
     }
 
+    /**
+     * As {@link #assertDeclaredBySchema}, for an object nested in {@code schema}: {@code path} names the properties to
+     * descend through; an array property descends into its {@code items}.
+     */
+    @SuppressWarnings("unchecked")
+    public static void assertDeclaredAt(JsonObject body, String schema, java.util.List<String> path, String... required) {
+        java.util.Map<String, Object> properties = schemaProperties(schema);
+        for (String segment : path) {
+            java.util.Map<String, Object> node = (java.util.Map<String, Object>) properties.get(segment);
+            assertNotNull(node, "openapi.yaml " + schema + " has no '" + segment + "' on the path " + path);
+            if (node.containsKey("items")) {
+                node = (java.util.Map<String, Object>) node.get("items");
+            }
+            properties = (java.util.Map<String, Object>) node.get("properties");
+            assertNotNull(properties, "openapi.yaml " + schema + " '" + segment + "' declares no properties");
+        }
+        for (String field : body.fieldNames()) {
+            assertTrue(properties.containsKey(field), "openapi.yaml " + schema + " " + path + " does not declare '" + field + "'");
+        }
+        for (String field : required) {
+            assertTrue(properties.containsKey(field), "openapi.yaml " + schema + " " + path + " does not declare '" + field + "'");
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static java.util.Map<String, Object> schemaProperties(String schema) {
         try (java.io.InputStream in = ContractAssertions.class.getResourceAsStream("/openapi.yaml")) {

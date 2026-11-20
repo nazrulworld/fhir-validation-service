@@ -1,6 +1,10 @@
 #!/bin/bash
 # Spec 008 T071 (SC-007): one perf/validate.js run against a fresh PostgreSQL + service pair.
 # usage: perf/compare-run.sh <label> <image> <sink: -|none|db> <out-dir>
+# Optional (spec 012): IG=name#version includes that IG for R4 first (IG_TGZ="<.tgz> ..." uploads packages and
+# IG_REGISTER="name#version ..." fetches them from the registries beforehand), and every
+# request then names it in ?ig=. With IG2=name#version both are included as one two-IG context and requests name
+# ig=IG|IG2. The context's build time and the memory before and after the include are recorded.
 set -u
 LABEL=$1 IMAGE=$2 SINK=$3 OUT=$4
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -33,6 +37,44 @@ for i in $(seq 1 300); do
 done
 if [ $ready != 1 ]; then echo "$LABEL: not ready"; docker logs --tail 40 $SVC; exit 1; fi
 
+memory() {  # the container's memory in use, and the service's estimate of the heap its package sets hold (R4)
+  echo "container $(docker stats --no-stream --format '{{.MemUsage}}' $SVC)"
+  curl -fsS http://127.0.0.1:18880/metrics | grep -E '^fv_packages_shared_(retained_estimate|expanded)_bytes\{fhir_version="R4"'
+}
+for tgz in ${IG_TGZ:-}; do
+  curl -fsS -H "Authorization: Bearer $ADMIN" -F "file=@$tgz;type=application/gzip" \
+    http://127.0.0.1:18880/igs/upload >/dev/null || { echo "$LABEL: upload of $tgz failed"; exit 1; }
+done
+# Spec 012: IG_REGISTER="name#version ..." fetches packages (with dependencies) from the configured registries.
+for ref in ${IG_REGISTER:-}; do
+  curl -fsS -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
+    --data "{\"name\":\"${ref%%#*}\",\"version\":\"${ref#*#}\"}" \
+    http://127.0.0.1:18880/igs/register >/dev/null || { echo "$LABEL: register of $ref failed"; exit 1; }
+done
+if [ -n "${IG:-}" ]; then
+  if [ -n "${IG2:-}" ]; then
+    # Spec 012: IG2=name#version includes IG and IG2 as one two-IG context; requests then name ig=IG|IG2.
+    BODY="{\"igPackages\":[{\"igPackageId\":\"${IG%%#*}\",\"igPackageVersion\":\"${IG#*#}\"},{\"igPackageId\":\"${IG2%%#*}\",\"igPackageVersion\":\"${IG2#*#}\"}]}"
+    KEY="$IG|$IG2"
+  else
+    BODY="{\"igPackageId\":\"${IG%%#*}\",\"igPackageVersion\":\"${IG#*#}\"}"
+    KEY="$IG"
+  fi
+  sleep 5
+  memory > "$OUT/$LABEL.memory-before.txt"
+  curl -fsS -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' --data "$BODY" \
+    http://127.0.0.1:18880/R4/validator > "$OUT/$LABEL.include.json" || { echo "$LABEL: include failed"; exit 1; }
+  # The build time this instance logs for the new context, and the memory in use once it is built.
+  for i in $(seq 1 300); do
+    docker logs $SVC 2>&1 | grep -F "Built validator for" | grep -F "$KEY" > "$OUT/$LABEL.build.txt" && break
+    sleep 1
+  done
+  [ -s "$OUT/$LABEL.build.txt" ] || { echo "$LABEL: context not built"; docker logs --tail 40 $SVC; exit 1; }
+  sleep 5
+  memory > "$OUT/$LABEL.memory-after.txt"
+  curl -fsS http://127.0.0.1:18880/health > "$OUT/$LABEL.health.json"
+  KEYARG+=(-e "IG=$KEY")
+fi
 K6=(docker run --rm --network $NET -v "$REPO":/work -w /work/perf grafana/k6:0.54.0 run --quiet
     -e BASE=http://$SVC:8880 ${KEYARG[@]+"${KEYARG[@]}"} -e VUS=8)
 "${K6[@]}" -e DURATION=15s validate.js >/dev/null 2>&1   # warm-up

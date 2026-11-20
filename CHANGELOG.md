@@ -6,6 +6,33 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Validator contexts built from two IGs (spec 012). No path, payload or status code of an existing request changes.
+
+### Added
+
+- `POST /{version}/validator` takes `igPackages`, a list of one or two `{igPackageId, igPackageVersion}` entries,
+  instead of `igPackageId`/`igPackageVersion` (exactly one of the two forms; one entry behaves like `igPackageId`).
+  Two entries build one validator context from both IGs, every dependency of each and the core specification, like
+  the validator CLI's repeated `-ig`. Its key is `A#a|B#b` in the order given.
+- Aliases: a two-IG context is also found by the reversed pair `B#b|A#a` and, for a validation request naming an exact
+  `A#a` while no single-IG context `A#a` is included, by its first IG. A name without a version (or `latest`) only
+  considers single-IG contexts, as before.
+- `ig` on `POST /{version}/validate` accepts two IGs, `name#version|name#version` (URL-encode `|` as `%7C`): the key is
+  looked up first, then the reversed pair; neither included is 400 `invalid-request`. `X-Validation-Context` always
+  reports the key. PATCH and DELETE `/{version}/validator` and the `snapshot share|transfer` commands take the key or
+  the reversed pair.
+- Include responses and the `/health` context listings report `igPackages` (the context's IGs) and `aliases`.
+- New problem types: 400 `dependency-conflict` (the two IGs need different versions of one package; the `conflicts`
+  extension names it and the versions) and 409 `alias-conflict` (another two-IG context already starts with the same
+  IG). Differences in `hl7.terminology*` and `hl7.fhir.uv.extensions*` are not conflicts: the highest version is used
+  and named in `warnings`.
+
+### Changed
+
+- Database migration V17: `fhir_validator_snapshots.ig_package` and `validation_usage.ig` are `VARCHAR(256)` (were
+  192), and two partial unique indexes keep two-IG contexts unique per first IG and per pair. Existing rows are not
+  changed. Usage records keep `ig` values up to 256 characters.
+
 ### Documentation
 
 - The user guide is published at <https://nazrulworld.github.io/fhir-validation-service/>, generated from the project

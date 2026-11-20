@@ -168,7 +168,9 @@ class ContextActivationIT extends BaseTestContainer {
                                     .getJsonObject("fhirVersions").getJsonObject("inactiveContexts");
                             assertEquals(1, inactive.getInteger("count"));
                             assertEquals(0, inactive.getInteger("private"));
+                            // Spec 012 FR-009: every listed context reports its IG packages and aliases.
                             assertEquals(new JsonArray().add(new JsonObject().put("fhirVersion", "R4").put("igPackage", R4_PKG)
+                                    .put("igPackages", new JsonArray().add(R4_PKG)).put("aliases", new JsonArray())
                                     .put("owner", "system").put("reason", "fhir-version-disabled")), inactive.getJsonArray("items"));
                             JsonObject readiness = cf.<HttpResponse<Buffer>>resultAt(2).bodyAsJsonObject();
                             assertEquals(java.util.Set.of("R5"), readiness.getJsonObject("versions").fieldNames());

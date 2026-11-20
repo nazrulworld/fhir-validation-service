@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 1.1.0
+  version: 1.2.0
 
 servers:
   - url: http://localhost:8880
@@ -141,6 +141,11 @@ paths:
             the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
             series such as `name#1.2.x` is rejected with 400 invalid-request; use the concrete version reported
             when the IG was included (POST /{version}/validator).
+            Two IGs (1.2.0): `name#version|name#version`, both with exact versions (URL-encode `|` as %7C). The
+            context included with exactly these two IGs is used, looked up by its key first and then by the
+            reversed order; neither included is 400 invalid-request. A single exact `name#version` uses the single-IG
+            context when one is included, otherwise the two-IG context whose first IG it is. A name without a version,
+            or `latest`, considers single-IG contexts only. X-Validation-Context always reports the context's key.
           schema:
             type: string
             maxLength: 256
@@ -303,6 +308,17 @@ paths:
         applies when an inactive context for it is already stored. Public mode: while access control is
         disabled (FV_GLOBAL_DISABLED_ACL_SECURITY), `shareable: false` is ignored and the context is stored as
         shareable, with a warning in `warnings`.
+        Two IGs (1.2.0): send `igPackages` with two entries instead of `igPackageId`/`igPackageVersion` (exactly one
+        of the two forms; one entry behaves like `igPackageId`). One context is built from both IGs, every dependency
+        of each and the core specification. Its key is `A#a|B#b` in the order given (at most 256 characters); it is
+        also found under the aliases `B#b|A#a` and, for a single-IG request with an exact version when no single-IG
+        context of that version is included, `A#a`. Including the same two IG versions again, in either order,
+        changes nothing and reports the existing context. Every check above applies to each IG and each dependency.
+        When the two IGs need different versions of the same package the include is refused with 400
+        dependency-conflict (extension `conflicts`), except packages whose name starts with `hl7.terminology` or
+        `hl7.fhir.uv.extensions`: the highest version is used and named in `warnings`. A conflict involving a
+        version the caller may not use is answered 424 without naming it. 409 alias-conflict: another two-IG context
+        for this FHIR version already has the same first IG. `shareable: false` needs ownership of both IG packages.
       parameters:
         - name: version
           in: path
@@ -315,9 +331,27 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - igPackageId
+              description: >-
+                Exactly one of `igPackageId` (one IG) or `igPackages` (one or two IGs) is required (400
+                invalid-request otherwise).
               properties:
+                igPackages:
+                  type: array
+                  minItems: 1
+                  maxItems: 2
+                  description: >-
+                    One or two IG packages for one context (1.2.0). Two entries may not name the same igPackageId.
+                  items:
+                    type: object
+                    required:
+                      - igPackageId
+                    properties:
+                      igPackageId:
+                        type: string
+                      igPackageVersion:
+                        type: string
+                        default: latest
+                        description: Same values as the top-level igPackageVersion.
                 igPackageId:
                   type: string
                 igPackageVersion:
@@ -355,6 +389,13 @@ paths:
           $ref: '#/components/responses/PackageNotFound'
         '413':
           $ref: '#/components/responses/Problem'
+        '409':
+          description: >-
+            alias-conflict: another two-IG context for this FHIR version already has the same first IG (1.2.0)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
           $ref: '#/components/responses/FhirVersionDisabled'
         '424':
@@ -393,7 +434,10 @@ paths:
         - name: ig
           in: query
           required: true
-          description: The exact IG package version to exclude, name#version (URL-encode `#` as %23); no `latest`
+          description: >-
+            The exact IG package version to exclude, name#version (URL-encode `#` as %23); no `latest`. A two-IG
+            context (1.2.0): its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
+            addresses a two-IG context.
           schema:
             type: string
             maxLength: 256
@@ -443,7 +487,10 @@ paths:
         - name: ig
           in: query
           required: true
-          description: The exact included IG package version, name#version (URL-encode `#` as %23); no `latest`
+          description: >-
+            The exact included IG package version, name#version (URL-encode `#` as %23); no `latest`. A two-IG
+            context (1.2.0): its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
+            addresses a two-IG context. `shareable: false` on a two-IG context needs ownership of both IG packages.
           schema:
             type: string
             maxLength: 256
@@ -843,7 +890,8 @@ components:
           type: object
           description: >-
             Per FHIR version: appliedRevision, latestRevision, `base` (the core-only context: state, packages,
-            packageBytes) and `contexts` (every IG context on this instance: key name#version, kind pinned,
+            packageBytes) and `contexts` (every IG context on this instance: key name#version or, for a two-IG
+            context, A#a|B#b, igPackages (the context's IGs, name#version, in key order), aliases, kind pinned,
             state ACTIVE|BUILDING|STALE|ABSENT, appliedRevision, packages, packageBytes, lastUsed, reason, and
             terminology {mode, server}).
             `contexts` lists only contexts that are shareable and whose packages are all shareable; the others
@@ -981,7 +1029,17 @@ components:
                         type: string
                       igPackage:
                         type: string
-                        description: name#version
+                        description: name#version, or A#a|B#b for a two-IG context
+                      igPackages:
+                        type: array
+                        description: The context's IGs (name#version) in key order (1.2.0)
+                        items:
+                          type: string
+                      aliases:
+                        type: array
+                        description: Other values that find this context (1.2.0); empty for a single-IG context
+                        items:
+                          type: string
                       owner:
                         type: string
                         description: The owning organisation's short name
@@ -1060,10 +1118,31 @@ components:
               type: string
             igPackage:
               type: string
-              description: concrete name#version
+              description: concrete name#version, or A#a|B#b for a two-IG context
+        igPackages:
+          type: array
+          description: The context's IGs with concrete versions, in key order (1.2.0)
+          items:
+            type: object
+            properties:
+              igPackageId:
+                type: string
+              igPackageVersion:
+                type: string
+              requestedVersion:
+                type: string
+                description: Present for a two-IG include; the value the request gave for this entry
+        aliases:
+          type: array
+          description: >-
+            Other values that find this context (1.2.0): `B#b|A#a` and `A#a` for a two-IG context, empty otherwise
+          items:
+            type: string
         requestedVersion:
           type: string
-          description: The igPackageVersion value of the request (latest, an exact version or a version series)
+          description: >-
+            The igPackageVersion value of the request (latest, an exact version or a version series); absent for a
+            two-IG include (see igPackages)
         revision:
           type: integer
           format: int64

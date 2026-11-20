@@ -135,6 +135,46 @@ class PackageInvalidationIT extends BaseTestContainer {
                 })));
     }
 
+    /**
+     * Spec 012 T016a (research R4): conflicts between the two IGs are refused at include time only. When a later
+     * catalog change makes the two trees need different versions, the context is rebuilt with the same key and the
+     * highest version, on every instance, and stays usable.
+     */
+    @Test
+    void aTwoIgContextRebuiltIntoAConflictKeepsItsKeyAndUsesTheHighestVersion(Vertx vertx, VertxTestContext ctx) {
+        String key = "inv.cp#1.0.0|inv.cr#1.0.0";
+        SnapshotKey pair = SnapshotKey.of(R4, key);
+        TestPackages.storePackage(a.services(), TestPackages.npmPackage("inv.cx", "1.0.0", Map.of(), List.of()))
+                .compose(v -> TestPackages.storePackage(a.services(),
+                        TestPackages.npmPackage("inv.cp", "1.0.0", Map.of("inv.cx", "1.0.0"), List.of())))
+                .compose(v -> TestPackages.storePackage(a.services(),
+                        TestPackages.npmPackage("inv.cr", "1.0.0", Map.of("inv.cx", "latest"), List.of())))
+                .compose(v -> a.services().configSync().syncCatalogNow())
+                .compose(v -> TestPackages.includePair(a.services(), R4, "inv.cp", "1.0.0", "inv.cr", "1.0.0"))
+                .compose(r -> Await.until(vertx, PROPAGATION_MS, "pinned on B", () -> pinnedActive(b, key)))
+                .compose(ms -> {
+                    ctx.verify(() -> assertEquals(List.of("inv.cp#1.0.0", "inv.cr#1.0.0", "inv.cx#1.0.0"),
+                            b.services().validatorRegistry().current(pair).resolvedPackages()));
+                    // inv.cr now resolves inv.cx to 2.0.0 while inv.cp still needs 1.0.0.
+                    return TestPackages.storePackage(a.services(), TestPackages.npmPackage("inv.cx", "2.0.0", Map.of(), List.of()));
+                })
+                .compose(v -> Future.all(
+                        Await.until(vertx, PROPAGATION_MS, "A rebuilds with inv.cx#2.0.0", () -> Future.succeededFuture(
+                                a.services().validatorRegistry().current(pair) != null
+                                        && a.services().validatorRegistry().current(pair).resolvedPackages().contains("inv.cx#2.0.0"))),
+                        Await.until(vertx, PROPAGATION_MS, "B rebuilds with inv.cx#2.0.0", () -> Future.succeededFuture(
+                                b.services().validatorRegistry().current(pair) != null
+                                        && b.services().validatorRegistry().current(pair).resolvedPackages().contains("inv.cx#2.0.0")))))
+                .compose(all -> Future.all(pinnedActive(a, key), pinnedActive(b, key)))
+                .onComplete(ctx.succeeding(active -> ctx.verify(() -> {
+                    assertTrue((Boolean) active.resultAt(0), "still pinned and active on A");
+                    assertTrue((Boolean) active.resultAt(1), "still pinned and active on B");
+                    assertEquals(List.of("inv.cp#1.0.0", "inv.cr#1.0.0", "inv.cx#2.0.0"),
+                            b.services().validatorRegistry().current(pair).resolvedPackages());
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void replacedPackageMakesAPinnedContextStaleUntilRebuilt(Vertx vertx, VertxTestContext ctx) {
         SnapshotKey key = SnapshotKey.of(R4, "inv.slow#1.0.0");

@@ -171,8 +171,10 @@ public final class ConfigRevisionRepository {
         String[] sorted = included.stream().sorted().toArray(String[]::new);
         Future<?> child = KIND_IG.equals(kind)
                 ? tx.preparedQuery("INSERT INTO " + SNAPSHOTS + " (fhir_version, ig_package, owner, is_shareable, tx_mode, tx_server) "
-                        + "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING")
+                        // Only a row left for the same key is ignored; a V17 two-IG index violation must fail.
+                        + "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (fhir_version, ig_package) DO NOTHING")
                 .execute(Tuple.of(version.name(), key, owner, shareable, terminology.mode().name(), terminology.server()))
+                .recover(err -> Future.failedFuture(twoIgConflict(err, key, version)))
                 : Future.succeededFuture();
         return child
                 // Rows whose context is no longer included (the excluded one, and any left by a 3.0 instance).
@@ -184,6 +186,28 @@ public final class ConfigRevisionRepository {
                         .execute(Tuple.of(sorted, VALIDATOR_ID, version.name())))
                 .map(rows -> rows.iterator().next().getLong(0))
                 .compose(revision -> notify(tx, version, revision, kind, key).map(revision));
+    }
+
+    /** The V17 partial unique indexes on two-IG keys (spec 012 research R3). */
+    static final String FIRST_MEMBER_INDEX = "fhir_validator_snapshots_first_member_uq";
+    static final String PAIR_INDEX = "fhir_validator_snapshots_pair_uq";
+
+    /**
+     * Defence in depth (spec 012 research R3): the include transaction checks both two-IG rules under the row lock, so
+     * these indexes only fire for a write that bypassed that check. A first-IG clash is 409 {@code alias-conflict}, a
+     * pair already stored in the other order 409 {@code conflict}; neither names another context. Anything else is
+     * passed through.
+     */
+    static Throwable twoIgConflict(Throwable err, String key, SupportedFhirVersion version) {
+        if (nzi.fhir.validator.core.PgErrors.isUniqueViolation(err, FIRST_MEMBER_INDEX)) {
+            return nzi.fhir.validator.web.ProblemException.aliasConflict(
+                    nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key).get(0), null, version);
+        }
+        if (nzi.fhir.validator.core.PgErrors.isUniqueViolation(err, PAIR_INDEX)) {
+            return new nzi.fhir.validator.web.ProblemException(409, nzi.fhir.validator.web.ProblemException.TYPE_CONFLICT,
+                    "These two IG packages are already included for " + version + " in the other order");
+        }
+        return err;
     }
 
     /**

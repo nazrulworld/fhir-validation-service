@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -255,5 +256,99 @@ class IgReferenceTest {
         ProblemException e = assertThrows(ProblemException.class,
                 () -> IgReference.parse("r5#1.0.0").resolveIn(SupportedFhirVersion.R4, view, A, java.util.Set.of()));
         assertTrue(e.detail().contains("is for FHIR R5"), e.detail());
+    }
+
+    // --- spec 012: two IGs (FR-010 to FR-012a) -----------------------------------------------------------------
+
+    /** {@code p} as in {@link #ownedView()}, plus shareable R4 packages {@code a#1}, {@code b#2}, {@code c#3}, {@code a#2}. */
+    private static PackageCatalogView pairView() {
+        Map<String, PackageCatalogView.Entry> entries = new java.util.HashMap<>();
+        nzi.fhir.validator.core.security.Access privateA = new nzi.fhir.validator.core.security.Access(ORG_A, "a", false);
+        for (String k : List.of("a#1", "a#2", "b#2", "c#3")) {
+            entries.put(k, new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R4), List.of(), null, 1));
+        }
+        entries.put("priv#1", new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R4), List.of(), null, 1, privateA));
+        entries.put("r5#1.0.0", new PackageCatalogView.Entry(java.util.Set.of(SupportedFhirVersion.R5), List.of(), null, 1, privateA));
+        return new PackageCatalogView(1, entries);
+    }
+
+    private static Optional<SnapshotKey> resolve(String raw, nzi.fhir.validator.core.security.Caller caller, java.util.Set<String> included) {
+        return IgRequest.parse(raw).resolveIn(SupportedFhirVersion.R4, pairView(), caller, included, ContextAliases.of(included));
+    }
+
+    @Test
+    void parsesAPair() {
+        assertEquals(new IgPair(new IgReference("a", "1"), new IgReference("b", "2")), IgRequest.parse("a#1|b#2"));
+        assertEquals("a#1|b#2", IgRequest.parse("a#1|b#2").label());
+        assertEquals(new IgReference("a", "1"), IgRequest.parse("a#1"), "one IG parses as before");
+        assertEquals(new IgReference("a", null), IgRequest.parse("a"));
+        assertNull(IgRequest.parseOptional(null));
+    }
+
+    @Test
+    void rejectsMalformedPairs() {
+        String a = "a".repeat(124) + "#1";
+        for (String bad : List.of("a|b#2", "a#latest|b#2", "a#1.x|b#2", "a#1|a#2", "a#1|a#1", "a#1|b#2|c#3", "a#1|", "|b#2",
+                "a#1||b#2", a + "|" + "b".repeat(129) + "#2")) {
+            ProblemException e = assertThrows(ProblemException.class, () -> IgRequest.parse(bad), bad);
+            assertEquals(400, e.status(), bad);
+            assertEquals("invalid-request", e.type(), bad);
+        }
+        assertTrue(assertThrows(ProblemException.class, () -> IgRequest.parse("a|b#2")).detail().contains("%7C"));
+    }
+
+    @Test
+    void aPairResolvesByKeyThenByTheReversedAlias() {
+        java.util.Set<String> included = java.util.Set.of("a#1|b#2");
+        assertEquals("a#1|b#2", resolve("a#1|b#2", A, included).orElseThrow().igPackage(), "exact key");
+        assertEquals("a#1|b#2", resolve("b#2|a#1", A, included).orElseThrow().igPackage(), "alias");
+        ProblemException e = assertThrows(ProblemException.class, () -> resolve("a#1|c#3", A, included));
+        assertEquals(400, e.status());
+        assertTrue(e.detail().contains("a#1|c#3") && e.detail().contains("not included for R4"), e.detail());
+    }
+
+    @Test
+    void aPairMemberForAnotherFhirVersionIs400BeforeNotIncluded() {
+        ProblemException e = assertThrows(ProblemException.class, () -> resolve("a#1|r5#1.0.0", A, java.util.Set.of()));
+        assertTrue(e.detail().contains("is for FHIR R5"), e.detail());
+    }
+
+    @Test
+    void aPairMemberTheCallerMayNotUseIsAMissWhicheverMember() {
+        java.util.Set<String> included = java.util.Set.of("a#1|priv#1");
+        assertTrue(resolve("a#1|priv#1", B, included).isEmpty());
+        assertTrue(resolve("priv#1|a#1", B, included).isEmpty());
+        assertTrue(resolve("r5#1.0.0|a#1", B, java.util.Set.of()).isEmpty(), "invisible: never the FHIR-version 400");
+        assertTrue(resolve("a#1|priv#1", A, included).isPresent());
+    }
+
+    @Test
+    void aPairThatIsNotStoredIs404NamingTheRequest() {
+        AtomicReference<PackageCatalogView> db = new AtomicReference<>(pairView());
+        PackageCatalog catalog = catalogOf(db, new AtomicInteger());
+        Future<SnapshotKey> missing = IgRequest.parse("a#1|zz#9").resolve(SupportedFhirVersion.R4, catalog, A,
+                java.util.Set.of(), ContextAliases.EMPTY);
+        ProblemException e = assertInstanceOf(ProblemException.class, missing.cause());
+        assertEquals(404, e.status());
+        assertTrue(e.detail().contains("a#1|zz#9"), e.detail());
+    }
+
+    @Test
+    void anExactSingleIgReachesTheTwoIgContextWhoseFirstIgItIs() {
+        assertEquals("a#1|b#2", resolve("a#1", A, java.util.Set.of("a#1|b#2")).orElseThrow().igPackage(), "first-IG alias");
+        assertEquals("a#1", resolve("a#1", A, java.util.Set.of("a#1", "a#1|b#2")).orElseThrow().igPackage(),
+                "a single-IG context takes precedence");
+        assertThrows(ProblemException.class, () -> resolve("b#2", A, java.util.Set.of("a#1|b#2")),
+                "the second IG is never an alias");
+    }
+
+    /** FR-012a regression (research R5): a versionless request never reaches a two-IG context. */
+    @Test
+    void versionlessConsidersSingleIgContextsOnly() {
+        assertEquals("a#1", resolve("a", A, java.util.Set.of("a#1", "a#2|b#2")).orElseThrow().igPackage());
+        assertEquals("a#1", resolve("a#latest", A, java.util.Set.of("a#1", "a#2|b#2")).orElseThrow().igPackage());
+        ProblemException e = assertThrows(ProblemException.class, () -> resolve("a", A, java.util.Set.of("a#2|b#2")));
+        assertEquals(ProblemException.igNotIncluded("a#2", SupportedFhirVersion.R4).detail(), e.detail(),
+                "as today: the highest stored version, not included");
     }
 }

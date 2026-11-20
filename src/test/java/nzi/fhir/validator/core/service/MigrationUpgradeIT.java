@@ -270,6 +270,38 @@ class MigrationUpgradeIT extends BaseTestContainer {
         }
     }
 
+    /**
+     * Spec 012 (V17, data-model §3, T041): on a populated 1.1.0 (V16) database the key columns are widened to 256 and the
+     * two partial unique indexes are added; existing single-IG rows are untouched and never match them.
+     */
+    @Test
+    void v17WidensKeysAndGuardsTwoIgContextsOnAPopulated110Database() throws SQLException {
+        PgConnectOptions db = freshDatabase();
+        DatabaseService.flywayBuilder(db).target("16").load().migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES "
+                    + "('R4', 'a.ig#1.0.0'), ('R4', 'a.ig#2.0.0'), ('R5', 'a.ig#1.0.0')");
+        }
+        DatabaseService.flyway(db).migrate();
+        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
+            assertEquals(List.of("ig|256", "ig_package|256"), column(c, "SELECT column_name || '|' || character_maximum_length "
+                    + "FROM information_schema.columns WHERE table_schema='" + S + "' AND ((table_name='fhir_validator_snapshots' "
+                    + "AND column_name='ig_package') OR (table_name='validation_usage' AND column_name='ig')) ORDER BY column_name"));
+            assertEquals(List.of("R4|a.ig#1.0.0", "R4|a.ig#2.0.0", "R5|a.ig#1.0.0"), column(c, "SELECT fhir_version || '|' || "
+                    + "ig_package FROM " + S + ".fhir_validator_snapshots ORDER BY 1"), "single-IG rows untouched");
+            String key = "a".repeat(120) + "#1.0.0|" + "b".repeat(123) + "#2.0.0";
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', '" + key + "')");
+            st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'x#1|y#1'), "
+                    + "('R5', 'x#1|z#1')");
+            SQLException first = assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S
+                    + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'x#1|z#1')"));
+            assertTrue(first.getMessage().contains("fhir_validator_snapshots_first_member_uq"), first.getMessage());
+            SQLException pair = assertThrows(SQLException.class, () -> st.execute("INSERT INTO " + S
+                    + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'y#1|x#1')"));
+            assertTrue(pair.getMessage().contains("fhir_validator_snapshots_pair_uq"), pair.getMessage());
+        }
+    }
+
     /** Revoking a well-known key records its hash; other keys are not recorded. */
     @Test
     void revokingAWellKnownKeyRecordsItsHash() throws SQLException {

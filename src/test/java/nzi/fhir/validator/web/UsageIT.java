@@ -184,8 +184,8 @@ class UsageIT extends BaseTestContainer {
     }
 
     /**
-     * Review regression: a well-formed but 250-character {@code ig} and a bogus version path segment are longer than
-     * their columns; they are cut, and the other requests' rows in the same batch are still written.
+     * Review regression: a well-formed 247-character {@code ig} (kept whole since V17) and a bogus version path segment
+     * longer than its column (cut); and the other requests' rows in the same batch are still written.
      */
     @Test
     void oversizedClientValuesNeverLoseOtherRows(Vertx vertx, VertxTestContext ctx) {
@@ -200,7 +200,8 @@ class UsageIT extends BaseTestContainer {
                 .compose(responses -> awaitRows(vertx, 3))
                 .onComplete(ctx.succeeding(rows -> ctx.verify(() -> {
                     assertEquals(3, rows.size());
-                    assertTrue(rows.stream().anyMatch(r -> r.getString(12) != null && r.getString(12).length() == 192), "ig cut to 192");
+                    // V17 (spec 012): the column holds 256, the ig parameter's own limit, so a valid ig is kept whole.
+                    assertTrue(rows.stream().anyMatch(r -> longIg.equals(r.getString(12))), "ig kept whole");
                     assertTrue(rows.stream().anyMatch(r -> r.getString(11) != null && r.getString(11).length() == 16), "version cut to 16");
                     assertTrue(rows.stream().anyMatch(r -> r.getInteger(4) == 200), "the ordinary validation is there too");
                     ctx.completeNow();

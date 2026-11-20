@@ -249,4 +249,64 @@ class HealthApiTest extends BaseTestContainer {
                     }
                 });
     }
+    /**
+     * Spec 012 T036a/T052 (FR-009): over HTTP, an inactive two-IG context is listed with its IGs and aliases, and the
+     * item matches the {@code HealthResponse} schema.
+     */
+    @Test
+    void inactiveTwoIgContextMatchesTheSchema(VertxTestContext testContext) {
+        resetSchema();
+        String a1 = nzi.fhir.validator.testsupport.TestPackages.MULTI_A + "#1.0.0";
+        String b2 = nzi.fhir.validator.testsupport.TestPackages.MULTI_B + "#2.0.0";
+        java.util.concurrent.atomic.AtomicReference<nzi.fhir.validator.testsupport.CoreHarness> holder =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        nzi.fhir.validator.testsupport.CoreHarness.start(vertx, connectOptions())
+                .compose(core -> {
+                    holder.set(core);
+                    var services = core.services();
+                    return nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                                    nzi.fhir.validator.testsupport.TestPackages.multiA())
+                            .compose(v -> nzi.fhir.validator.testsupport.TestPackages.storePackage(services,
+                                    nzi.fhir.validator.testsupport.TestPackages.multiB()))
+                            .compose(v -> services.configSync().syncCatalogNow())
+                            .compose(v -> nzi.fhir.validator.testsupport.TestPackages.includePair(services,
+                                    nzi.fhir.validator.core.enums.SupportedFhirVersion.R4,
+                                    nzi.fhir.validator.testsupport.TestPackages.MULTI_A, "1.0.0",
+                                    nzi.fhir.validator.testsupport.TestPackages.MULTI_B, "2.0.0"))
+                            // What ContextActivation does when R4 is no longer served (spec 009).
+                            .compose(r -> services.pool().query("UPDATE fhir_validator_schema.fhir_validator_snapshots "
+                                    + "SET is_active = false, inactive_reason = 'fhir-version-disabled' WHERE fhir_version = 'R4'").execute());
+                })
+                .compose(rows -> {
+                    healthService.setInactiveCount(1);
+                    return client.get(testPort, "localhost", "/health").as(BodyCodec.jsonObject()).send();
+                })
+                .onComplete(ar -> {
+                    nzi.fhir.validator.testsupport.CoreHarness core = holder.get();
+                    try {
+                        testContext.verify(() -> {
+                            if (ar.failed()) {
+                                throw new AssertionError(ar.cause());
+                            }
+                            assertEquals(200, ar.result().statusCode());
+                            JsonObject inactive = ar.result().body().getJsonObject("fhirVersions").getJsonObject("inactiveContexts");
+                            nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredAt(inactive, "HealthResponse",
+                                    java.util.List.of("fhirVersions", "inactiveContexts"), "count", "private", "items");
+                            assertEquals(1L, inactive.getLong("count"), inactive.encode());
+                            JsonObject item = inactive.getJsonArray("items").getJsonObject(0);
+                            nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredAt(item, "HealthResponse",
+                                    java.util.List.of("fhirVersions", "inactiveContexts", "items"), "igPackages", "aliases");
+                            assertEquals(a1 + "|" + b2, item.getString("igPackage"));
+                            assertEquals(new io.vertx.core.json.JsonArray().add(a1).add(b2), item.getJsonArray("igPackages"));
+                            assertEquals(new io.vertx.core.json.JsonArray().add(b2 + "|" + a1).add(a1), item.getJsonArray("aliases"));
+                        });
+                    } finally {
+                        if (core == null) {
+                            testContext.completeNow();
+                        } else {
+                            core.stop().onComplete(x -> testContext.completeNow());
+                        }
+                    }
+                });
+    }
 }

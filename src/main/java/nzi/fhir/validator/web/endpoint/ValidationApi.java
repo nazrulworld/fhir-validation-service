@@ -14,7 +14,7 @@ import nzi.fhir.validator.core.model.ValidationRequestOptions;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.ApiKeyAuthHandler;
 import nzi.fhir.validator.core.service.FhirValidationService;
-import nzi.fhir.validator.core.validator.IgReference;
+import nzi.fhir.validator.core.validator.IgRequest;
 import nzi.fhir.validator.core.validator.OutcomeRenderer;
 import nzi.fhir.validator.web.ErrorResponder;
 import nzi.fhir.validator.web.ProblemException;
@@ -199,7 +199,7 @@ public class ValidationApi {
             return false;
         }
         meter.profiles(profiles == null ? 0 : profiles.size());
-        IgReference ig;
+        IgRequest ig;
         try {
             ig = igParameter(ctx);
         } catch (ProblemException e) {
@@ -281,7 +281,7 @@ public class ValidationApi {
      * The {@code ig} query parameter: absent is {@code null} (the base context); more than one value, or a malformed
      * one, is 400 {@code invalid-request} (FR-002). Client input is logged at DEBUG only.
      */
-    private static IgReference igParameter(RoutingContext ctx) {
+    private static IgRequest igParameter(RoutingContext ctx) {
         List<String> values = ctx.queryParam("ig");
         if (values == null || values.isEmpty()) {
             return null;
@@ -292,7 +292,8 @@ public class ValidationApi {
         if (logger.isDebugEnabled()) {
             logger.debug("Validation requested against ig={}", values.get(0));
         }
-        return IgReference.parse(values.get(0));
+        // Spec 012 FR-010: one IG, or two as name#version|name#version (one parameter value).
+        return IgRequest.parse(values.get(0));
     }
 
     private static ProblemException invalidResource(String parserMessage) {

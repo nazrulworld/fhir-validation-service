@@ -165,15 +165,15 @@ public class HealthService {
     private static final String SCHEMA = nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
     /**
      * Inactive contexts, as one row even when there are none: the total, how many are private, and the first
-     * {@value #MAX_INACTIVE_LISTED} public ones. A context is public when it and its IG package are shareable, as for
-     * the readiness report (spec 005 research R12): {@code /health} is unauthenticated, so private contexts are only
-     * counted, never named (code review of PR #72).
+     * {@value #MAX_INACTIVE_LISTED} public ones. A context is public when it and each of its IG packages (one, or two
+     * for a two-IG key {@code A#a|B#b}, spec 012) are shareable, as for the readiness report (spec 005 research R12):
+     * {@code /health} is unauthenticated, so private contexts are only counted, never named (code review of PR #72).
      */
     private static final String INACTIVE_CONTEXTS_QUERY = "WITH x AS (SELECT s.fhir_version, s.ig_package, o.name_short, "
-            + "s.inactive_reason, (s.is_shareable AND coalesce(g.is_shareable, true)) AS public FROM " + SCHEMA
-            + ".fhir_validator_snapshots s JOIN " + SCHEMA + ".organisations o ON o.id = s.owner LEFT JOIN " + SCHEMA
-            + ".fhir_implementation_guides g ON g.ig_package_id = split_part(s.ig_package, '#', 1) "
-            + "AND g.ig_package_version = split_part(s.ig_package, '#', 2) WHERE NOT s.is_active) "
+            + "s.inactive_reason, (s.is_shareable AND NOT EXISTS (SELECT 1 FROM unnest(string_to_array(s.ig_package, '|')) m "
+            + "JOIN " + SCHEMA + ".fhir_implementation_guides g ON g.ig_package_id = split_part(m, '#', 1) "
+            + "AND g.ig_package_version = split_part(m, '#', 2) WHERE NOT g.is_shareable)) AS public FROM " + SCHEMA
+            + ".fhir_validator_snapshots s JOIN " + SCHEMA + ".organisations o ON o.id = s.owner WHERE NOT s.is_active) "
             + "SELECT (SELECT count(*) FROM x), (SELECT count(*) FROM x WHERE NOT public), p.fhir_version, p.ig_package, "
             + "p.name_short, p.inactive_reason FROM (SELECT 1) one LEFT JOIN LATERAL (SELECT * FROM x WHERE public "
             + "ORDER BY fhir_version, ig_package LIMIT " + MAX_INACTIVE_LISTED + ") p ON true";
@@ -196,7 +196,10 @@ public class HealthService {
                         count = r.getLong(0);
                         privateCount = r.getLong(1);
                         if (r.getString(3) != null) {
-                            items.add(new JsonObject().put("fhirVersion", r.getString(2)).put("igPackage", r.getString(3))
+                            String key = r.getString(3);
+                            items.add(new JsonObject().put("fhirVersion", r.getString(2)).put("igPackage", key)
+                                    .put("igPackages", new JsonArray(nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key)))
+                                    .put("aliases", new JsonArray(nzi.fhir.validator.core.validator.ContextAliases.aliasesFor(key)))
                                     .put("owner", r.getString(4)).put("reason", r.getString(5)));
                         }
                     }

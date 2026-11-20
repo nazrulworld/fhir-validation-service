@@ -87,7 +87,15 @@ public class ValidatorApi {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "The body must be a JSON object"));
             return;
         }
-        if (body == null || body.getString("igPackageId") == null) {
+        // Spec 012 FR-001 to FR-003: exactly one of igPackageId (one IG) or igPackages (one or two IGs).
+        List<IgPackageService.IgEntry> entries;
+        try {
+            entries = igPackages(body);
+        } catch (ProblemException e) {
+            ErrorResponder.fail(ctx, e);
+            return;
+        }
+        if (entries == null && (body == null || body.getString("igPackageId") == null)) {
             ErrorResponder.fail(ctx, new ProblemException(400, "invalid-request", "igPackageId is required"));
             return;
         }
@@ -108,13 +116,61 @@ public class ValidatorApi {
             ErrorResponder.fail(ctx, e);
             return;
         }
-        String requestedVersion = body.getString("igPackageVersion", "latest");
         List<String> forced = new java.util.ArrayList<>();
         Optional<Boolean> sharingRequested = sharing.apply(Optional.ofNullable((Boolean) shareable), forced);
+        if (entries != null && entries.size() == 2) {
+            // Spec 012 contracts §1: each entry's requested version is echoed in its igPackages entry; no top-level one.
+            ErrorResponder.respond(ctx, igPackageService.includePair(ApiKeyAuthHandler.caller(ctx), version,
+                            entries.get(0), entries.get(1), sharingRequested, terminology)
+                    .map(json -> {
+                        io.vertx.core.json.JsonArray members = json.getJsonArray("igPackages");
+                        for (int i = 0; i < members.size(); i++) {
+                            members.getJsonObject(i).put("requestedVersion", entries.get(i).requested());
+                        }
+                        return withWarnings(json, forced);
+                    }));
+            return;
+        }
+        // One IG: igPackageId, or an igPackages list of one entry (FR-003, same response).
+        String packageId = entries != null ? entries.get(0).igPackageId() : body.getString("igPackageId");
+        String requestedVersion = entries != null ? entries.get(0).requested() : body.getString("igPackageVersion", "latest");
         // Spec 006 FR-013, research R7: key.igPackage is the concrete version; requestedVersion echoes the request.
         ErrorResponder.respond(ctx, igPackageService.include(ApiKeyAuthHandler.caller(ctx), version,
-                body.getString("igPackageId"), requestedVersion, sharingRequested, terminology)
+                packageId, requestedVersion, sharingRequested, terminology)
                 .map(json -> withWarnings(json.put("requestedVersion", requestedVersion), forced)));
+    }
+
+    /**
+     * The {@code igPackages} list of an include body (spec 012 FR-001, FR-002), or {@code null} when absent.
+     *
+     * @throws ProblemException 400 {@code invalid-request} when it is combined with {@code igPackageId}, is not an
+     *                          array of one or two objects with a string {@code igPackageId} (and an optional string
+     *                          {@code igPackageVersion}), or names the same package twice
+     */
+    static List<IgPackageService.IgEntry> igPackages(JsonObject body) {
+        if (body == null || !body.containsKey("igPackages")) {
+            return null;
+        }
+        if (body.containsKey("igPackageId") || body.containsKey("igPackageVersion")) {
+            throw new ProblemException(400, "invalid-request",
+                    "Send either igPackageId/igPackageVersion or igPackages, not both");
+        }
+        if (!(body.getValue("igPackages") instanceof io.vertx.core.json.JsonArray list) || list.isEmpty() || list.size() > 2) {
+            throw new ProblemException(400, "invalid-request", "igPackages must list one or two IG packages");
+        }
+        List<IgPackageService.IgEntry> entries = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof JsonObject entry) || !(entry.getValue("igPackageId") instanceof String id) || id.isBlank()
+                    || (entry.getValue("igPackageVersion") != null && !(entry.getValue("igPackageVersion") instanceof String))) {
+                throw new ProblemException(400, "invalid-request",
+                        "Each igPackages entry needs a string igPackageId and an optional string igPackageVersion");
+            }
+            entries.add(new IgPackageService.IgEntry(id, entry.getString("igPackageVersion")));
+        }
+        if (entries.size() == 2 && entries.get(0).igPackageId().equals(entries.get(1).igPackageId())) {
+            throw new ProblemException(400, "invalid-request", "The two igPackages entries must name different packages");
+        }
+        return List.copyOf(entries);
     }
 
     /** {@code PATCH /{version}/validator?ig=name#version} (spec 005 FR-019, spec 007 FR-003, contracts §3-4). */

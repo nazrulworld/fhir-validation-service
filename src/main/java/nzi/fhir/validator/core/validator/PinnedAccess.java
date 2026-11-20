@@ -14,9 +14,21 @@ public final class PinnedAccess {
     public static final PinnedAccess EMPTY = new PinnedAccess(Map.of());
 
     private final Map<String, Access> access;
+    /**
+     * Spec 012 (research R3): the aliases of the two-IG contexts in this set, derived once per published set, so the
+     * aliases validation sees always match the included contexts it sees (both are swapped together by
+     * {@link ConfigSync}).
+     */
+    private final ContextAliases aliases;
 
     private PinnedAccess(Map<String, Access> access) {
         this.access = Map.copyOf(access);
+        this.aliases = ContextAliases.of(this.access.keySet());
+    }
+
+    /** The aliases of the two-IG contexts in this set (spec 012 FR-008, FR-012). */
+    public ContextAliases aliases() {
+        return aliases;
     }
 
     /**

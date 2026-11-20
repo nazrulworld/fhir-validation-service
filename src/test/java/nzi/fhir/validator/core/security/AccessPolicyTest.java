@@ -141,6 +141,59 @@ class AccessPolicyTest {
                 PinnedAccess.of(List.of("ig.a#1.0.0"), Map.of("ig.a#1.0.0", A_PRIVATE), "system")));
     }
 
+    // ---- Spec 012: two-IG contexts (FR-014) ----
+
+    private static final SnapshotKey PAIR = SnapshotKey.of(SupportedFhirVersion.R4, "ig.a#1.0.0|ig.b#2.0.0");
+    private static final List<String> PAIR_RESOLVED = List.of("dep.c#1.0.0", "ig.a#1.0.0", "ig.b#2.0.0");
+
+    private static PinnedAccess pinnedPair(Access context) {
+        return PinnedAccess.of(List.of(PAIR.igPackage()), Map.of(PAIR.igPackage(), context), "system");
+    }
+
+    @Test
+    void combinedContextNeedsEveryMemberUsable() {
+        PackageCatalogView bothShared = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_SHARED, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        assertEquals(Decision.ALLOWED, AccessPolicy.canUseContext(ANON, PAIR, PAIR_RESOLVED, bothShared, pinnedPair(A_SHARED)));
+
+        PackageCatalogView firstPrivate = view(Map.of("ig.a#1.0.0", A_PRIVATE, "ig.b#2.0.0", B_SHARED, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        PackageCatalogView secondPrivate = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_PRIVATE, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        // Same decision whichever member is hidden, so a refusal never tells which one.
+        assertEquals(Decision.IG_NOT_VISIBLE, AccessPolicy.canUseContext(OTHER, PAIR, PAIR_RESOLVED, firstPrivate, pinnedPair(A_SHARED)));
+        assertEquals(Decision.IG_NOT_VISIBLE, AccessPolicy.canUseContext(OWNER, PAIR, PAIR_RESOLVED, secondPrivate, pinnedPair(A_SHARED)));
+        assertEquals(Decision.ALLOWED, AccessPolicy.canUseContext(OWNER, PAIR, PAIR_RESOLVED, firstPrivate, pinnedPair(A_SHARED)));
+        assertEquals(Decision.ALLOWED, AccessPolicy.canUseContext(SYSTEM, PAIR, PAIR_RESOLVED, secondPrivate, pinnedPair(A_SHARED)));
+    }
+
+    @Test
+    void combinedContextDependencyAndContextAccess() {
+        PackageCatalogView privateDep = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_SHARED, "dep.c#1.0.0", B_PRIVATE),
+                Map.of());
+        assertEquals(Decision.DEPENDENCY_NOT_VISIBLE,
+                AccessPolicy.canUseContext(OWNER, PAIR, PAIR_RESOLVED, privateDep, pinnedPair(A_SHARED)));
+        PackageCatalogView shared = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_SHARED, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        assertEquals(Decision.IG_NOT_VISIBLE, AccessPolicy.canUseContext(OTHER, PAIR, PAIR_RESOLVED, shared, pinnedPair(A_PRIVATE)),
+                "a private two-IG context");
+        assertEquals(Decision.IG_NOT_VISIBLE, AccessPolicy.canUseContext(OWNER, PAIR, PAIR_RESOLVED, shared, PinnedAccess.EMPTY),
+                "a two-IG key that isn't included is never usable");
+    }
+
+    @Test
+    void combinedContextIsPublicOnlyWhenEverythingIsShareable() {
+        PackageCatalogView shared = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_SHARED, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        assertTrue(AccessPolicy.isPublic(PAIR, PAIR_RESOLVED, shared, pinnedPair(A_SHARED)));
+        assertFalse(AccessPolicy.isPublic(PAIR, PAIR_RESOLVED, shared, pinnedPair(A_PRIVATE)));
+        PackageCatalogView secondPrivate = view(Map.of("ig.a#1.0.0", A_SHARED, "ig.b#2.0.0", B_PRIVATE, "dep.c#1.0.0", A_SHARED),
+                Map.of());
+        assertFalse(AccessPolicy.isPublic(PAIR, PAIR_RESOLVED, secondPrivate, pinnedPair(A_SHARED)));
+        assertFalse(AccessPolicy.isPublic(PAIR, List.of("ig.a#1.0.0"), secondPrivate, pinnedPair(A_SHARED)),
+                "members count even when the resolved list misses one");
+    }
+
     @Test
     void highestVisibleVersion() {
         PackageCatalogView view = view(Map.of("p#1.0.0", B_SHARED, "p#2.0.0", A_PRIVATE), Map.of());

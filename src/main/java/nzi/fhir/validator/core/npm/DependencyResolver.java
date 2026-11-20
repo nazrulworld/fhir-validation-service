@@ -161,6 +161,70 @@ public final class DependencyResolver {
         return new Resolution(List.copyOf(resolved), List.copyOf(warnings), List.copyOf(missing));
     }
 
+    /**
+     * Package-name prefixes exempt from the two-IG conflict rule (spec 012 FR-006a): almost every IG pins its own
+     * version of these, so the highest required version is used instead of refusing the include.
+     */
+    public static final List<String> CONFLICT_EXEMPT_PREFIXES = List.of("hl7.terminology", "hl7.fhir.uv.extensions");
+
+    /**
+     * A package two IGs of one context need in different versions (spec 012 FR-006, research R4).
+     *
+     * @param versions {@code root -> version} that root's own resolution chose, in root order
+     * @param exempt   whether the package is exempt (FR-006a): the highest version is used with a warning
+     */
+    public record Conflict(String packageName, Map<String, String> versions, boolean exempt) {
+        public Conflict {
+            versions = java.util.Collections.unmodifiableMap(new TreeMap<>(versions));
+        }
+
+        /** The highest of the versions, the one a two-IG context uses for an exempt package. */
+        public String highest() {
+            return versions.values().stream().max(PackageVersionComparator.INSTANCE).orElseThrow();
+        }
+    }
+
+    /** Whether {@code packageName} is exempt from the two-IG conflict rule (spec 012 FR-006a). */
+    public static boolean isConflictExempt(String packageName) {
+        for (String prefix : CONFLICT_EXEMPT_PREFIXES) {
+            if (packageName.equals(prefix) || packageName.startsWith(prefix + ".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The packages the two roots of a two-IG context need in different versions (spec 012 FR-006, research R4). Each
+     * root is resolved alone with today's rules, so each tree's own choices stay as they are; every package name found
+     * in both results with different versions is a conflict (a root found in the other tree in another version too).
+     * The result is sorted by package name and doesn't depend on root order.
+     */
+    public static List<Conflict> conflicts(String rootA, String rootB, Catalog catalog, Predicate<String> selectable) {
+        Map<String, String> a = byName(resolve(List.of(rootA), catalog, selectable).resolved());
+        Map<String, String> b = byName(resolve(List.of(rootB), catalog, selectable).resolved());
+        List<Conflict> conflicts = new ArrayList<>();
+        new TreeMap<>(a).forEach((name, va) -> {
+            String vb = b.get(name);
+            if (vb != null && !vb.equals(va)) {
+                Map<String, String> versions = new TreeMap<>();
+                versions.put(rootA, va);
+                versions.put(rootB, vb);
+                conflicts.add(new Conflict(name, versions, isConflictExempt(name)));
+            }
+        });
+        return List.copyOf(conflicts);
+    }
+
+    private static Map<String, String> byName(List<String> resolved) {
+        Map<String, String> byName = new HashMap<>();
+        for (String p : resolved) {
+            String[] parts = split(p);
+            byName.put(parts[0], parts[1]);
+        }
+        return byName;
+    }
+
     private static Optional<String> concrete(String name, String requested, Catalog catalog, Predicate<String> selectable) {
         Collection<String> stored = catalog.versions(name);
         if (requested == null || requested.isBlank() || requested.equals("latest") || requested.equals("current")) {
