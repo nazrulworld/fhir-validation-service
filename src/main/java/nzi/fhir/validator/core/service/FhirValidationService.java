@@ -160,11 +160,14 @@ public class FhirValidationService {
         java.util.concurrent.atomic.AtomicReference<Access> contextAccess = new java.util.concurrent.atomic.AtomicReference<>();
         return admission.admit(() -> {
                     meter.markAdmitted();
-                    return onCaller(caller, resolve(who, version, ig))
+                    // Spec 012: the lookup and the access check read the same published set, so an exclude between
+                    // them can't turn "not included" into "not stored".
+                    PinnedAccess pinned = pinnedAccess.apply(version);
+                    return onCaller(caller, resolve(version, ig, who, pinned))
                         .compose(key -> {
                             // Before any build is admitted, and from memory only (FR-013).
                             try {
-                                contextAccess.set(checkAccess(who, key, ig));
+                                contextAccess.set(checkAccess(who, key, ig, pinned));
                                 effective.set(effectiveTerminology(key, override));
                             } catch (ProblemException e) {
                                 return Future.failedFuture(e);
@@ -229,10 +232,9 @@ public class FhirValidationService {
         return promise.future();
     }
 
-    private Future<SnapshotKey> resolve(Caller who, SupportedFhirVersion version, IgRequest ig) {
+    private Future<SnapshotKey> resolve(SupportedFhirVersion version, IgRequest ig, Caller who, PinnedAccess pinned) {
         // Spec 007 FR-021: only included contexts serve a named IG; the included keys come from memory (no DB wait).
         // Spec 012: the included keys and their aliases come from the same published set (one revision).
-        PinnedAccess pinned = pinnedAccess.apply(version);
         return ig == null ? Future.succeededFuture(SnapshotKey.base(version))
                 : ig.resolve(version, catalog, who, pinned.asMap().keySet(), pinned.aliases());
     }
@@ -246,12 +248,11 @@ public class FhirValidationService {
      * @return the context's access (for FR-020)
      * @throws ProblemException 404 for an IG (or context) the caller may not use, 424 for a dependency
      */
-    private Access checkAccess(Caller who, SnapshotKey key, IgRequest ig) {
+    private Access checkAccess(Caller who, SnapshotKey key, IgRequest ig, PinnedAccess pinned) {
         PackageCatalogView view = catalog.current();
         if (key.isBase()) {
             return Access.systemShared(view.systemShortName());
         }
-        PinnedAccess pinned = pinnedAccess.apply(key.fhirVersion());
         List<String> resolved = registry.peekResolvedPackages(key)
                 .orElseGet(() -> ResolvedContext.forKey(key.igPackage(), view, pinned).packages());
         AccessPolicy.Decision decision = AccessPolicy.canUseContext(who, key, resolved, view, pinned);

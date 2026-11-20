@@ -178,8 +178,10 @@ class MultiIgIncludeIT extends BaseTestContainer {
                         assertProblem(err, 400, "dependency-conflict");
                         JsonArray conflicts = ((ProblemException) err).extensions().getJsonArray("conflicts");
                         assertEquals("test.multi.x", conflicts.getJsonObject(0).getString("package"));
-                        assertEquals(new JsonObject().put("test.multi.p#1.0.0", "1.0.0").put("test.multi.q#1.0.0", "2.0.0"),
-                                conflicts.getJsonObject(0).getJsonObject("versions"));
+                        JsonObject versions = conflicts.getJsonObject(0).getJsonObject("versions");
+                        assertEquals(new JsonObject().put("test.multi.p#1.0.0", "1.0.0").put("test.multi.q#1.0.0", "2.0.0"), versions);
+                        // Code review: in include order, the same on every instance.
+                        assertEquals(List.of("test.multi.p#1.0.0", "test.multi.q#1.0.0"), List.copyOf(versions.fieldNames()));
                     });
                     return snapshotRows();
                 })
@@ -202,6 +204,45 @@ class MultiIgIncludeIT extends BaseTestContainer {
                                     + "(test.multi.t2#1.0.0); using 6.0.2")), warnings.toString());
                     assertEquals(1, warnings.stream().filter(w -> w.toString().contains("hl7.terminology.r4")).count(),
                             "one warning per exempt package: " + warnings);
+                    ctx.completeNow();
+                })));
+    }
+
+    /** Code review: including the same pair again reports the same dependency warnings, in either order. */
+    @Test
+    void aRepeatedIncludeReportsTheSameWarnings(VertxTestContext ctx) {
+        pair(system, "test.multi.t1", "1.0.0", "test.multi.t2", "1.0.0")
+                .compose(first -> pair(system, "test.multi.t2", "1.0.0", "test.multi.t1", "1.0.0")
+                        .map(again -> List.of(first, again)))
+                .onComplete(ctx.succeeding(both -> ctx.verify(() -> {
+                    JsonArray again = both.get(1).getJsonArray("warnings");
+                    assertTrue(again.stream().anyMatch(w -> w.toString().startsWith(
+                            "Package hl7.terminology.r4 is required in versions 6.0.2 (test.multi.t2#1.0.0) and 5.0.0 "
+                                    + "(test.multi.t1#1.0.0); using 6.0.2")), again.encode());
+                    assertEquals(both.get(0).getJsonArray("warnings").size(), again.size(), again.encode());
+                    ctx.completeNow();
+                })));
+    }
+
+    /**
+     * Code review: an IG named in the pair is never replaced by a higher version the other IG needs, even for an exempt
+     * package (one version per package; FR-006). When the named IG is the higher version it is used, with a warning.
+     */
+    @Test
+    void anExemptIgReplacedByTheOtherIgsDependencyIsAConflict(VertxTestContext ctx) {
+        failure(pair(system, "hl7.terminology.r4", "5.0.0", "test.multi.t2", "1.0.0"))
+                .compose(err -> {
+                    ctx.verify(() -> {
+                        assertProblem(err, 400, "dependency-conflict");
+                        JsonArray conflicts = ((ProblemException) err).extensions().getJsonArray("conflicts");
+                        assertEquals("hl7.terminology.r4", conflicts.getJsonObject(0).getString("package"));
+                    });
+                    return pair(system, "hl7.terminology.r4", "6.0.2", "test.multi.t1", "1.0.0");
+                })
+                .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
+                    JsonArray resolved = r.getJsonArray("resolved");
+                    assertTrue(resolved.contains("hl7.terminology.r4#6.0.2"), resolved.encode());
+                    assertFalse(resolved.contains("hl7.terminology.r4#5.0.0"), resolved.encode());
                     ctx.completeNow();
                 })));
     }

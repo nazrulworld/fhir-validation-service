@@ -57,6 +57,17 @@ class ResolvedContextTest {
         assertFalse(ctx.missing().contains("gone#9.0.0"), "a member is not reported as a missing dependency");
     }
 
+    /** Code review: a member the resolution replaced by a higher version is not added back (one version per package). */
+    @Test
+    void aMemberReplacedByAHigherVersionIsNotAddedBack() {
+        PackageCatalogView view = view(Map.of(
+                "hl7.terminology.r4#1.0.0", List.of(),
+                "hl7.terminology.r4#6.0.2", List.of(),
+                "my.ig#1.0.0", List.of("hl7.terminology.r4#6.0.2")));
+        List<String> packages = ResolvedContext.of("hl7.terminology.r4#1.0.0|my.ig#1.0.0", view, Organisations.SYSTEM_ID).packages();
+        assertEquals(1, packages.stream().filter(p -> p.startsWith("hl7.terminology.r4#")).count(), packages.toString());
+    }
+
     @Test
     void singleKeyUnchanged() {
         PackageCatalogView view = view(Map.of("a#1.0.0", List.of("x#1.0.0"), "x#1.0.0", List.of()));

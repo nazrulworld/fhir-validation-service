@@ -25,7 +25,7 @@ Validator contexts built from two IGs (spec 012). No path, payload or status cod
 - New problem types: 400 `dependency-conflict` (the two IGs need different versions of one package; the `conflicts`
   extension names it and the versions) and 409 `alias-conflict` (another two-IG context already starts with the same
   IG). Differences in `hl7.terminology*` and `hl7.fhir.uv.extensions*` are not conflicts: the highest version is used
-  and named in `warnings`.
+  and named in `warnings`. That exception covers dependencies only, not an IG named in the request.
 
 ### Changed
 

@@ -457,6 +457,9 @@ curl -H "$AUTH" -X DELETE \
   400 `dependency-conflict` and the `conflicts` extension names the package and the version each IG needs. Choose IG
   versions that agree. Packages whose name starts with `hl7.terminology` or `hl7.fhir.uv.extensions` are the
   exception: almost every IG pins its own version of these, so the highest version is used and named in `warnings`.
+  The exception covers dependencies only: when one of the two IGs is itself such a package and the other IG needs a
+  higher version of it, the include is refused, because the IGs you name are always in the context in the version
+  you name.
 - **Access.** Every IG and every dependency must be usable by the caller, exactly as for one IG. A private two-IG
   context (`"shareable": false`) needs ownership of both IG packages.
 - Including the same two IG versions again, in either order, changes nothing. At most two IGs per context.
