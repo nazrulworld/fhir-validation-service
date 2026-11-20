@@ -72,8 +72,37 @@ The projection compared is the sorted set of (severity, location, message text) 
 Each run also has the `dom-6` best-practice warning, identical on both sides. Terminology was off on both sides, so
 the comparison covers profile and structure rules, not code validation.
 
-## Not measured here
+## Two-IG context: latency, build time and memory (T050) — PASS
 
-- Build time and heap of a production-sized two-IG context (for example DK Core with MedCom Core). The heap budget
-  admits it with the same rule as any include, and packages shared with already included contexts count for their
-  indexes only (spec 010).
+DK Core 3.4.0 on its own against DK Core 3.4.0 with IPS 1.1.0 (`hl7.fhir.uv.ips#1.1.0`) as one two-IG context, on
+the image built from this branch. Both IGs were fetched from the package registry with their dependencies, so the
+contexts are production-sized: 7 packages for DK Core alone, 9 for the pair. The runs alternated
+(single, pair, single, pair), with the same settings as above; requests named `ig=hl7.fhir.dk.core#3.4.0` or
+`ig=hl7.fhir.dk.core#3.4.0|hl7.fhir.uv.ips#1.1.0` and validated the DK Core Patient sample.
+
+| Run | Context | Packages | Build (ms) | Requests/s | Median (ms) | p95 (ms) | Failed |
+|-----|---------|---------:|-----------:|-----------:|------------:|---------:|-------:|
+| 1 | DK Core | 7 | 3875 | 71.7 | 104.7 | 134.5 | 0 |
+| 1 | DK Core + IPS | 9 | 3604 | 74.8 | 102.8 | 122.2 | 0 |
+| 2 | DK Core | 7 | 3412 | 75.9 | 101.1 | 120.1 | 0 |
+| 2 | DK Core + IPS | 9 | 3904 | 66.7 | 104.7 | 129.7 | 0 |
+
+- **Latency**: validation against the two-IG context stays below the 200 ms p95 target and within the spread of the
+  single-IG runs. Run 2 of the pair had one slow request (5.6 s maximum) that lowered its requests/s; its median and
+  p95 are in line with the others.
+- **Build time**: 3.6–3.9 s for the pair against 3.4–3.9 s for DK Core alone, once per instance at include time.
+- **Memory**: the service's heap estimate for the R4 package sets (`fv_packages_shared_retained_estimate_bytes`, the
+  figure the 413 admission uses) is 415 MB for DK Core alone and 460 MB for the pair: IPS and its two extra packages
+  add about 44 MB. The container's memory grew by 0.5–1.1 GB over the include in every run. That figure includes heap
+  the JVM reserves and hasn't collected, so it doesn't measure the context.
+- **FR-006a on real packages**: DK Core needs `hl7.terminology.r4#6.2.0` and IPS `#5.0.0`. The pair was included with
+  6.2.0 and the warning "Package hl7.terminology.r4 is required in versions 6.2.0 (hl7.fhir.dk.core#3.4.0) and 5.0.0
+  (hl7.fhir.uv.ips#1.1.0); using 6.2.0".
+
+Reproduce (each run needs network access to the package registry):
+
+```bash
+R='hl7.fhir.dk.core#3.4.0 hl7.fhir.uv.ips#1.1.0'
+IG='hl7.fhir.dk.core#3.4.0' IG_REGISTER="$R" perf/compare-run.sh single <branch image> db target/perf
+IG='hl7.fhir.dk.core#3.4.0' IG2='hl7.fhir.uv.ips#1.1.0' IG_REGISTER="$R" perf/compare-run.sh pair <branch image> db target/perf
+```

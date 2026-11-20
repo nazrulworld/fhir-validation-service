@@ -219,3 +219,9 @@ T016 include contract cases      (test/web/endpoint/)
 5. US3: first-IG alias (quickstart 5–6).
 6. US4: manage by key or reversed pair (quickstart 9).
 7. Polish: propagation, migration upgrade, CLI parity, docs, release 1.2.0.
+
+## Phase 8: Convergence
+
+- [X] T050 Measure validation against a two-IG context with `perf/compare-run.sh` (p95 below 200 ms against a warm context), and record the build time and heap of one two-IG context, in `perf/results-1.2.0.md`, per Performance and Capacity, T045 (partial)
+- [X] T051 [P] Add an HTTP test that validates with an unencoded `|` in `ig` (`?ig=A#a|B#b` with `#` encoded as `%23`) and gets the same context as the `%7C` form, in `test/web/MultiIgValidationIT.java`, per Edge Cases: Encoding, FR-010 (partial) — already covered: `bothIgsApplyInEitherOrder` sends `ig=…%231.0.0|…%232.0.0` with an unencoded `|` and asserts the same context as the `%7C` form; no change needed
+- [X] T052 [P] Check `/health` `inactiveContexts.items` with `igPackages` and `aliases` for a two-IG context against the `HealthResponse` schema over HTTP, in `test/web/endpoint/HealthApiTest.java`, per T036a, FR-009 (partial)
