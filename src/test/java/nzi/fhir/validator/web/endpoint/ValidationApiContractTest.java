@@ -11,6 +11,7 @@ import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import nzi.fhir.validator.testcontainers.BaseTestContainer;
 import nzi.fhir.validator.testsupport.AppHarness;
+import nzi.fhir.validator.testsupport.TestPackages;
 import nzi.fhir.validator.testsupport.Fixtures;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.concurrent.TimeUnit;
 
+import static nzi.fhir.validator.testsupport.ContractAssertions.assertDeclaredBySchema;
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertNoTxHeaders;
 import static nzi.fhir.validator.testsupport.ContractAssertions.assertProblem;
 import static org.junit.jupiter.api.Assertions.*;
@@ -503,6 +505,36 @@ class ValidationApiContractTest extends BaseTestContainer {
                 })
                 .onComplete(ctx.succeeding(missingIg -> ctx.verify(() -> {
                     assertEquals(400, missingIg.statusCode(), "ig is required on DELETE: " + missingIg.bodyAsString());
+                    ctx.completeNow();
+                })));
+    }
+
+    // ---- Spec 012 FR-010 to FR-013: two IGs in the ig parameter ---------------------------------------------------
+
+    @Test
+    void aPairOfIgsNamesTheTwoIgContextInBothFormats(VertxTestContext ctx) {
+        nzi.fhir.validator.ServiceRegistry services = app.bootstrap().services();
+        String key = TestPackages.MULTI_A + "#1.0.0|" + TestPackages.MULTI_B + "#2.0.0";
+        String reversed = TestPackages.MULTI_B + "%232.0.0%7C" + TestPackages.MULTI_A + "%231.0.0";
+        TestPackages.storePackage(services, TestPackages.multiA())
+                .compose(v -> TestPackages.storePackage(services, TestPackages.multiB()))
+                .compose(v -> services.configSync().syncCatalogNow())
+                .compose(v -> TestPackages.includePair(services, nzi.fhir.validator.core.enums.SupportedFhirVersion.R4,
+                        TestPackages.MULTI_A, "1.0.0", TestPackages.MULTI_B, "2.0.0"))
+                .compose(v -> Future.all(validateWith("ig=" + reversed, null), validateWith("ig=" + reversed, "application/fhir+json"),
+                        validateWith("ig=" + TestPackages.MULTI_A + "%7C" + TestPackages.MULTI_B + "%232.0.0", null)))
+                .onComplete(ctx.succeeding(all -> ctx.verify(() -> {
+                    HttpResponse<Buffer> json = all.resultAt(0);
+                    assertLegacyJson(json);
+                    assertEquals(key, json.getHeader("X-Validation-Context"));
+                    assertEquals(key, json.bodyAsJsonObject().getString("igPackage"), "the body reports the key, never the alias");
+                    assertDeclaredBySchema(json.bodyAsJsonObject(), "ValidationResponse");
+                    HttpResponse<Buffer> fhir = all.resultAt(1);
+                    assertEquals(200, fhir.statusCode(), fhir.bodyAsString());
+                    assertEquals("OperationOutcome", fhir.bodyAsJsonObject().getString("resourceType"));
+                    assertEquals(key, fhir.getHeader("X-Validation-Context"));
+                    JsonObject problem = assertProblem(all.resultAt(2), 400, "invalid-request");
+                    assertTrue(problem.getString("detail").contains("%7C"), problem.encode());
                     ctx.completeNow();
                 })));
     }

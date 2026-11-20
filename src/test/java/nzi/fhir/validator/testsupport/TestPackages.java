@@ -137,6 +137,76 @@ public final class TestPackages {
         return out.toByteArray();
     }
 
+    // ---- Spec 012: packages for two-IG contexts ----
+
+    public static final String MULTI_A = "test.multi.a";
+    public static final String MULTI_B = "test.multi.b";
+    public static final String MULTI_C = "test.multi.c";
+    public static final String MULTI_A_PROFILE = "http://example.org/fhir/StructureDefinition/multi-a-patient";
+    public static final String MULTI_B_PROFILE = "http://example.org/fhir/StructureDefinition/multi-b-patient";
+    public static final String MULTI_C_PROFILE = "http://example.org/fhir/StructureDefinition/multi-c-patient";
+
+    /** {@code test.multi.a#1.0.0} (R4): a Patient profile requiring {@code birthDate}. */
+    public static byte[] multiA() {
+        return npmPackage(MULTI_A, "1.0.0", Map.of(), List.of(requiredPatientElements(MULTI_A_PROFILE, "birthDate")));
+    }
+
+    /** {@code test.multi.b#2.0.0} (R4): a Patient profile requiring {@code gender}. */
+    public static byte[] multiB() {
+        return npmPackage(MULTI_B, "2.0.0", Map.of(), List.of(requiredPatientElements(MULTI_B_PROFILE, "gender")));
+    }
+
+    /** {@code test.multi.c#3.0.0} (R4): a Patient profile requiring {@code name}. */
+    public static byte[] multiC() {
+        return npmPackage(MULTI_C, "3.0.0", Map.of(), List.of(requiredPatientElements(MULTI_C_PROFILE, "name")));
+    }
+
+    /** {@code test.multi.x#version} (R4), a plain dependency. */
+    public static byte[] conflictX(String version) {
+        return npmPackage("test.multi.x", version, Map.of(), List.of());
+    }
+
+    /** {@code test.multi.p#1.0.0} depends on {@code test.multi.x#1.0.0}. */
+    public static byte[] multiNeedsX1() {
+        return npmPackage("test.multi.p", "1.0.0", Map.of("test.multi.x", "1.0.0"), List.of());
+    }
+
+    /** {@code test.multi.q#1.0.0} depends on {@code test.multi.x#2.0.0}. */
+    public static byte[] multiNeedsX2() {
+        return npmPackage("test.multi.q", "1.0.0", Map.of("test.multi.x", "2.0.0"), List.of());
+    }
+
+    /** A stand-in {@code hl7.terminology.r4#version} (no resources). */
+    public static byte[] terminologyPackage(String version) {
+        return npmPackage("hl7.terminology.r4", version, Map.of(), List.of());
+    }
+
+    /** {@code test.multi.t1#1.0.0} depends on {@code hl7.terminology.r4#5.0.0}. */
+    public static byte[] multiNeedsTx1() {
+        return npmPackage("test.multi.t1", "1.0.0", Map.of("hl7.terminology.r4", "5.0.0"), List.of());
+    }
+
+    /** {@code test.multi.t2#1.0.0} depends on {@code hl7.terminology.r4#6.0.2}. */
+    public static byte[] multiNeedsTx2() {
+        return npmPackage("test.multi.t2", "1.0.0", Map.of("hl7.terminology.r4", "6.0.2"), List.of());
+    }
+
+    /**
+     * Includes two stored IG packages as one context for {@code fhirVersion} (spec 012) as the system organisation.
+     *
+     * @return the include response
+     */
+    public static io.vertx.core.Future<JsonObject> includePair(nzi.fhir.validator.ServiceRegistry services,
+                                                                nzi.fhir.validator.core.enums.SupportedFhirVersion fhirVersion,
+                                                                String a, String aVersion, String b, String bVersion) {
+        return services.igPackageService().includePair(
+                nzi.fhir.validator.core.security.Caller.system(nzi.fhir.validator.core.org.Organisations.DEFAULT_SYSTEM_SHORT_NAME),
+                fhirVersion,
+                new nzi.fhir.validator.core.service.IgPackageService.IgEntry(a, aVersion),
+                new nzi.fhir.validator.core.service.IgPackageService.IgEntry(b, bVersion),
+                java.util.Optional.empty(), java.util.Optional.empty());
+    }
+
     /** Stores {@code tgz} without including it (it can still be named in {@code ig}, spec 004 FR-006). */
     public static io.vertx.core.Future<Void> storePackage(nzi.fhir.validator.ServiceRegistry services, byte[] tgz) {
         return services.igPackageService().registerIg(tgz, false).mapEmpty();

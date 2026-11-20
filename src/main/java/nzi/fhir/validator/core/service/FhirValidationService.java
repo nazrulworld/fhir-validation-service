@@ -11,7 +11,7 @@ import nzi.fhir.validator.core.npm.PackageCatalogView;
 import nzi.fhir.validator.core.security.Access;
 import nzi.fhir.validator.core.security.AccessPolicy;
 import nzi.fhir.validator.core.security.Caller;
-import nzi.fhir.validator.core.validator.IgReference;
+import nzi.fhir.validator.core.validator.IgRequest;
 import nzi.fhir.validator.core.validator.PinnedAccess;
 import nzi.fhir.validator.core.validator.ResolvedContext;
 import nzi.fhir.validator.web.ProblemException;
@@ -121,18 +121,18 @@ public class FhirValidationService {
      * @param who the request's caller: only contexts it may use are served (spec 005 FR-010 to FR-013)
      * @param ig  the request's {@code ig} reference, or {@code null} for the base context
      */
-    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
+    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgRequest ig, String body,
                                   SupportedContentType contentType, List<String> profiles,
                                   Function<ValidatorSnapshot.Outcome, T> finisher) {
         return validate(who, version, ig, body, contentType, profiles, nzi.fhir.validator.core.usage.UsageMeter.NONE, finisher);
     }
 
     /**
-     * Like {@link #validate(Caller, SupportedFhirVersion, IgReference, String, SupportedContentType, List, Function)},
+     * Like {@link #validate(Caller, SupportedFhirVersion, IgRequest, String, SupportedContentType, List, Function)},
      * marking each phase on {@code meter} (spec 008 research R10): admission, context ready, and the CPU time, allocated
      * bytes and issue counts of the work on the validation worker.
      */
-    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
+    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgRequest ig, String body,
                                   SupportedContentType contentType, List<String> profiles,
                                   nzi.fhir.validator.core.usage.UsageMeter meter,
                                   Function<ValidatorSnapshot.Outcome, T> finisher) {
@@ -140,14 +140,14 @@ public class FhirValidationService {
     }
 
     /**
-     * Like {@link #validate(Caller, SupportedFhirVersion, IgReference, String, SupportedContentType, List,
+     * Like {@link #validate(Caller, SupportedFhirVersion, IgRequest, String, SupportedContentType, List,
      * nzi.fhir.validator.core.usage.UsageMeter, Function)}, with the request's {@code tx}/{@code txMode} (spec 010).
      * After the access check and before the context-readiness wait (FR-008a), the effective setting is resolved from
      * the context's default and {@code override} (FR-006), and a server the request names is checked against the
      * allowlist: 400 {@code tx-server-not-registered} or 503 {@code tx-registry-unavailable}, with no outbound call
      * (FR-008).
      */
-    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgReference ig, String body,
+    public <T> Future<T> validate(Caller who, SupportedFhirVersion version, IgRequest ig, String body,
                                   SupportedContentType contentType, List<String> profiles, TerminologyOverride override,
                                   nzi.fhir.validator.core.usage.UsageMeter meter,
                                   Function<ValidatorSnapshot.Outcome, T> finisher) {
@@ -229,10 +229,12 @@ public class FhirValidationService {
         return promise.future();
     }
 
-    private Future<SnapshotKey> resolve(Caller who, SupportedFhirVersion version, IgReference ig) {
+    private Future<SnapshotKey> resolve(Caller who, SupportedFhirVersion version, IgRequest ig) {
         // Spec 007 FR-021: only included contexts serve a named IG; the included keys come from memory (no DB wait).
+        // Spec 012: the included keys and their aliases come from the same published set (one revision).
+        PinnedAccess pinned = pinnedAccess.apply(version);
         return ig == null ? Future.succeededFuture(SnapshotKey.base(version))
-                : ig.resolve(version, catalog, who, pinnedAccess.apply(version).asMap().keySet());
+                : ig.resolve(version, catalog, who, pinned.asMap().keySet(), pinned.aliases());
     }
 
     /**
@@ -244,7 +246,7 @@ public class FhirValidationService {
      * @return the context's access (for FR-020)
      * @throws ProblemException 404 for an IG (or context) the caller may not use, 424 for a dependency
      */
-    private Access checkAccess(Caller who, SnapshotKey key, IgReference ig) {
+    private Access checkAccess(Caller who, SnapshotKey key, IgRequest ig) {
         PackageCatalogView view = catalog.current();
         if (key.isBase()) {
             return Access.systemShared(view.systemShortName());

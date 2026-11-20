@@ -139,7 +139,7 @@ class SquashedBaselineIT extends BaseTestContainer {
         earlier(original, ORIGINAL, "15").migrate();
         DatabaseService.migrateOnce(original);
         DatabaseService.migrateOnce(baseline);
-        assertEquals(List.of("15 | baseline 1 0", "16 | usage terminology"),
+        assertEquals(List.of("15 | baseline 1 0", "16 | usage terminology", "17 | multi ig contexts"),
                 history(baseline).stream().map(r -> r.substring(0, r.lastIndexOf(" | "))).toList(),
                 "a new database runs the baseline, then the migrations after it");
         assertEquals(snapshot(original), snapshot(baseline));
@@ -180,7 +180,7 @@ class SquashedBaselineIT extends BaseTestContainer {
 
         List<String> after = history(db);
         assertEquals(before, after.subList(0, before.size()), "the earlier history is unchanged");
-        assertEquals(List.of("16 | usage terminology"), after.subList(before.size(), after.size()).stream()
+        assertEquals(List.of("16 | usage terminology", "17 | multi ig contexts"), after.subList(before.size(), after.size()).stream()
                 .map(r -> r.substring(0, r.lastIndexOf(" | "))).toList(), "only the migrations after the baseline are added");
         try (Connection c = jdbc(db)) {
             assertEquals(List.of("acme"), rows(c, "SELECT o.name_short FROM " + S + ".api_keys k JOIN " + S
@@ -211,7 +211,7 @@ class SquashedBaselineIT extends BaseTestContainer {
         PgConnectOptions db = freshDatabase();
         DatabaseService.migrateOnce(withProbe(db));
         try (Connection c = jdbc(db)) {
-            assertEquals(List.of("15", "16", "999"), rows(c, "SELECT version FROM " + S + ".flyway_schema_history "
+            assertEquals(List.of("15", "16", "17", "999"), rows(c, "SELECT version FROM " + S + ".flyway_schema_history "
                     + "WHERE version IS NOT NULL ORDER BY installed_rank"));
         }
     }

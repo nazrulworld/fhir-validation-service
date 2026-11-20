@@ -1,6 +1,8 @@
 #!/bin/bash
 # Spec 008 T071 (SC-007): one perf/validate.js run against a fresh PostgreSQL + service pair.
 # usage: perf/compare-run.sh <label> <image> <sink: -|none|db> <out-dir>
+# Optional (spec 012): IG=name#version IG_TGZ=<path to its .tgz> uploads and includes that IG for R4 first, and every
+# request then names it in ?ig=, so the IG lookup path is measured too.
 set -u
 LABEL=$1 IMAGE=$2 SINK=$3 OUT=$4
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -33,6 +35,14 @@ for i in $(seq 1 300); do
 done
 if [ $ready != 1 ]; then echo "$LABEL: not ready"; docker logs --tail 40 $SVC; exit 1; fi
 
+if [ -n "${IG_TGZ:-}" ]; then
+  curl -fsS -H "Authorization: Bearer $ADMIN" -F "file=@$IG_TGZ;type=application/gzip" \
+    http://127.0.0.1:18880/igs/upload >/dev/null || { echo "$LABEL: upload failed"; exit 1; }
+  curl -fsS -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
+    --data "{\"igPackageId\":\"${IG%%#*}\",\"igPackageVersion\":\"${IG#*#}\"}" \
+    http://127.0.0.1:18880/R4/validator > "$OUT/$LABEL.include.json" || { echo "$LABEL: include failed"; exit 1; }
+  KEYARG+=(-e "IG=$IG")
+fi
 K6=(docker run --rm --network $NET -v "$REPO":/work -w /work/perf grafana/k6:0.54.0 run --quiet
     -e BASE=http://$SVC:8880 ${KEYARG[@]+"${KEYARG[@]}"} -e VUS=8)
 "${K6[@]}" -e DURATION=15s validate.js >/dev/null 2>&1   # warm-up

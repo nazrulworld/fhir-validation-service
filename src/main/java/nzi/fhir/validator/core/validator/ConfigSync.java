@@ -328,7 +328,9 @@ public class ConfigSync {
                     if (previous != null && !previous.equals(row.activeAccess())) {
                         logger.info("Access of included IG validator contexts for {} changed (revision {})", version, row.revision());
                     }
-                    boolean unknown = row.active().stream().anyMatch(k -> !catalog.current().contains(k));
+                    // Spec 012: a two-IG key is not a package; its IG packages are what the view must know.
+                    boolean unknown = row.active().stream().flatMap(k -> SnapshotKey.membersOf(k).stream())
+                            .anyMatch(k -> !catalog.current().contains(k));
                     Future<PackageCatalogView> view = unknown
                             ? catalog.refresh().recover(err -> Future.succeededFuture(catalog.current()))
                             : Future.succeededFuture(catalog.current());

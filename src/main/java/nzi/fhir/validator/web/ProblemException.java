@@ -53,11 +53,16 @@ public class ProblemException extends RuntimeException {
     }
 
     /**
-     * @param igPackage the request's IG package ({@code name#version}), or {@code null} for the core-only base context
+     * @param igPackage the context's key ({@code name#version}, or {@code A#a|B#b} for a two-IG context), or
+     *                  {@code null} for the core-only base context
      */
     public static ProblemException unknownProfiles(nzi.fhir.validator.core.enums.SupportedFhirVersion version, String igPackage,
                                                    java.util.List<String> unresolved) {
         String context = igPackage == null ? "the core specification of FHIR " + version
+                : nzi.fhir.validator.core.validator.SnapshotKey.isCombined(igPackage)
+                // Spec 012: a two-IG context reads "IG packages A#a and B#b".
+                ? "IG packages " + igPackage.replace("|", " and ") + " (FHIR " + version + "), their dependencies or the "
+                + "core specification"
                 : "IG package " + igPackage + " (FHIR " + version + "), its dependencies or the core specification";
         return new ProblemException(400, TYPE_UNKNOWN_PROFILE, "One or more requested profiles are not defined by "
                 + context + "; name the IG that defines them with the ig parameter")
@@ -140,6 +145,37 @@ public class ProblemException extends RuntimeException {
     public static ProblemException dependencyUnavailable() {
         return new ProblemException(424, TYPE_DEPENDENCY_NOT_FOUND, "A dependency of the requested IG package is not "
                 + "available. Register or upload it via /igs/register or /igs/upload");
+    }
+
+    /** Spec 012 FR-006: the two IGs of an include need different versions of the same package. */
+    public static final String TYPE_DEPENDENCY_CONFLICT = "dependency-conflict";
+    /** Spec 012 FR-012: another two-IG context for the FHIR version already has the same first IG. */
+    public static final String TYPE_ALIAS_CONFLICT = "alias-conflict";
+
+    /**
+     * The two IGs of an include need different versions of one or more packages that are not exempt (spec 012 FR-006,
+     * contracts §1). Only raised when the caller may use every version named.
+     *
+     * @param conflicts {@code {package, versions: {"A#a": "x", "B#b": "y"}}} per conflicting package, sorted by package
+     */
+    public static ProblemException dependencyConflict(java.util.List<io.vertx.core.json.JsonObject> conflicts) {
+        String names = conflicts.stream().map(c -> c.getString("package")).collect(java.util.stream.Collectors.joining(", "));
+        return new ProblemException(400, TYPE_DEPENDENCY_CONFLICT, "The two IG packages need different versions of "
+                + names + "; include versions that agree")
+                .withExtension("conflicts", new io.vertx.core.json.JsonArray(java.util.List.copyOf(conflicts)));
+    }
+
+    /**
+     * Another two-IG context for {@code version} already has {@code firstIg} as its first IG (spec 012 FR-012).
+     *
+     * @param existingKey the other context's key when the caller may use it, otherwise {@code null} (not named)
+     */
+    public static ProblemException aliasConflict(String firstIg, String existingKey,
+                                                 nzi.fhir.validator.core.enums.SupportedFhirVersion version) {
+        return new ProblemException(409, TYPE_ALIAS_CONFLICT, "IG package " + firstIg + " is already the first IG of "
+                + (existingKey == null ? "another two-IG context" : "the two-IG context " + existingKey) + " for "
+                + version + "; a first IG can start only one two-IG context. Put the other IG first, or exclude that "
+                + "context");
     }
 
     /** Upload or download of a {@code name#version} another organisation stored (spec 005 FR-017, research R7). */

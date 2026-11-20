@@ -423,6 +423,44 @@ and `dependencies`, plus the `.json` resources under `package/`), then upload it
 Package downloads are limited to the hosts in `FV_PACKAGE_SOURCES`, over https, to public addresses. Archives are
 checked for size, entry count, expansion ratio and unsafe paths before they are unpacked.
 
+### Validating against two IGs
+
+Some exchanges are governed by two IGs at once, for example a national base IG and a project IG that doesn't declare
+it as a dependency (the validator CLI's repeated `-ig`). Include them together with `igPackages`; the service builds
+one validator context from both IGs, every dependency of each and the core specification.
+
+```bash
+# Include two IGs as one context for R4 (each entry takes the same versions as igPackageVersion: exact, latest, N.x)
+curl -H "$AUTH" -H 'Content-Type: application/json' --data '{"igPackages":[
+    {"igPackageId":"hl7.fhir.dk.core","igPackageVersion":"3.4.0"},
+    {"igPackageId":"dk.ehealth.sundhed.fhir.ig.core","igPackageVersion":"latest"}]}' \
+  http://127.0.0.1:8880/R4/validator
+# -> "key": {"igPackage": "hl7.fhir.dk.core#3.4.0|dk.ehealth.sundhed.fhir.ig.core#4.0.0"},
+#    "aliases": ["dk.ehealth.sundhed.fhir.ig.core#4.0.0|hl7.fhir.dk.core#3.4.0", "hl7.fhir.dk.core#3.4.0"]
+
+# Validate against it: both IGs with exact versions, in either order. URL-encode '#' as %23 and '|' as %7C.
+curl -H "Authorization: Bearer $FV_VALIDATOR_API_KEY" -H 'Content-Type: application/fhir+json' --data @patient.json \
+  'http://127.0.0.1:8880/R4/validate?ig=hl7.fhir.dk.core%233.4.0%7Cdk.ehealth.sundhed.fhir.ig.core%234.0.0'
+
+# Change or stop it by its key or the reversed pair
+curl -H "$AUTH" -X DELETE \
+  'http://127.0.0.1:8880/R4/validator?ig=dk.ehealth.sundhed.fhir.ig.core%234.0.0%7Chl7.fhir.dk.core%233.4.0'
+```
+
+- **Key and aliases.** The key is `A#a|B#b` in the order you listed the IGs (at most 256 characters); the response and
+  `X-Validation-Context` always report it. `B#b|A#a` finds the same context. The first IG alone, `ig=A#a`, also finds
+  it, but only with an exact version and only while no single-IG context `A#a` is included: a single-IG context always
+  wins, and `ig=A` or `ig=A#latest` only ever looks at single-IG contexts. A first IG can start only one two-IG context
+  per FHIR version (409 `alias-conflict` otherwise). PATCH and DELETE take the key or the reversed pair; a single
+  `name#version` never addresses a two-IG context.
+- **Version conflicts.** When the two IGs need different versions of the same package, the include is refused with
+  400 `dependency-conflict` and the `conflicts` extension names the package and the version each IG needs. Choose IG
+  versions that agree. Packages whose name starts with `hl7.terminology` or `hl7.fhir.uv.extensions` are the
+  exception: almost every IG pins its own version of these, so the highest version is used and named in `warnings`.
+- **Access.** Every IG and every dependency must be usable by the caller, exactly as for one IG. A private two-IG
+  context (`"shareable": false`) needs ownership of both IG packages.
+- Including the same two IG versions again, in either order, changes nothing. At most two IGs per context.
+
 ### Terminology servers
 
 By default every context is offline: codes are checked only against code systems in its packages and the built-in

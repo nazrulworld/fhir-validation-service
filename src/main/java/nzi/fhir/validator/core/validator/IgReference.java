@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  *
  * @param version {@code null} when absent or {@code latest}: the highest included version (spec 007 FR-023)
  */
-public record IgReference(String name, String version) {
+public record IgReference(String name, String version) implements IgRequest {
     public static final int MAX_LENGTH = 256;
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
     private static final Pattern VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9.+_-]*");
@@ -66,11 +66,12 @@ public record IgReference(String name, String version) {
 
     private static ProblemException invalid() {
         return new ProblemException(400, "invalid-request", "The ig parameter must be name#version, name#latest or name "
-                + "(at most " + MAX_LENGTH + " characters; letters, digits, '.', '_', '-'; one IG per request). "
-                + "URL-encode '#' as %23");
+                + "(at most " + MAX_LENGTH + " characters; letters, digits, '.', '_', '-'), or two IGs as "
+                + "name#version|name#version. URL-encode '#' as %23 and '|' as %7C");
     }
 
     /** {@code name#version} or {@code name} (for messages). */
+    @Override
     public String label() {
         return version == null ? name : name + "#" + version;
     }
@@ -90,9 +91,16 @@ public record IgReference(String name, String version) {
      */
     public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
                                        Set<String> included) {
+        return resolve(fhirVersion, catalog, caller, included, ContextAliases.of(included));
+    }
+
+    /** As {@link #resolve(SupportedFhirVersion, PackageCatalog, Caller, Set)}, with the version's alias index (spec 012). */
+    @Override
+    public Future<SnapshotKey> resolve(SupportedFhirVersion fhirVersion, PackageCatalog catalog, Caller caller,
+                                       Set<String> included, ContextAliases aliases) {
         Optional<SnapshotKey> known;
         try {
-            known = resolveIn(fhirVersion, catalog.current(), caller, included);
+            known = resolveIn(fhirVersion, catalog.current(), caller, included, aliases);
         } catch (ProblemException e) {
             return Future.failedFuture(e);
         }
@@ -103,7 +111,7 @@ public record IgReference(String name, String version) {
                 .recover(err -> Future.succeededFuture(catalog.current()))
                 .compose(view -> {
                     try {
-                        return resolveIn(fhirVersion, view, caller, included)
+                        return resolveIn(fhirVersion, view, caller, included, aliases)
                                 .map(Future::succeededFuture)
                                 .orElseGet(() -> Future.failedFuture(ProblemException.igNotStored(label())));
                     } catch (ProblemException e) {
@@ -121,6 +129,17 @@ public record IgReference(String name, String version) {
      */
     Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller,
                                     Set<String> included) {
+        return resolveIn(fhirVersion, view, caller, included, ContextAliases.of(included));
+    }
+
+    /**
+     * As {@link #resolveIn(SupportedFhirVersion, PackageCatalogView, Caller, Set)}. Spec 012: an exact version that has
+     * no single-IG context but is the first IG of an included two-IG context resolves to that context (FR-012); a
+     * versionless reference considers single-IG contexts only (FR-012a).
+     */
+    @Override
+    public Optional<SnapshotKey> resolveIn(SupportedFhirVersion fhirVersion, PackageCatalogView view, Caller caller,
+                                           Set<String> included, ContextAliases aliases) {
         String concrete = version;
         if (concrete == null) {
             concrete = highestIncluded(view, caller, included)
@@ -140,6 +159,11 @@ public record IgReference(String name, String version) {
                     + ", not " + fhirVersion.name());
         }
         if (!included.contains(key)) {
+            // FR-012: the first-IG alias, only for an exact version (FR-012a) and only without a single-IG context.
+            Optional<String> combined = version == null ? Optional.empty() : aliases.target(key);
+            if (combined.isPresent()) {
+                return Optional.of(SnapshotKey.of(fhirVersion, combined.get()));
+            }
             throw ProblemException.igNotIncluded(key, fhirVersion);
         }
         return Optional.of(SnapshotKey.of(fhirVersion, key));
@@ -150,7 +174,9 @@ public record IgReference(String name, String version) {
         String prefix = name + "#";
         List<String> versions = new ArrayList<>();
         for (String key : included) {
-            if (key.startsWith(prefix) && view.contains(key) && AccessPolicy.canUse(caller, view.access(key))) {
+            // FR-012a (research R5): a two-IG key A#a|B#b also starts with "A#"; it is never a versionless match.
+            if (key.startsWith(prefix) && !SnapshotKey.isCombined(key) && view.contains(key)
+                    && AccessPolicy.canUse(caller, view.access(key))) {
                 versions.add(key.substring(prefix.length()));
             }
         }

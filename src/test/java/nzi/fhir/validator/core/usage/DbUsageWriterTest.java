@@ -185,7 +185,7 @@ class DbUsageWriterTest extends BaseTestContainer {
         writer = new DbUsageWriter(vertx, pool, metrics, 1_000, 500, 60_000);
         writer.write(record(null, 1));
         writer.write(new UsageRecord("r".repeat(100), Instant.now(), null, null, Constant.SYSTEM_ORG_UUID,
-                "R4" + "x".repeat(40), "a".repeat(256), 0, "JSON", 10, "rejected", 400, 0, 0, 0, 0, null, 1, -1, -1, -1, -1, -1));
+                "R4" + "x".repeat(40), "a".repeat(300), 0, "JSON", 10, "rejected", 400, 0, 0, 0, 0, null, 1, -1, -1, -1, -1, -1));
         writer.write(record(null, 3));
         writer.flush()
                 .compose(v -> pool.query("SELECT length(ig), length(fhir_version), length(request_id) FROM " + TABLE
@@ -194,7 +194,7 @@ class DbUsageWriterTest extends BaseTestContainer {
                     assertEquals(3, rs.size(), "the whole batch was written");
                     assertEquals(0, counter("fv.usage.dropped", "reason", "write_failed"));
                     io.vertx.sqlclient.Row long_ = java.util.stream.StreamSupport.stream(rs.spliterator(), false).toList().get(1);
-                    assertEquals(192, long_.getInteger(0));
+                    assertEquals(256, long_.getInteger(0), "V17: validation_usage.ig is VARCHAR(256)");
                     assertEquals(16, long_.getInteger(1));
                     assertEquals(64, long_.getInteger(2));
                     ctx.completeNow();

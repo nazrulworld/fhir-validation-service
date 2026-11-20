@@ -49,26 +49,29 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
     }
 
     /**
-     * The context of an IG package resolved as the package's owner (spec 006 FR-024).
+     * The context of an IG package resolved as the package's owner (spec 006 FR-024). A two-IG key that isn't included
+     * (only in tests) is resolved as its first IG's owner.
      *
-     * @param igPackage a concrete {@code name#version}, or {@code null} for the base context
+     * @param igPackage a concrete {@code name#version}, a two-IG key, or {@code null} for the base context
      */
     public static ResolvedContext of(String igPackage, PackageCatalogView view) {
         if (igPackage == null) {
             return EMPTY;
         }
-        Access root = view.access(igPackage);
+        Access root = view.access(SnapshotKey.membersOf(igPackage).get(0));
         return of(igPackage, view, root == null ? null : root.owner());
     }
 
     /**
-     * Resolves the context of one IG package against the catalog with the deterministic {@link DependencyResolver}.
+     * Resolves the context of one IG package, or of the two IG packages of a two-IG key (spec 012 FR-004: both are
+     * roots of one resolution), against the catalog with the deterministic {@link DependencyResolver}.
      * A dependency declared without an explicit version is chosen among the versions {@code owner} may select
      * ({@link AccessPolicy#selectableFor}), so another organisation's private version is never chosen. A root package
      * that is not stored stays in the list, so building it fails naming that package instead of silently producing a
      * core-only context.
      *
-     * @param igPackage a concrete {@code name#version}, or {@code null} for the base context
+     * @param igPackage a concrete {@code name#version}, a two-IG key {@code A#a|B#b}, or {@code null} for the base
+     *                  context
      * @param owner     the organisation the context is resolved for: the included context's owner, or the IG
      *                  package's owner for an on-demand context
      */
@@ -76,12 +79,17 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
         if (igPackage == null) {
             return EMPTY;
         }
-        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(igPackage), view.asCatalog(),
+        List<String> members = SnapshotKey.membersOf(igPackage);
+        DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.copyOf(members), view.asCatalog(),
                 p -> AccessPolicy.selectableFor(owner, view.access(p)));
         List<String> resolved = resolution.resolved();
-        if (!resolved.contains(igPackage)) {
+        if (!resolved.containsAll(members)) {
             resolved = new java.util.ArrayList<>(resolved);
-            resolved.add(igPackage);
+            for (String m : members) {
+                if (!resolved.contains(m)) {
+                    resolved.add(m);
+                }
+            }
             resolved.sort(null);
         }
         Map<String, byte[]> hashes = new HashMap<>();
@@ -91,7 +99,7 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
                 hashes.put(p, sha);
             }
         }
-        List<String> missing = resolution.missing().stream().filter(m -> !m.equals(igPackage)).toList();
+        List<String> missing = resolution.missing().stream().filter(m -> !members.contains(m)).toList();
         return new ResolvedContext(resolved, hashes, missing);
     }
 

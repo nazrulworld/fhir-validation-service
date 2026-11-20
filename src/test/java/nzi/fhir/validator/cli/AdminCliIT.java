@@ -341,4 +341,35 @@ class AdminCliIT extends BaseTestContainer {
         assertFalse(row.getBoolean(0), "still inactive");
         assertFalse(row.getBoolean(1), "the change is stored");
     }
+
+    /** Spec 012 T036 (FR-017): the snapshot commands address a two-IG context by its key or reversed pair. */
+    @Test
+    void snapshotCommandsAddressATwoIgContext() throws Exception {
+        assertExit(createAcme(), 0);
+        app = await(AppHarness.start(vertx, AppHarness.baseConfig(getPostgresHost(), getPostgresPort(), POSTGRES_DATABASE,
+                POSTGRES_USERNAME, POSTGRES_PASSWORD)));
+        await(app.awaitReady(90_000));
+        var services = app.bootstrap().services();
+        await(TestPackages.storePackage(services, TestPackages.multiA()));
+        await(TestPackages.storePackage(services, TestPackages.multiB()));
+        await(services.configSync().syncCatalogNow());
+        await(TestPackages.includePair(services, SupportedFhirVersion.R4, TestPackages.MULTI_A, "1.0.0", TestPackages.MULTI_B, "2.0.0"));
+        String key = TestPackages.MULTI_A + "#1.0.0|" + TestPackages.MULTI_B + "#2.0.0";
+
+        Run share = cli("snapshot", "share", "--fhir-version", "R4", "--ig", key, "--shareable", "false");
+        assertExit(share, 0);
+        assertEquals(key, share.json().getString("igPackage"));
+        assertFalse(share.json().getBoolean("shareable"));
+
+        Run transfer = cli("snapshot", "transfer", "--fhir-version", "R4", "--ig",
+                TestPackages.MULTI_B + "#2.0.0|" + TestPackages.MULTI_A + "#1.0.0", "--to", "acme");
+        assertExit(transfer, 0);
+        assertEquals(key, transfer.json().getString("igPackage"), "the reversed pair addresses the stored key");
+        assertEquals("acme", transfer.json().getString("owner"));
+        eventually(10_000, "the change reaches the running instance",
+                () -> "acme".equals(services.configSync().pinnedAccess(SupportedFhirVersion.R4).get(key).ownerShortName()));
+
+        assertExit(cli("snapshot", "share", "--fhir-version", "R4", "--ig", TestPackages.MULTI_A + "#1.0.0", "--shareable", "true"), 3);
+        assertExit(cli("package", "share", "--ig", key, "--shareable", "true"), 2);
+    }
 }

@@ -60,15 +60,23 @@ public final class AccessPolicy {
             return Decision.ALLOWED;
         }
         String ig = key.igPackage();
+        java.util.List<String> members = key.members();
         Access context = pinned == null ? null : pinned.get(ig);
-        if (context == null) {
+        if (context == null && !key.isCombined()) {
+            // A two-IG key has no package of its own: it is usable only while included (spec 012 FR-014).
             context = view.access(ig);
         }
-        if (!canUse(caller, context) || !canUse(caller, view.access(ig))) {
+        if (!canUse(caller, context)) {
             return Decision.IG_NOT_VISIBLE;
         }
+        // Spec 012 FR-014: every IG of the context must be usable; the same decision whichever one isn't.
+        for (String m : members) {
+            if (!canUse(caller, view.access(m))) {
+                return Decision.IG_NOT_VISIBLE;
+            }
+        }
         for (String p : resolvedPackages) {
-            if (p.equals(ig)) {
+            if (members.contains(p)) {
                 continue;
             }
             Access a = view.access(p);
@@ -89,11 +97,18 @@ public final class AccessPolicy {
             return true;
         }
         Access context = pinned == null ? null : pinned.get(key.igPackage());
-        if (context == null) {
+        if (context == null && !key.isCombined()) {
             context = view.access(key.igPackage());
         }
         if (context != null && !context.shareable()) {
             return false;
+        }
+        // Spec 012: every IG of a two-IG context counts, even when the resolved list doesn't name it.
+        for (String m : key.members()) {
+            Access a = view.access(m);
+            if (a != null && !a.shareable()) {
+                return false;
+            }
         }
         for (String p : resolvedPackages) {
             Access a = view.access(p);

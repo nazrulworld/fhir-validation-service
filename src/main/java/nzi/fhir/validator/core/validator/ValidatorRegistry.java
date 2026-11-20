@@ -597,7 +597,11 @@ public class ValidatorRegistry {
                 for (Slot s : slots) {
                     if (publicLocked(s)) {
                         // Spec 010 FR-002: the configured default (applied per request, never built in).
-                        contexts.add(describeSlot(s).put("key", s.key.igPackage()).put("kind", "pinned")
+                        // Spec 012 FR-009: the context's IGs in key order, and its aliases.
+                        contexts.add(describeSlot(s).put("key", s.key.igPackage())
+                                .put("igPackages", new JsonArray(s.key.members()))
+                                .put("aliases", new JsonArray(ContextAliases.aliasesFor(s.key.igPackage())))
+                                .put("kind", "pinned")
                                 .put("terminology", terminologyDefaults.apply(version).get(s.key.igPackage()).toJson()));
                     } else {
                         privateCount++;

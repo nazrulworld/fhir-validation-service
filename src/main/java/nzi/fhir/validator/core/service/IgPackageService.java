@@ -207,6 +207,8 @@ public class IgPackageService {
                             .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion)).compose(row -> {
                         // This key's context only: one IG and its dependencies (FR-021), resolved as the context's
                         // owner (spec 006 FR-024), exactly as every instance will build it.
+                        // Whole-key match: a two-IG context whose first IG is this key (spec 012 FR-012 alias) is a different
+                        // context, so including the single-IG context A#a beside it is a new include, not "already included".
                         UUID contextOwner = row.included().contains(key) ? row.access().get(key).owner() : caller.orgId();
                         DependencyResolver.Resolution resolution = DependencyResolver.resolve(Set.of(key), catalog.catalog(),
                                 p -> AccessPolicy.selectableFor(contextOwner, catalog.access().get(p)));
@@ -287,16 +289,248 @@ public class IgPackageService {
     private static JsonObject includeResult(SupportedFhirVersion fhirVersion, String key, long revision,
                                             List<String> included, List<String> resolved, Access access,
                                             nzi.fhir.validator.core.terminology.TerminologySettings terminology) {
+        // Spec 012 contracts §1: one response shape for one and two IGs (members in key order, aliases).
+        JsonArray members = new JsonArray();
+        for (String m : nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key)) {
+            int hash = m.indexOf('#');
+            members.add(new JsonObject().put("igPackageId", m.substring(0, hash)).put("igPackageVersion", m.substring(hash + 1)));
+        }
         return new JsonObject()
                 .put("terminology", terminology.toJson())
                 .put("status", "success")
                 .put("fhirVersion", fhirVersion.name())
                 .put("key", new JsonObject().put("fhirVersion", fhirVersion.name()).put("igPackage", key))
+                .put("igPackages", members)
+                .put("aliases", new JsonArray(nzi.fhir.validator.core.validator.ContextAliases.aliasesFor(key)))
                 .put("revision", revision)
                 .put("included", new JsonArray(List.copyOf(included)))
                 .put("resolved", new JsonArray(resolved))
                 .put("owner", access.ownerShortName())
                 .put("shareable", access.shareable());
+    }
+
+    /** One IG of an include request (spec 012 FR-001): a package name and a requested version. */
+    public record IgEntry(String igPackageId, String igPackageVersion) {
+        /** The requested version as the request gave it, {@code latest} when absent. */
+        public String requested() {
+            return igPackageVersion == null || igPackageVersion.isBlank() ? "latest" : igPackageVersion;
+        }
+
+        boolean latest() {
+            return igPackageVersion == null || igPackageVersion.isBlank() || "latest".equalsIgnoreCase(igPackageVersion);
+        }
+    }
+
+    static final String PAIR_SAME_PACKAGE = "The two igPackages entries must name different packages";
+    static final String PAIR_KEY_TOO_LONG = "The two IG packages' key (name#version|name#version) would be longer than "
+            + nzi.fhir.validator.core.validator.SnapshotKey.MAX_KEY_LENGTH + " characters";
+    static final String PRIVATE_PAIR_REFUSED = "Only the owner of both IG packages can make their validator context private";
+
+    /**
+     * Includes one validator context built from two IG packages (spec 012 US1, FR-004 to FR-009, contracts §1). Every
+     * check of a single-IG include applies to each IG and each dependency. Under the configuration row lock: the same
+     * pair in either order is reported as already included (FR-008); a first IG that already starts another two-IG
+     * context is 409 {@code alias-conflict} (FR-012, checked against the locked row, never the in-memory index); a
+     * version conflict between the two trees is 400 {@code dependency-conflict} unless exempt (FR-006, FR-006a), or 424
+     * when it involves a version the caller may not use.
+     *
+     * @return the include result with {@code igPackages} and {@code aliases}; the key is {@code A#a|B#b}
+     */
+    public Future<JsonObject> includePair(Caller caller, SupportedFhirVersion fhirVersion, IgEntry first, IgEntry second,
+                                          Optional<Boolean> shareable,
+                                          Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology) {
+        if (!servedVersions.contains(fhirVersion)) {
+            return Future.failedFuture(ProblemException.fhirVersionDisabled(fhirVersion, servedVersions));
+        }
+        List<IgEntry> entries = List.of(first, second);
+        List<VersionSeries> series = new ArrayList<>();
+        for (IgEntry e : entries) {
+            if (e.igPackageId() == null || e.igPackageId().isBlank()) {
+                return Future.failedFuture(new ProblemException(400, "invalid-request", "igPackageId is required"));
+            }
+            try {
+                series.add(VersionSeries.isSeries(e.igPackageVersion()) ? VersionSeries.parse(e.igPackageVersion()) : null);
+            } catch (ProblemException ex) {
+                return Future.failedFuture(ex);
+            }
+            if (!e.latest() && !PostgresPackageCacheManager.isValidVersionLabel(e.igPackageVersion())) {
+                return Future.failedFuture(new ProblemException(400, "invalid-request",
+                        "igPackageVersion must be 1-64 characters without whitespace"));
+            }
+        }
+        if (first.igPackageId().equals(second.igPackageId())) {
+            return Future.failedFuture(new ProblemException(400, "invalid-request", PAIR_SAME_PACKAGE));
+        }
+        List<String> warnings = new ArrayList<>();
+        return pgPool.withTransaction(tx -> loadCatalogWithAccess(tx).compose(catalog -> {
+                    List<String> keys = new ArrayList<>();
+                    for (int i = 0; i < 2; i++) {
+                        IgEntry e = entries.get(i);
+                        Optional<String> concrete = concreteFor(catalog, caller, e, series.get(i));
+                        if (concrete.isEmpty()) {
+                            String label = e.latest() ? e.igPackageId() : e.igPackageId() + "#" + e.igPackageVersion();
+                            return Future.failedFuture(new ProblemException(404, "package-not-found",
+                                    "IG package " + label + " is not stored. Register it first via /igs/upload or /igs/register"));
+                        }
+                        keys.add(e.igPackageId() + "#" + concrete.get());
+                    }
+                    String keyA = keys.get(0);
+                    String keyB = keys.get(1);
+                    String key = keyA + nzi.fhir.validator.core.validator.SnapshotKey.MEMBER_SEPARATOR + keyB;
+                    if (key.length() > nzi.fhir.validator.core.validator.SnapshotKey.MAX_KEY_LENGTH) {
+                        return Future.failedFuture(new ProblemException(400, "invalid-request", PAIR_KEY_TOO_LONG));
+                    }
+                    return checkFhirVersion(tx, fhirVersion, first.igPackageId(), keyA.substring(keyA.indexOf('#') + 1))
+                            .compose(v -> checkFhirVersion(tx, fhirVersion, second.igPackageId(), keyB.substring(keyB.indexOf('#') + 1)))
+                            .compose(v -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion))
+                            .compose(row -> includePairLocked(tx, caller, fhirVersion, keyA, keyB, key, row, catalog,
+                                    shareable, terminology, warnings));
+                }))
+                .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
+                                () -> warnings.add(STILL_APPLYING_WARNING))
+                        .recover(err -> {
+                            logger.warn("Included IGs {} and {} in {} are committed but not applied locally yet",
+                                    first.igPackageId(), second.igPackageId(), fhirVersion, err);
+                            warnings.add(NOT_APPLIED_WARNING);
+                            return Future.succeededFuture();
+                        })
+                        .map(v -> result.put("warnings", new JsonArray(warnings))))
+                .onSuccess(r -> logger.info("Included two-IG context {} in {} (aliases {}, revision {}, owner {}, shareable {}) by {}",
+                        r.getJsonObject("key").getString("igPackage"), fhirVersion, r.getJsonArray("aliases"),
+                        r.getLong("revision"), r.getString("owner"), r.getBoolean("shareable"), caller.label()));
+    }
+
+    /** The steps of {@link #includePair} that run with the version's configuration row locked. */
+    private Future<JsonObject> includePairLocked(SqlClient tx, Caller caller, SupportedFhirVersion fhirVersion,
+                                                 String keyA, String keyB, String key,
+                                                 ConfigRevisionRepository.ConfigRow row, CatalogWithAccess catalog,
+                                                 Optional<Boolean> shareable,
+                                                 Optional<nzi.fhir.validator.core.terminology.TerminologySettings> terminology,
+                                                 List<String> warnings) {
+        // U1: the alias index of the committed state, read under the lock (never the published in-memory one).
+        nzi.fhir.validator.core.validator.ContextAliases aliases =
+                nzi.fhir.validator.core.validator.ContextAliases.of(row.included());
+        Optional<String> existingKey = aliases.pair(keyA, keyB);
+        UUID contextOwner = existingKey.map(k -> row.access().get(k).owner()).orElse(caller.orgId());
+        java.util.function.Predicate<String> selectable = p -> AccessPolicy.selectableFor(contextOwner, catalog.access().get(p));
+        List<String> members = List.of(keyA, keyB);
+        DependencyResolver.Resolution resolution = DependencyResolver.resolve(members, catalog.catalog(), selectable);
+        for (String p : resolution.resolved()) {
+            Access a = catalog.access().get(p);
+            if (!members.contains(p) && a != null && !AccessPolicy.canUse(caller, a)) {
+                return Future.failedFuture(ProblemException.dependencyUnavailable());
+            }
+        }
+        if (existingKey.isPresent()) {
+            // FR-008: the same two IG versions, in either order, are included once; report the existing context.
+            String existing = existingKey.get();
+            Access access = row.access().get(existing);
+            if (!AccessPolicy.canUse(caller, access)) {
+                return Future.failedFuture(new ProblemException(404, "package-not-found", "IG packages " + key
+                        + " are not stored. Register them first via /igs/upload or /igs/register"));
+            }
+            if (shareable.isPresent() && shareable.get() != access.shareable() && caller.owns(access.owner())) {
+                warnings.add(ALREADY_INCLUDED_WARNING);
+            }
+            if (terminology.isPresent() && !terminology.get().equals(row.terminologyOf(existing))) {
+                warnings.add(TERMINOLOGY_IGNORED_WARNING);
+            }
+            return Future.succeededFuture(includeResult(fhirVersion, existing, row.revision(), row.included(),
+                    ResolvedPackages.of(existing, resolution), access, row.terminologyOf(existing)));
+        }
+        Optional<String> firstTaken = aliases.firstMemberOwner(keyA);
+        if (firstTaken.isPresent()) {
+            Access other = row.access().get(firstTaken.get());
+            return Future.failedFuture(ProblemException.aliasConflict(keyA,
+                    AccessPolicy.canUse(caller, other) ? firstTaken.get() : null, fhirVersion));
+        }
+        // FR-006, FR-006a: conflicts between the two trees, each resolved alone.
+        List<DependencyResolver.Conflict> conflicts = DependencyResolver.conflicts(keyA, keyB, catalog.catalog(), selectable);
+        List<JsonObject> refused = new ArrayList<>();
+        Set<String> exemptNames = new java.util.HashSet<>();
+        for (DependencyResolver.Conflict c : conflicts) {
+            boolean visible = c.versions().values().stream()
+                    .allMatch(ver -> AccessPolicy.canUse(caller, catalog.access().get(c.packageName() + "#" + ver)));
+            if (!visible) {
+                return Future.failedFuture(ProblemException.dependencyUnavailable());
+            }
+            if (c.exempt()) {
+                exemptNames.add(c.packageName());
+            } else {
+                refused.add(new JsonObject().put("package", c.packageName()).put("versions", new JsonObject(new java.util.LinkedHashMap<>(
+                        Map.of(keyA, c.versions().get(keyA), keyB, c.versions().get(keyB))))));
+            }
+        }
+        if (!refused.isEmpty()) {
+            return Future.failedFuture(ProblemException.dependencyConflict(refused));
+        }
+        for (String w : resolution.warnings()) {
+            if (exemptNames.stream().noneMatch(n -> w.startsWith("Package " + n + " is required in versions"))) {
+                warnings.add(w);
+            }
+        }
+        for (DependencyResolver.Conflict c : conflicts) {
+            warnings.add("Package " + c.packageName() + " is required in versions " + c.versions().get(keyA) + " (" + keyA
+                    + ") and " + c.versions().get(keyB) + " (" + keyB + "); using " + c.highest());
+        }
+        nzi.fhir.validator.core.terminology.TerminologySettings txSettings =
+                terminology.orElse(nzi.fhir.validator.core.terminology.TerminologySettings.NONE);
+        try {
+            txAllowlist.current().require(txSettings, fhirVersion);
+        } catch (ProblemException e) {
+            return Future.failedFuture(e);
+        }
+        boolean share = shareable.orElse(true);
+        if (!share && !caller.system()) {
+            for (String m : members) {
+                Access pkg = catalog.access().get(m);
+                if (!caller.owns(pkg == null ? null : pkg.owner())) {
+                    return Future.failedFuture(new ProblemException(400, "invalid-request", PRIVATE_PAIR_REFUSED));
+                }
+            }
+        }
+        Set<String> included = new TreeSet<>(row.included());
+        included.add(key);
+        List<String> includedList = List.copyOf(included);
+        Access contextAccess = new Access(caller.orgId(), caller.orgShortName(), share);
+        List<String> resolved = resolution.resolved();
+        List<String> sharedNow = resolved.stream().filter(p -> sharedPackage.test(fhirVersion, p)).toList();
+        List<String> unshared = resolved.stream().filter(p -> !sharedNow.contains(p)).toList();
+        return PostgresPackageCacheManager.expandedBytes(tx, unshared)
+                .compose(bytes -> PostgresPackageCacheManager.expandedBytes(tx, sharedNow)
+                        .compose(sharedBytes -> admitBuild.apply(bytes,
+                                nzi.fhir.validator.core.validator.HeapBudget.sharedBytes(sharedBytes))))
+                .compose(v -> ConfigRevisionRepository.updateIgSet(tx, fhirVersion, includedList, key,
+                        ConfigRevisionRepository.KIND_IG, caller.orgId(), share, txSettings))
+                .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolved, contextAccess, txSettings));
+    }
+
+    /** The resolved package list reported for an already included context (its members are always listed). */
+    private static final class ResolvedPackages {
+        static List<String> of(String key, DependencyResolver.Resolution resolution) {
+            List<String> list = new ArrayList<>(resolution.resolved());
+            for (String m : nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key)) {
+                if (!list.contains(m)) {
+                    list.add(m);
+                }
+            }
+            list.sort(null);
+            return List.copyOf(list);
+        }
+    }
+
+    /**
+     * The concrete version of {@code entry} among the stored versions {@code caller} may use: an exact version, the
+     * highest ({@code latest} or absent), or the highest match of a version series (spec 006 FR-011). No registry.
+     */
+    private static Optional<String> concreteFor(CatalogWithAccess catalog, Caller caller, IgEntry entry, VersionSeries series) {
+        String name = entry.igPackageId();
+        List<String> visible = catalog.catalog().versions(name).stream()
+                .filter(v -> AccessPolicy.canUse(caller, catalog.access().get(name + "#" + v)))
+                .toList();
+        return series != null ? series.highest(visible)
+                : entry.latest() ? PackageVersionComparator.max(visible)
+                : visible.contains(entry.igPackageVersion()) ? Optional.of(entry.igPackageVersion()) : Optional.empty();
     }
 
     /**
@@ -316,22 +550,21 @@ public class IgPackageService {
      * organisation; anyone else gets the "not included" answer (spec 005 FR-018).
      */
     public Future<JsonObject> exclude(Caller caller, SupportedFhirVersion fhirVersion, String ig) {
-        nzi.fhir.validator.core.validator.IgReference ref;
+        nzi.fhir.validator.core.validator.IgRequest ref;
         try {
-            ref = nzi.fhir.validator.core.validator.IgReference.parse(ig);
+            ref = exactRequest(ig, "An exact name#version is required to exclude an IG");
         } catch (ProblemException e) {
             return Future.failedFuture(e);
         }
-        if (ref.version() == null) {
-            return Future.failedFuture(new ProblemException(400, "invalid-request",
-                    "An exact name#version is required to exclude an IG"));
-        }
-        String key = ref.label();
         List<String> warnings = new ArrayList<>();
+        String[] stored = new String[1];
         return pgPool.withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
-                    if (!row.included().contains(key) || !(caller.system() || caller.owns(row.access().get(key).owner()))) {
-                        return Future.failedFuture(notIncluded(key, fhirVersion));
+                    // Spec 012 FR-017: a two-IG context by its key or reversed pair; a single value only a single-IG one.
+                    String key = canonicalKey(row, ref);
+                    if (key == null || !(caller.system() || caller.owns(row.access().get(key).owner()))) {
+                        return Future.failedFuture(notIncluded(ref.label(), fhirVersion));
                     }
+                    stored[0] = key;
                     List<String> remaining = row.included().stream().filter(p -> !p.equals(key)).sorted().toList();
                     return ConfigRevisionRepository.updateIgSet(tx, fhirVersion, remaining, key,
                                     ConfigRevisionRepository.KIND_IG_EXCLUDE)
@@ -345,18 +578,46 @@ public class IgPackageService {
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_APPLYING_WARNING))
                         .recover(err -> {
-                            logger.warn("Excluded IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
+                            logger.warn("Excluded IG {} in {} is committed but not applied locally yet", stored[0], fhirVersion, err);
                             warnings.add(NOT_APPLIED_WARNING);
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
-                .onSuccess(r -> logger.info("Excluded IG {} in {} (revision {}) by {}", key, fhirVersion, r.getLong("revision"),
+                .onSuccess(r -> logger.info("Excluded IG {} in {} (revision {}) by {}", stored[0], fhirVersion, r.getLong("revision"),
                         caller.label()));
     }
 
     private static ProblemException notIncluded(String key, SupportedFhirVersion fhirVersion) {
         return new ProblemException(404, ProblemException.TYPE_PACKAGE_NOT_FOUND,
-                "IG package " + key + " is not included for " + fhirVersion.name());
+                (nzi.fhir.validator.core.validator.SnapshotKey.isCombined(key) ? "IG packages " + key + " are"
+                        : "IG package " + key + " is") + " not included for " + fhirVersion.name());
+    }
+
+    /**
+     * The {@code ig} value of PATCH/DELETE (and the CLI): one exact {@code name#version}, or a two-IG
+     * {@code A#a|B#b} (spec 012 FR-017).
+     *
+     * @throws ProblemException 400 for a malformed value or a single IG without an exact version
+     */
+    static nzi.fhir.validator.core.validator.IgRequest exactRequest(String ig, String needsVersion) {
+        nzi.fhir.validator.core.validator.IgRequest ref = nzi.fhir.validator.core.validator.IgRequest.parse(ig);
+        if (ref instanceof nzi.fhir.validator.core.validator.IgReference single && single.version() == null) {
+            throw new ProblemException(400, "invalid-request", needsVersion);
+        }
+        return ref;
+    }
+
+    /**
+     * The stored key {@code ref} addresses in {@code row} (spec 012 FR-017), or {@code null}: a pair is the key itself
+     * or its reversed order; a single {@code name#version} is only ever a single-IG context, never the first-IG alias.
+     */
+    public static String canonicalKey(ConfigRevisionRepository.ConfigRow row, nzi.fhir.validator.core.validator.IgRequest ref) {
+        if (ref instanceof nzi.fhir.validator.core.validator.IgPair pair) {
+            return nzi.fhir.validator.core.validator.ContextAliases.of(row.included())
+                    .pair(pair.first().label(), pair.second().label()).orElse(null);
+        }
+        String key = ref.label();
+        return row.included().contains(key) && !nzi.fhir.validator.core.validator.SnapshotKey.isCombined(key) ? key : null;
     }
 
     /**
@@ -386,34 +647,32 @@ public class IgPackageService {
      */
     public Future<JsonObject> changeSnapshotAccess(Caller caller, SupportedFhirVersion fhirVersion, String ig,
                                                    AccessChange change) {
-        nzi.fhir.validator.core.validator.IgReference ref;
+        nzi.fhir.validator.core.validator.IgRequest ref;
         try {
-            ref = nzi.fhir.validator.core.validator.IgReference.parse(ig);
+            ref = exactRequest(ig, "An exact name#version is required to change an included IG");
         } catch (ProblemException e) {
             return Future.failedFuture(e);
         }
-        if (ref.version() == null) {
-            return Future.failedFuture(new ProblemException(400, "invalid-request",
-                    "An exact name#version is required to change an included IG"));
-        }
-        String key = ref.label();
         List<String> warnings = new ArrayList<>();
+        String[] stored = new String[1];
         return pgPool.withTransaction(tx -> ConfigRevisionRepository.lockForUpdate(tx, fhirVersion).compose(row -> {
-                    Access current = row.included().contains(key) ? row.access().get(key) : null;
+                    String key = canonicalKey(row, ref);
+                    Access current = key == null ? null : row.access().get(key);
                     if (current == null || !(caller.system() || caller.owns(current.owner()))) {
-                        return Future.failedFuture(notIncluded(key, fhirVersion));
+                        return Future.failedFuture(notIncluded(ref.label(), fhirVersion));
                     }
+                    stored[0] = key;
                     if (change.transfers() && !caller.system()) {
                         return Future.failedFuture(ProblemException.transferForbidden());
                     }
                     if (change.invalid() != null) {
                         return Future.failedFuture(new ProblemException(400, "invalid-request", change.invalid()));
                     }
+                    // Spec 012: a private two-IG context needs ownership of both IG packages.
                     Future<Void> privateAllowed = change.shareable().orElse(true) || caller.system()
                             ? Future.succeededFuture()
-                            : packageAccess(tx, ref.name(), ref.version()).compose(pkg -> pkg.isPresent() && caller.owns(pkg.get().owner())
-                            ? Future.succeededFuture()
-                            : Future.failedFuture(new ProblemException(400, "invalid-request", PRIVATE_CONTEXT_REFUSED)));
+                            : ownsAll(tx, caller, nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key),
+                            nzi.fhir.validator.core.validator.SnapshotKey.isCombined(key) ? PRIVATE_PAIR_REFUSED : PRIVATE_CONTEXT_REFUSED);
                     // Spec 007 FR-003, FR-010 a, FR-012a: a terminology setting is checked against the allowlist after the
                     // body checks (contracts §3); setting the same value again changes nothing.
                     Optional<nzi.fhir.validator.core.terminology.TerminologySettings> newTerminology = change.terminology()
@@ -444,14 +703,26 @@ public class IgPackageService {
                 .compose(result -> LocalApplyWait.await(vertx, applyLocally.apply(fhirVersion), localApplyWaitMs,
                                 () -> warnings.add(STILL_PROPAGATING_WARNING))
                         .recover(err -> {
-                            logger.warn("Access change of IG {} in {} is committed but not applied locally yet", key, fhirVersion, err);
+                            logger.warn("Access change of IG {} in {} is committed but not applied locally yet", stored[0], fhirVersion, err);
                             warnings.add(NOT_APPLIED_WARNING);
                             return Future.succeededFuture();
                         })
                         .map(v -> result.put("warnings", new JsonArray(warnings))))
-                .onSuccess(r -> logger.info("Changed IG {} in {} (owner {}, shareable {}, terminology {}, revision {}) by {}", key,
+                .onSuccess(r -> logger.info("Changed IG {} in {} (owner {}, shareable {}, terminology {}, revision {}) by {}", stored[0],
                         fhirVersion, r.getString("owner"), r.getBoolean("shareable"),
                         r.getJsonObject("terminology").getString("mode"), r.getLong("revision"), caller.label()));
+    }
+
+    /** Succeeds when {@code caller} owns every package in {@code members} ({@code name#version}), else 400 {@code refusal}. */
+    private Future<Void> ownsAll(SqlClient tx, Caller caller, List<String> members, String refusal) {
+        Future<Void> all = Future.succeededFuture();
+        for (String m : members) {
+            int hash = m.indexOf('#');
+            all = all.compose(v -> packageAccess(tx, m.substring(0, hash), m.substring(hash + 1)).compose(pkg ->
+                    pkg.isPresent() && caller.owns(pkg.get().owner()) ? Future.<Void>succeededFuture()
+                            : Future.<Void>failedFuture(new ProblemException(400, "invalid-request", refusal))));
+        }
+        return all;
     }
 
     /**

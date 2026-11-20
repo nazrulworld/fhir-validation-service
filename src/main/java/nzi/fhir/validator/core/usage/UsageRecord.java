@@ -33,7 +33,7 @@ public record UsageRecord(String requestId, Instant startedAt, UUID apiKeyId, St
         requestId = cut(requestId, 64);
         apiKeyName = cut(apiKeyName, 64);
         fhirVersion = cut(fhirVersion, 16);
-        ig = cut(ig, 192);
+        ig = cut(ig, 256); // V17 (spec 012): a two-IG key A#a|B#b is up to 256 characters
         contentType = cut(contentType, 16);
         outcome = cut(outcome, 32);
         txMode = cut(txMode, 16);
