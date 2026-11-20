@@ -167,7 +167,7 @@ Single Maven project. `main/` = `src/main/java/nzi/fhir/validator/`, `test/` = `
 - [X] T045 [P] k6 comparison of single-IG validation against 1.1.0 with `perf/compare-run.sh` (hot path changed in `IgReference`); record p95 and the build time and heap of one combined context in `perf/results-1.2.0.md`
 - [X] T046 [P] `CHANGELOG.md` `[Unreleased]` → 1.2.0 entry: Added (multi-IG contexts, aliases, `igPackages`, pair `ig`, new problem types), Changed (column widths, V17); bump `pom.xml` `<version>` to `1.2.0`
 - [X] T047 [P] README section "Validating against two IGs" (include body, `ig` pair form with `%7C`, alias rules, conflicts) in `README.md`
-- [ ] T048 [P] Add `dependency-conflict` (400) and `alias-conflict` (409) rows, in the `<a id="<type>"></a>` form, to the API Documentation wiki problem-type table so `scripts/build-docs-site.py` publishes `/problems/<type>` (spec 011); run `scripts/tests/docs-site/test_problem_redirects.py`
+- [X] T048 [P] Add `dependency-conflict` (400) and `alias-conflict` (409) rows, in the `<a id="<type>"></a>` form, to the API Documentation wiki problem-type table so `scripts/build-docs-site.py` publishes `/problems/<type>` (spec 011); run `scripts/tests/docs-site/test_problem_redirects.py`
 - [X] T049 Run every scenario in `specs/012-multi-ig-validator-contexts/quickstart.md` and `mvn verify`; fix any blocked-thread warning — done as automated equivalents: every quickstart scenario is covered by `MultiIg*IT`/contract tests; final `mvn verify` 936 tests, 0 failures, no blocked-thread warnings (2026-11-20)
 
 ---
