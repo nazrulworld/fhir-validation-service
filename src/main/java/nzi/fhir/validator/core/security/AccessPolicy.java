@@ -97,7 +97,12 @@ public final class AccessPolicy {
             return true;
         }
         Access context = pinned == null ? null : pinned.get(key.igPackage());
-        if (context == null && !key.isCombined()) {
+        if (context == null && key.isCombined()) {
+            // As canUseContext: a two-IG context has no package access of its own, so without its pinned access (not
+            // included, or not yet applied) its sharing is unknown and it is never listed.
+            return false;
+        }
+        if (context == null) {
             context = view.access(key.igPackage());
         }
         if (context != null && !context.shareable()) {

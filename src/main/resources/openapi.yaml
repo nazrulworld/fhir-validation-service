@@ -316,7 +316,8 @@ paths:
         changes nothing and reports the existing context. Every check above applies to each IG and each dependency.
         When the two IGs need different versions of the same package the include is refused with 400
         dependency-conflict (extension `conflicts`), except packages whose name starts with `hl7.terminology` or
-        `hl7.fhir.uv.extensions`: the highest version is used and named in `warnings`. A conflict involving a
+        `hl7.fhir.uv.extensions`: the highest version is used and named in `warnings` (dependencies only; an IG
+        named in igPackages is never replaced by another version, so that case is a conflict). A conflict involving a
         version the caller may not use is answered 424 without naming it. 409 alias-conflict: another two-IG context
         for this FHIR version already has the same first IG. `shareable: false` needs ownership of both IG packages.
       parameters:

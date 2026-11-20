@@ -123,9 +123,12 @@ public class ValidatorApi {
             ErrorResponder.respond(ctx, igPackageService.includePair(ApiKeyAuthHandler.caller(ctx), version,
                             entries.get(0), entries.get(1), sharingRequested, terminology)
                     .map(json -> {
+                        // By package name: an existing pair is reported in its stored order, which may be the reverse.
                         io.vertx.core.json.JsonArray members = json.getJsonArray("igPackages");
                         for (int i = 0; i < members.size(); i++) {
-                            members.getJsonObject(i).put("requestedVersion", entries.get(i).requested());
+                            JsonObject member = members.getJsonObject(i);
+                            entries.stream().filter(e -> e.igPackageId().equals(member.getString("igPackageId"))).findFirst()
+                                    .ifPresent(e -> member.put("requestedVersion", e.requested()));
                         }
                         return withWarnings(json, forced);
                     }));

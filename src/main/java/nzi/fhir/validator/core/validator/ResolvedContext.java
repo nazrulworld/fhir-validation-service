@@ -86,7 +86,10 @@ public record ResolvedContext(List<String> packages, Map<String, byte[]> hashes,
         if (!resolved.containsAll(members)) {
             resolved = new java.util.ArrayList<>(resolved);
             for (String m : members) {
-                if (!resolved.contains(m)) {
+                // A member that isn't stored is still listed (and reported missing by the build); never a second
+                // version of a package the resolution already chose (one version per package, FR-006a).
+                String name = m.substring(0, m.indexOf('#') + 1);
+                if (resolved.stream().noneMatch(p -> p.startsWith(name))) {
                     resolved.add(m);
                 }
             }

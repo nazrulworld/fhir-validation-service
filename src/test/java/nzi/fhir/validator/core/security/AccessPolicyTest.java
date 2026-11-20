@@ -192,6 +192,9 @@ class AccessPolicyTest {
         assertFalse(AccessPolicy.isPublic(PAIR, PAIR_RESOLVED, secondPrivate, pinnedPair(A_SHARED)));
         assertFalse(AccessPolicy.isPublic(PAIR, List.of("ig.a#1.0.0"), secondPrivate, pinnedPair(A_SHARED)),
                 "members count even when the resolved list misses one");
+        // Code review: as canUseContext, a two-IG key without its pinned access (excluded, or not applied yet) is
+        // never listed, whatever its packages' sharing.
+        assertFalse(AccessPolicy.isPublic(PAIR, PAIR_RESOLVED, shared, PinnedAccess.EMPTY));
     }
 
     @Test

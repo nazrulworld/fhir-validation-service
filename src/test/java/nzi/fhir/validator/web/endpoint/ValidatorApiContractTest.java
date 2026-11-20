@@ -116,17 +116,33 @@ class ValidatorApiContractTest extends BaseTestContainer {
     @Order(2)
     void includeTwoIgs(VertxTestContext ctx) {
         include(new JsonObject().put("igPackages", new JsonArray().add(entry(MULTI_A, "1.0.0")).add(entry(MULTI_B, null))))
+                .compose(r -> {
+                    ctx.verify(() -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        JsonObject body = r.bodyAsJsonObject();
+                        assertDeclaredBySchema(body, "IncludeResponse", "igPackages", "aliases");
+                        assertEquals(KEY, body.getJsonObject("key").getString("igPackage"));
+                        assertNull(body.getString("requestedVersion"), "a two-IG include has no top-level requestedVersion");
+                        JsonArray members = body.getJsonArray("igPackages");
+                        assertEquals("1.0.0", members.getJsonObject(0).getString("requestedVersion"));
+                        assertEquals("latest", members.getJsonObject(1).getString("requestedVersion"));
+                        assertEquals("2.0.0", members.getJsonObject(1).getString("igPackageVersion"));
+                        assertEquals(new JsonArray().add(B2 + "|" + A1).add(A1), body.getJsonArray("aliases"));
+                    });
+                    // Again in the reverse order: the existing context is reported in its key order, and each requested
+                    // version stays with its own package (code review).
+                    return include(new JsonObject().put("igPackages", new JsonArray().add(entry(MULTI_B, "latest"))
+                            .add(entry(MULTI_A, "1.0.0"))));
+                })
                 .onComplete(ctx.succeeding(r -> ctx.verify(() -> {
                     assertEquals(200, r.statusCode(), r.bodyAsString());
                     JsonObject body = r.bodyAsJsonObject();
-                    assertDeclaredBySchema(body, "IncludeResponse", "igPackages", "aliases");
                     assertEquals(KEY, body.getJsonObject("key").getString("igPackage"));
-                    assertNull(body.getString("requestedVersion"), "a two-IG include has no top-level requestedVersion");
                     JsonArray members = body.getJsonArray("igPackages");
+                    assertEquals(MULTI_A, members.getJsonObject(0).getString("igPackageId"));
                     assertEquals("1.0.0", members.getJsonObject(0).getString("requestedVersion"));
+                    assertEquals(MULTI_B, members.getJsonObject(1).getString("igPackageId"));
                     assertEquals("latest", members.getJsonObject(1).getString("requestedVersion"));
-                    assertEquals("2.0.0", members.getJsonObject(1).getString("igPackageVersion"));
-                    assertEquals(new JsonArray().add(B2 + "|" + A1).add(A1), body.getJsonArray("aliases"));
                     ctx.completeNow();
                 })));
     }

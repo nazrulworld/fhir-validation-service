@@ -421,6 +421,8 @@ public class IgPackageService {
                 return Future.failedFuture(ProblemException.dependencyUnavailable());
             }
         }
+        // FR-006, FR-006a: conflicts between the two trees, each resolved alone.
+        List<DependencyResolver.Conflict> conflicts = DependencyResolver.conflicts(keyA, keyB, catalog.catalog(), selectable);
         if (existingKey.isPresent()) {
             // FR-008: the same two IG versions, in either order, are included once; report the existing context.
             String existing = existingKey.get();
@@ -429,6 +431,8 @@ public class IgPackageService {
                 return Future.failedFuture(new ProblemException(404, "package-not-found", "IG packages " + key
                         + " are not stored. Register them first via /igs/upload or /igs/register"));
             }
+            // The same dependency warnings as the first include (as a repeated single-IG include reports them).
+            warnings.addAll(pairWarnings(conflicts, resolution, keyA, keyB));
             if (shareable.isPresent() && shareable.get() != access.shareable() && caller.owns(access.owner())) {
                 warnings.add(ALREADY_INCLUDED_WARNING);
             }
@@ -444,35 +448,23 @@ public class IgPackageService {
             return Future.failedFuture(ProblemException.aliasConflict(keyA,
                     AccessPolicy.canUse(caller, other) ? firstTaken.get() : null, fhirVersion));
         }
-        // FR-006, FR-006a: conflicts between the two trees, each resolved alone.
-        List<DependencyResolver.Conflict> conflicts = DependencyResolver.conflicts(keyA, keyB, catalog.catalog(), selectable);
         List<JsonObject> refused = new ArrayList<>();
-        Set<String> exemptNames = new java.util.HashSet<>();
         for (DependencyResolver.Conflict c : conflicts) {
             boolean visible = c.versions().values().stream()
                     .allMatch(ver -> AccessPolicy.canUse(caller, catalog.access().get(c.packageName() + "#" + ver)));
             if (!visible) {
                 return Future.failedFuture(ProblemException.dependencyUnavailable());
             }
-            if (c.exempt()) {
-                exemptNames.add(c.packageName());
-            } else {
-                refused.add(new JsonObject().put("package", c.packageName()).put("versions", new JsonObject(new java.util.LinkedHashMap<>(
-                        Map.of(keyA, c.versions().get(keyA), keyB, c.versions().get(keyB))))));
+            if (!c.exempt() || memberSuperseded(c, members)) {
+                // In include order (A first), the same on every instance.
+                JsonObject versions = new JsonObject().put(keyA, c.versions().get(keyA)).put(keyB, c.versions().get(keyB));
+                refused.add(new JsonObject().put("package", c.packageName()).put("versions", versions));
             }
         }
         if (!refused.isEmpty()) {
             return Future.failedFuture(ProblemException.dependencyConflict(refused));
         }
-        for (String w : resolution.warnings()) {
-            if (exemptNames.stream().noneMatch(n -> w.startsWith("Package " + n + " is required in versions"))) {
-                warnings.add(w);
-            }
-        }
-        for (DependencyResolver.Conflict c : conflicts) {
-            warnings.add("Package " + c.packageName() + " is required in versions " + c.versions().get(keyA) + " (" + keyA
-                    + ") and " + c.versions().get(keyB) + " (" + keyB + "); using " + c.highest());
-        }
+        warnings.addAll(pairWarnings(conflicts, resolution, keyA, keyB));
         nzi.fhir.validator.core.terminology.TerminologySettings txSettings =
                 terminology.orElse(nzi.fhir.validator.core.terminology.TerminologySettings.NONE);
         try {
@@ -505,12 +497,42 @@ public class IgPackageService {
                 .map(revision -> includeResult(fhirVersion, key, revision, includedList, resolved, contextAccess, txSettings));
     }
 
+    /**
+     * Whether the exempt conflict {@code c} would replace one of the pair's own IGs with a higher version the other IG
+     * needs. The IGs named in the key are always in the context, so this is a conflict like any other (FR-006: an IG's
+     * own version differing from the version the other IG depends on is a conflict); FR-006a exempts dependencies.
+     */
+    private static boolean memberSuperseded(DependencyResolver.Conflict c, List<String> members) {
+        String highest = c.packageName() + "#" + c.highest();
+        return members.stream().anyMatch(m -> m.startsWith(c.packageName() + "#") && !m.equals(highest));
+    }
+
+    /**
+     * The include warnings of a pair: the resolver's, except its duplicate-version warning for an exempt package, which
+     * is replaced by one naming the version each IG needs and the version used (FR-006a).
+     */
+    private static List<String> pairWarnings(List<DependencyResolver.Conflict> conflicts,
+                                             DependencyResolver.Resolution resolution, String keyA, String keyB) {
+        List<String> warnings = new ArrayList<>();
+        for (String w : resolution.warnings()) {
+            if (conflicts.stream().noneMatch(c -> w.startsWith("Package " + c.packageName() + " is required in versions"))) {
+                warnings.add(w);
+            }
+        }
+        for (DependencyResolver.Conflict c : conflicts) {
+            warnings.add("Package " + c.packageName() + " is required in versions " + c.versions().get(keyA) + " (" + keyA
+                    + ") and " + c.versions().get(keyB) + " (" + keyB + "); using " + c.highest());
+        }
+        return warnings;
+    }
+
     /** The resolved package list reported for an already included context (its members are always listed). */
     private static final class ResolvedPackages {
         static List<String> of(String key, DependencyResolver.Resolution resolution) {
             List<String> list = new ArrayList<>(resolution.resolved());
             for (String m : nzi.fhir.validator.core.validator.SnapshotKey.membersOf(key)) {
-                if (!list.contains(m)) {
+                String name = m.substring(0, m.indexOf('#') + 1);
+                if (list.stream().noneMatch(p -> p.startsWith(name))) {
                     list.add(m);
                 }
             }
