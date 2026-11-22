@@ -17,7 +17,7 @@ up-cluster:
 up-obs:
 	docker compose --profile observability up -d
 
-## Add pgAdmin (http://127.0.0.1:5050); needs PGADMIN_DEFAULT_EMAIL and PGADMIN_DEFAULT_PASSWORD in .env
+## Add pgAdmin (http://127.0.0.1:5050); login admin@example.org / admin unless PGADMIN_DEFAULT_* set in .env
 up-admin:
 	docker compose --profile admin up -d
 

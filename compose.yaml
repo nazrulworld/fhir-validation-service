@@ -98,13 +98,13 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # --- profile: admin — pgAdmin on 127.0.0.1:5050 (credentials required, no defaults) -----------------------
+  # --- profile: admin — pgAdmin on 127.0.0.1:5050 (defaults admin@example.org / admin; override in .env) -------
   pgadmin:
     image: dpage/pgadmin4:9.19.0
     profiles: [admin]
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?set PGADMIN_DEFAULT_EMAIL in .env}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?set PGADMIN_DEFAULT_PASSWORD in .env}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
     ports:
       - "127.0.0.1:5050:80"
     volumes:
