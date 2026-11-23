@@ -46,9 +46,9 @@ class ServiceSettingsRepositoryIT extends BaseTestContainer {
                     ctx.verify(() -> assertEquals(Optional.empty(), none, "V15 seeds no row"));
                     return pool.withTransaction(tx -> ServiceSettingsRepository.upsert(tx, ACL_SECURITY, "disabled", "host-a"));
                 })
-                .compose(v -> pool.query("SELECT value, updated_by, updated_at FROM fhir_validator_schema.service_settings").execute())
+                .compose(v -> pool.query("SELECT value, updated_by, updated_at FROM fhir_validator_schema.service_settings WHERE name = 'acl_security'").execute())
                 .compose(first -> pool.withTransaction(tx -> ServiceSettingsRepository.upsert(tx, ACL_SECURITY, "enabled", "host-b"))
-                        .compose(v -> pool.query("SELECT value, updated_by, updated_at FROM fhir_validator_schema.service_settings").execute())
+                        .compose(v -> pool.query("SELECT value, updated_by, updated_at FROM fhir_validator_schema.service_settings WHERE name = 'acl_security'").execute())
                         .map(second -> {
                             ctx.verify(() -> {
                                 assertEquals(1, second.size());

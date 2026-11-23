@@ -56,6 +56,9 @@ public class HttpVerticle extends AbstractVerticle {
                     routerBuilder.rootHandler(nzi.fhir.validator.core.security.ClientAddress.handler(services.config().trustedProxies(),
                             services.config().forwardedHeader()));
                     routerBuilder.rootHandler(services.auth().rootHandler());
+                    // Spec 014 (research R1): rate limits right after authentication, before the usage fallback, contract
+                    // validation and parsing; only while access control is enabled (FR-002).
+                    services.throttle().ifPresent(t -> routerBuilder.rootHandler(new ThrottleHandler(t)));
                     // Spec 008 (convergence T076): authorised validate requests the router refuses still get a usage record.
                     routerBuilder.rootHandler(services.validationApi().usageFallbackHandler());
                     routerBuilder.rootHandler(new AdminAdmissionHandler(services.adminAdmission()));

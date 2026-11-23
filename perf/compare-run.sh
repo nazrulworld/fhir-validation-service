@@ -37,6 +37,19 @@ for i in $(seq 1 300); do
 done
 if [ $ready != 1 ]; then echo "$LABEL: not ready"; docker logs --tail 40 $SVC; exit 1; fi
 
+# Spec 014 (1.4.0+): THROTTLE_CAP=<n> sets the trial key's, the trial organisation's and the default caps to n before the
+# run (e.g. 1000000 so nothing is refused, or a low value to measure 429 throughput). Unset: the shipped caps (the trial
+# key is limited to 30 a minute). Leave it unset for images before 1.4.0, which have no caps.
+if [ -n "${THROTTLE_CAP:-}" ]; then
+  docker exec $PG psql -U postgres -d fhir_validator -v ON_ERROR_STOP=1 -qc "
+    UPDATE fhir_validator_schema.api_keys SET rate_limit_per_minute = $THROTTLE_CAP WHERE name = 'trial validator';
+    UPDATE fhir_validator_schema.organisations SET rate_limit_per_minute = $THROTTLE_CAP WHERE name_short = 'trial';
+    UPDATE fhir_validator_schema.service_settings SET value = '$THROTTLE_CAP'
+      WHERE name IN ('throttle_default_key_per_minute', 'throttle_default_org_per_minute');" \
+    || { echo "$LABEL: setting THROTTLE_CAP failed"; exit 1; }
+  sleep 11   # FV_THROTTLE_CAPS_REFRESH_MS (10 s) + one sync interval
+fi
+
 memory() {  # the container's memory in use, and the service's estimate of the heap its package sets hold (R4)
   echo "container $(docker stats --no-stream --format '{{.MemUsage}}' $SVC)"
   curl -fsS http://127.0.0.1:18880/metrics | grep -E '^fv_packages_shared_(retained_estimate|expanded)_bytes\{fhir_version="R4"'
@@ -82,6 +95,7 @@ K6=(docker run --rm --network $NET -v "$REPO":/work -w /work/perf grafana/k6:0.5
 mv "$REPO/target/perf-$LABEL.json" "$OUT/$LABEL.json"
 
 curl -fsS http://127.0.0.1:18880/metrics > "$OUT/$LABEL.metrics.txt" 2>/dev/null
+grep -E '^fv_throttle_refused_total' "$OUT/$LABEL.metrics.txt" > "$OUT/$LABEL.refused.txt" 2>/dev/null || true
 if [ "$SINK" = "db" ]; then
   sleep 2
   docker exec $PG psql -U postgres -d fhir_validator -tAc \

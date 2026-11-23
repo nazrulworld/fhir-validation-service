@@ -328,7 +328,9 @@ class MigrationUpgradeIT extends BaseTestContainer {
             st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'a.ig#1.0.0')");
             assertEquals(List.of("true|"), column(c, "SELECT is_active || '|' || coalesce(inactive_reason, '') FROM " + S
                     + ".fhir_validator_snapshots"));
-            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".service_settings"));
+            // Spec 014: V18 seeds the two rate-limit defaults; no other setting is stored by the migrations.
+            assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".service_settings "
+                    + "WHERE name NOT IN ('throttle_default_key_per_minute', 'throttle_default_org_per_minute')"));
             assertThrows(SQLException.class, () -> st.execute("UPDATE " + S
                     + ".fhir_validator_snapshots SET is_active = false WHERE ig_package = 'a.ig#1.0.0'"), "inactive needs a reason");
             assertThrows(SQLException.class, () -> st.execute("UPDATE " + S

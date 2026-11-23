@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 1.3.0
+  version: 1.4.0
 
 servers:
   - url: http://localhost:8880
@@ -131,6 +131,10 @@ paths:
         re-check within one second), the response is the last attempt's result as the engine reports it: the timeout
         stays an issue with the engine's severity, the status is 200 and the headers are those of any validation. A
         re-check never changes the status code and is never answered with 503.
+        Rate limits (spec 014): requests are limited per API key and per organisation, as validation requests per
+        rolling minute (operator configured). Responses to a limited key carry RateLimit-Limit, RateLimit-Remaining and
+        RateLimit-Reset (also on 4xx and 5xx responses); above the cap the answer is 429 rate-limited with Retry-After.
+        Keys of the system organisation, and every request while access control is disabled, are not limited.
       parameters:
         - name: version
           in: path
@@ -245,6 +249,12 @@ paths:
               schema:
                 type: string
                 enum: [request, context]
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
           content:
             application/json:
               schema:
@@ -282,6 +292,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/Problem'
         '503':
@@ -825,7 +837,58 @@ components:
         reports `security.aclSecurity`. In this mode packages and validator contexts are always stored as shareable:
         `shareable: false` is ignored with a warning.
 
+  headers:
+    RetryAfter:
+      description: Seconds to wait before a retry of this request can be admitted.
+      schema:
+        type: integer
+        minimum: 1
+    RateLimitLimit:
+      description: >-
+        The per-minute validation cap that currently leaves the least allowance for this API key (its own cap or its
+        organisation's). Not sent for keys that are not rate limited.
+      schema:
+        type: integer
+        minimum: 1
+    RateLimitRemaining:
+      description: >-
+        Validation requests still allowed in the current rolling 60-second window, after this request. Approximate
+        when the service runs as several instances.
+      schema:
+        type: integer
+        minimum: 0
+    RateLimitReset:
+      description: Seconds until the allowance next grows.
+      schema:
+        type: integer
+        minimum: 0
   responses:
+    TooManyRequests:
+      description: >-
+        rate-limited: the API key's or its organisation's per-minute validation cap was reached (spec 014). Nothing
+        was validated and the request does not count towards any cap. Retry after the Retry-After seconds.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        RateLimit-Limit:
+          $ref: '#/components/headers/RateLimitLimit'
+        RateLimit-Remaining:
+          $ref: '#/components/headers/RateLimitRemaining'
+        RateLimit-Reset:
+          $ref: '#/components/headers/RateLimitReset'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: rate-limited
+            title: Too many requests
+            status: 429
+            detail: "This API key's rate limit of 30 validation requests per minute was reached; retry after 12 s"
+            scope: key
+            limit: 30
+            retryAfterSeconds: 12
+            correlationId: 3f0c6f0e-8c1e-4b7a-9d55-0d2f6c1b9a10
     Unauthorized:
       description: >-
         unauthorized: no valid API key was sent (missing, malformed, unknown, revoked or expired). The response doesn't
@@ -940,6 +1003,16 @@ components:
           description: Present only for type unknown-profile (see UnknownProfileProblem)
           items:
             type: string
+        scope:
+          type: string
+          enum: [key, organisation]
+          description: Present only for type rate-limited (spec 014) - which cap was reached
+        limit:
+          type: integer
+          description: Present only for type rate-limited (spec 014) - the per-minute cap that was reached
+        retryAfterSeconds:
+          type: integer
+          description: Present only for type rate-limited (spec 014) - the same value as the Retry-After header
 
     UnknownProfileProblem:
       description: >-

@@ -49,6 +49,7 @@ public final class ErrorResponder {
             Map.entry("payload-too-large", "Payload too large"),
             Map.entry("overloaded", "Overloaded"),
             Map.entry("not-ready", "Not ready"),
+            Map.entry("rate-limited", "Too many requests"),
             Map.entry("internal-error", "Internal error"));
 
     private static final Map<Integer, String> DEFAULT_TYPES = Map.of(

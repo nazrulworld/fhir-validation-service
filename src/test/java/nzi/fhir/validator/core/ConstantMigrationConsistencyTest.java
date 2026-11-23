@@ -43,6 +43,28 @@ class ConstantMigrationConsistencyTest {
         }
     }
 
+    /** Spec 014 (FR-015): V18 seeds the initial caps with the constant values and ids. */
+    @Test
+    void v18SeedsTheInitialCaps() throws IOException {
+        String sql;
+        try (InputStream in = getClass().getResourceAsStream("/db/migration/V18__validation_rate_limits.sql")) {
+            assertNotNull(in, "V18 is on the classpath");
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        String settings = nzi.fhir.validator.core.settings.ServiceSettingsRepository.THROTTLE_DEFAULT_KEY;
+        String orgSettings = nzi.fhir.validator.core.settings.ServiceSettingsRepository.THROTTLE_DEFAULT_ORG;
+        assertTrue(sql.contains("('" + settings + "', '" + Constant.THROTTLE_DEFAULT_KEY_PER_MINUTE + "'"), "default key cap");
+        assertTrue(sql.contains("('" + orgSettings + "', '" + Constant.THROTTLE_DEFAULT_ORG_PER_MINUTE + "'"), "default org cap");
+        assertTrue(sql.contains("SET rate_limit_per_minute = " + Constant.TRIAL_ORG_RATE_LIMIT_PER_MINUTE + "\nWHERE id = '"
+                + Constant.TRIAL_ORG_ID + "'"), "trial organisation cap");
+        assertTrue(sql.contains("SET rate_limit_per_minute = " + Constant.TRIAL_ORG_VALIDATOR_API_KEY_RATE_LIMIT_PER_MINUTE
+                + "\nWHERE id = '" + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'"), "trial validator key cap");
+        for (String literal : List.of("'" + Constant.SYSTEM_ORG_ID + "'", "BETWEEN 1 AND " + Constant.RATE_LIMIT_MAX_PER_MINUTE,
+                "value::int <= " + Constant.RATE_LIMIT_MAX_PER_MINUTE)) {
+            assertTrue(sql.contains(literal), "V18 contains " + literal);
+        }
+    }
+
     @Test
     void parsedFormsMatchTheStrings() {
         assertTrue(Constant.SYSTEM_ORG_UUID.toString().equals(Constant.SYSTEM_ORG_ID));

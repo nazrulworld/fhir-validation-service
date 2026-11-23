@@ -6,6 +6,10 @@
 
 **Status**: Draft
 
+**Amended by spec 014** (`specs/014-api-throttling/spec.md`, 1.4.0): requests refused with 429 by the rate limiter are
+not written to `validation_usage` (spec 014 FR-018a, research R9). The rule that authorised validate requests the
+router refuses still get a usage record applies to every other refusal.
+
 **Input**: User description: "@var/api_key_hardening_plan.md". In summary: (1) harden API keys (cheap rejection of
 malformed tokens, an admin network allowlist, trusted-proxy client address resolution, key expiry, last-used address
 audit); (2) make every validation and package-read request require a key; (3) measure each validation cycle (time,

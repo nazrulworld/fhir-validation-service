@@ -84,6 +84,9 @@ class NoSecretsInLogsTest extends BaseTestContainer {
                     "--role", "VALIDATE"));
             assertEquals(0, run(env, sink, stdinKey + "\n", "key", "create", "--org", "logorg", "--name", "log-stdin", "--role",
                     "ADMIN", "--key-stdin"));
+            // Spec 014 (FR-016): cap changes are logged by key name and id, never by key value.
+            assertEquals(0, run(env, sink, "", "limit", "set", "--key", "log-gen", "--per-minute", "5"));
+            assertEquals(0, run(env, sink, "", "limit", "set", "--key", "log-stdin", "--per-minute", "5"));
             assertEquals(0, run(env, sink, "", "org", "deactivate", "--name-short", "logorg"));
             try (java.sql.Connection c = java.sql.DriverManager.getConnection(getPostgresJdbcUrl(), POSTGRES_USERNAME, POSTGRES_PASSWORD);
                  java.sql.Statement st = c.createStatement()) {
@@ -108,6 +111,7 @@ class NoSecretsInLogsTest extends BaseTestContainer {
         // LogCapture sees an event once per logger it is attached to (additivity): compare distinct lines.
         List<String> cli = lines.stream().filter(l -> l.startsWith("cli: ")).distinct().toList();
         assertEquals(1, cli.stream().filter(l -> l.startsWith("cli: org create name_short=logorg")).count(), cli.toString());
+        assertEquals(2, cli.stream().filter(l -> l.startsWith("cli: limit set key=log-")).count(), cli.toString());
         assertEquals(1, cli.stream().filter(l -> l.startsWith("cli: key create name=log-gen org=logorg")).count(), cli.toString());
         assertEquals(1, cli.stream().filter(l -> l.startsWith("cli: key create name=log-stdin org=logorg")).count(), cli.toString());
         assertEquals(1, cli.stream().filter(l -> l.startsWith("cli: org deactivate name_short=logorg")).count(), cli.toString());

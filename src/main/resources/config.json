@@ -46,6 +46,11 @@
     "batchSize": 500,
     "flushMs": 1000
   },
+  "throttle": {
+    "syncIntervalMs": 1000,
+    "capsRefreshMs": 10000,
+    "maxTracked": 100000
+  },
   "health": {
     "dbStalenessMs": 10000
   },

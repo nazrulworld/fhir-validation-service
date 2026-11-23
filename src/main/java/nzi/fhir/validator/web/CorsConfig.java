@@ -30,6 +30,8 @@ public final class CorsConfig {
                 .exposedHeaders(Set.of(RequestIdHandler.HEADER, "Retry-After",
                         nzi.fhir.validator.web.endpoint.ValidationApi.TX_MODE_HEADER,
                         nzi.fhir.validator.web.endpoint.ValidationApi.TX_SERVER_HEADER,
-                        nzi.fhir.validator.web.endpoint.ValidationApi.TX_SOURCE_HEADER)));
+                        nzi.fhir.validator.web.endpoint.ValidationApi.TX_SOURCE_HEADER,
+                        // Spec 014 (contracts/http-api.md §6): the remaining allowance of a rate-limited key.
+                        ThrottleHandler.LIMIT_HEADER, ThrottleHandler.REMAINING_HEADER, ThrottleHandler.RESET_HEADER)));
     }
 }

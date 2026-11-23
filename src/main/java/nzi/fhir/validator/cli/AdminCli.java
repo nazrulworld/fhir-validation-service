@@ -150,6 +150,7 @@ public final class AdminCli {
                 case "key" -> KeyCommands.run(cmd, ctx);
                 case "package", "snapshot" -> AccessCommands.run(cmd, ctx);
                 case "usage" -> UsageCommands.run(cmd, ctx);
+                case "limit" -> LimitCommands.run(cmd, ctx);
                 default -> Future.failedFuture(CliException.usage("Unknown command group '" + cmd.group() + "'"));
             };
         } catch (CliException e) {

@@ -42,6 +42,15 @@ public final class Constant {
     public final static String TRIAL_ORG_VALIDATOR_API_KEY_NAME = "trial validator";
     public final static UUID TRIAL_ORG_VALIDATOR_API_KEY_UUID = UUID.fromString(TRIAL_ORG_VALIDATOR_API_KEY_ID);
 
+    // Spec 014 (FR-015, clarification Q3): the caps installed by V18. The migration repeats them as SQL literals;
+    // ConstantMigrationConsistencyTest keeps the two in step. Operators change them with 'limit set'.
+    public final static int THROTTLE_DEFAULT_KEY_PER_MINUTE = 600;
+    public final static int THROTTLE_DEFAULT_ORG_PER_MINUTE = 1200;
+    public final static int TRIAL_ORG_RATE_LIMIT_PER_MINUTE = 60;
+    public final static int TRIAL_ORG_VALIDATOR_API_KEY_RATE_LIMIT_PER_MINUTE = 30;
+    /** Spec 014 FR-012: the largest cap (validation requests per minute) that may be stored. */
+    public final static int RATE_LIMIT_MAX_PER_MINUTE = 1_000_000;
+
     private Constant() {
     }
 }

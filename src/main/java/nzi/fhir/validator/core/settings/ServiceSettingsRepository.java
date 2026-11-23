@@ -18,6 +18,11 @@ public final class ServiceSettingsRepository {
     /** The FHIR versions served by the most recent start, e.g. {@code R4,R5} (spec 009 FR-033). */
     public static final String FHIR_VERSIONS = "fhir_versions";
 
+    /** Spec 014 (FR-006): the default per-minute cap of keys without a cap of their own; absent = not limited. */
+    public static final String THROTTLE_DEFAULT_KEY = "throttle_default_key_per_minute";
+    /** Spec 014 (FR-006): the default per-minute cap of organisations without a cap of their own; absent = not limited. */
+    public static final String THROTTLE_DEFAULT_ORG = "throttle_default_org_per_minute";
+
     private static final String TABLE = DB_POSTGRES_SCHEMA_NAME + ".service_settings";
 
     private ServiceSettingsRepository() {
@@ -34,6 +39,20 @@ public final class ServiceSettingsRepository {
     public static Future<Boolean> insertIfAbsent(SqlClient tx, String name, String value) {
         return tx.preparedQuery("INSERT INTO " + TABLE + " (name, value) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING")
                 .execute(Tuple.of(name, value))
+                .map(rows -> rows.rowCount() > 0);
+    }
+
+    /** The value of {@code name}, without a lock; empty when there is no row (spec 014). */
+    public static Future<Optional<String>> get(SqlClient client, String name) {
+        return client.preparedQuery("SELECT value FROM " + TABLE + " WHERE name = $1")
+                .execute(Tuple.of(name))
+                .map(rows -> rows.size() == 0 ? Optional.<String>empty() : Optional.of(rows.iterator().next().getString(0)));
+    }
+
+    /** Deletes {@code name}; whether a row was deleted (spec 014: removing a default cap). */
+    public static Future<Boolean> delete(SqlClient tx, String name) {
+        return tx.preparedQuery("DELETE FROM " + TABLE + " WHERE name = $1")
+                .execute(Tuple.of(name))
                 .map(rows -> rows.rowCount() > 0);
     }
 

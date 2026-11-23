@@ -6,6 +6,40 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-23
+
+Rate limits on validation, per API key and per organisation (spec 014). Additive contract change: `POST
+/{version}/validate` may now answer 429, and its responses carry rate-limit headers.
+
+### Added
+
+- Per-minute caps on `POST /{version}/validate` for each API key and for each organisation (all its keys together).
+  Above a cap the answer is 429 `rate-limited` (problem members `scope`, `limit`, `retryAfterSeconds`) with
+  `Retry-After`; nothing is validated and the refused request counts towards no cap. Responses to a limited key carry
+  `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (also exposed through CORS).
+- Caps are stored in the database (migration `V18`): `rate_limit_per_minute` on `api_keys` and `organisations`, and
+  service-wide defaults in `service_settings`. Initial values: 600 per key and 1200 per organisation by default, 60
+  for the trial organisation and 30 for the `trial validator` key. Operator changes are never overwritten.
+- Keys of the system organisation are never limited; nothing is limited while `FV_GLOBAL_DISABLED_ACL_SECURITY=true`.
+- Command line `limit set | remove | list` (`--key`, `--org`, `--default-key`, `--default-org`, `--per-minute`). Changes
+  apply on every instance within `FV_THROTTLE_CAPS_REFRESH_MS` without a restart, and are logged with old and new
+  values.
+- Instances share their counts through PostgreSQL (UNLOGGED tables `throttle_counts`, `throttle_instances`) every
+  `FV_THROTTLE_SYNC_INTERVAL_MS`; a cap holds fleet-wide within 10 % (at least one request). When the database can't
+  be reached, each instance enforces caps on its own counts (local mode) and nothing is refused because of it.
+- Settings `FV_THROTTLE_SYNC_INTERVAL_MS` (1000), `FV_THROTTLE_CAPS_REFRESH_MS` (10000), `FV_THROTTLE_MAX_TRACKED`
+  (100000).
+- Metrics `fv_throttle_checked_total`, `fv_throttle_refused_total{scope,reason}`, `fv_throttle_tracked_subjects`,
+  `fv_throttle_evictions_total`, `fv_throttle_peers`, `fv_throttle_local_mode`,
+  `fv_throttle_sync_failures_total{step}`, `fv_throttle_sync_seconds`, `fv_throttle_ticks_skipped_total`; a refusal
+  log line at most once a minute per key or organisation. Readiness reports `rate limits not loaded` until the caps
+  are read at startup.
+
+### Changed
+
+- `POST /{version}/validate` can answer 429. Clients of the trial key are limited to 30 validations per minute.
+- Requests refused with 429 are not written to `validation_usage` (an amendment to spec 008).
+
 ## [1.3.0] - 2026-11-20
 
 No spurious regex timeout errors under load (spec 013). No path, payload or status code changes.

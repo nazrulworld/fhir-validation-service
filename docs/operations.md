@@ -135,3 +135,42 @@ With `FV_USAGE_SINK=db`, every authorised validation adds one row (about 250 byt
 ```sql
 DELETE FROM fhir_validator_schema.validation_usage WHERE created_at < now() - interval '90 days';
 ```
+
+## Rate limits
+
+Validation requests (`POST /{version}/validate`) are limited per API key and per organisation, per rolling minute
+(spec 014, 1.4.0). The caps are stored in the database: `rate_limit_per_minute` on `api_keys` and `organisations`,
+and the two defaults in `service_settings` (`throttle_default_key_per_minute`, `throttle_default_org_per_minute`; an
+absent row means "not limited at that level"). Manage them with `fv-admin limit set | remove | list`
+([contracts](../specs/014-api-throttling/contracts/operations.md)). The system organisation and its keys are never
+limited, and nothing is limited while access control is disabled.
+
+How it works:
+- Each instance counts its admitted requests per key and organisation in one-second buckets, in memory. No validation
+  request waits on the database.
+- Once every `FV_THROTTLE_SYNC_INTERVAL_MS` (1 s) each instance writes its counts to the UNLOGGED table
+  `throttle_counts`, records a heartbeat in `throttle_instances` and reads the other instances' counts of the last
+  5 seconds. Instances delete rows older than 2 minutes themselves; nothing needs to be scheduled.
+- With one instance a cap is exact. With several, an instance keeps room for what the others may have admitted but not
+  yet shared, so the fleet admits at most the cap plus 10 % (at least one request) per rolling minute. For very small
+  caps on several instances this means admitting slightly fewer than the cap (cap 5 on 3 instances: 4 per minute), and
+  a cap smaller than the number of instances (cap 1 on 3 instances) can be exceeded by up to the number of other
+  instances. In the first second after an instance joins, the others still count it out, so the bound can be exceeded
+  briefly.
+- A refused request is counted in `fv_throttle_refused_total` and logged at most once a minute per key or
+  organisation (`throttle: key <id> (org <id>) refused <n> request(s) …`). It is not written to `validation_usage`.
+
+When the database can't be reached (local mode):
+- each instance keeps enforcing every cap on its own counts and the last caps it read, so a client can get at most the
+  cap times the number of instances per minute. Validation is never refused because sharing failed;
+- the instance logs `throttle: cannot share request counts (…)` once at WARN, sets `fv_throttle_local_mode` to 1, and
+  logs `throttle: request counts shared again after <s> s` when sharing works again.
+
+Metrics: `fv_throttle_checked_total`, `fv_throttle_refused_total{scope,reason}`, `fv_throttle_tracked_subjects`,
+`fv_throttle_evictions_total`, `fv_throttle_peers`, `fv_throttle_local_mode`, `fv_throttle_sync_failures_total{step}`,
+`fv_throttle_sync_seconds` and `fv_throttle_ticks_skipped_total`. None carries a key, organisation or instance id.
+Suggested alerts: `fv_throttle_local_mode == 1` for more than a minute; `rate(fv_throttle_evictions_total[5m]) > 0`
+(raise `FV_THROTTLE_MAX_TRACKED`).
+
+Readiness reports `rate limits not loaded` until an instance has read the caps at startup.
+

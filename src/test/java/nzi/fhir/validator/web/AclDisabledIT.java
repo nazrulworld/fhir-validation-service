@@ -92,6 +92,48 @@ class AclDisabledIT extends BaseTestContainer {
     }
 
     /** US4-1 to US4-6, FR-017 to FR-020, FR-023. */
+    /**
+     * Spec 014 US4 (T033): with access control disabled nothing is rate limited, whatever caps are stored: no 429, no
+     * RateLimit-* headers, with or without an Authorization header; the stored caps are left as they are.
+     */
+    @Test
+    void notThrottled(Vertx vertx, VertxTestContext ctx) {
+        nzi.fhir.validator.testsupport.LogCapture logs = nzi.fhir.validator.testsupport.LogCapture.start();
+        String setCaps = "UPDATE fhir_validator_schema.api_keys SET rate_limit_per_minute = 1 WHERE id = '"
+                + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'";
+        String setOrgCap = "UPDATE fhir_validator_schema.organisations SET rate_limit_per_minute = 1 WHERE id = '"
+                + Constant.TRIAL_ORG_ID + "'";
+        start(vertx, null)
+                .compose(a -> app.bootstrap().services().pool().query(setCaps).execute())
+                .compose(v -> app.bootstrap().services().pool().query(setOrgCap).execute())
+                .compose(v -> {
+                    ctx.verify(() -> assertTrue(app.bootstrap().services().throttle().isEmpty(), "no rate limits are built"));
+                    List<Future<HttpResponse<Buffer>>> calls = new ArrayList<>();
+                    for (int i = 0; i < 20; i++) {
+                        calls.add(validate("", i % 2 == 0 ? null : AppHarness.VALIDATOR_AUTH));
+                    }
+                    return Future.all(calls).map(cf -> cf.<HttpResponse<Buffer>>list());
+                })
+                .compose(responses -> {
+                    ctx.verify(() -> responses.forEach(r -> {
+                        assertEquals(200, r.statusCode(), r.bodyAsString());
+                        assertNull(r.getHeader("RateLimit-Limit"));
+                        assertNull(r.getHeader("RateLimit-Remaining"));
+                    }));
+                    return column("SELECT rate_limit_per_minute FROM fhir_validator_schema.api_keys WHERE id = '"
+                            + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "' UNION ALL SELECT rate_limit_per_minute FROM "
+                            + "fhir_validator_schema.organisations WHERE id = '" + Constant.TRIAL_ORG_ID + "'");
+                })
+                .onComplete(ar -> logs.close())
+                .onComplete(ctx.succeeding(caps -> ctx.verify(() -> {
+                    assertEquals(List.of("1", "1"), caps, "the stored caps are kept (AC3)");
+                    assertTrue(logs.events().stream().anyMatch(e -> e.message().equals(
+                                    "Rate limits are not applied: access control is disabled (FV_GLOBAL_DISABLED_ACL_SECURITY)")),
+                            "the startup line");
+                    ctx.completeNow();
+                })));
+    }
+
     @Test
     void everyEndpointWorksWithoutAKeyAsItsFixedCaller(Vertx vertx, VertxTestContext ctx) {
         var services = new Object() {

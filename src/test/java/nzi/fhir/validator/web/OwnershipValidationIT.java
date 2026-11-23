@@ -286,7 +286,9 @@ class OwnershipValidationIT extends BaseTestContainer {
                     String metrics = r.bodyAsString();
                     assertTrue(metrics.contains("outcome=\"package_not_found\""), "refusals are counted as package_not_found");
                     assertFalse(metrics.contains("access"), "no metric reveals access decisions");
-                    assertFalse(metrics.contains("own.a") || metrics.contains("orga") || metrics.contains("own.dep"),
+                    // Whole words: the organisations are named orga and orgb (spec 014's scope="organisation" is fine).
+                    assertFalse(metrics.contains("own.a") || java.util.regex.Pattern.compile("\\borg[ab]\\b").matcher(metrics).find()
+                                    || metrics.contains("own.dep"),
                             "no metric names private content or organisations");
                     ctx.completeNow();
                 })));

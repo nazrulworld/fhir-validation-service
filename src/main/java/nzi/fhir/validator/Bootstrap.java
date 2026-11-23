@@ -186,6 +186,8 @@ public final class Bootstrap {
                                             services.config().servedVersions(),
                                             services.config().fhirVersionsChangeConfirmed(), afterCommit)))
                             .<Void>mapEmpty()
+                            // Spec 014: the cap snapshot (readiness waits for it); nothing while access control is disabled.
+                            .compose(v -> services.startThrottle())
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
                             // Spec 009 FR-015: the total, counted by the sync's start, at every start (not only changes).

@@ -95,6 +95,27 @@ class ConfigLoaderTest {
         assertTrue(cross.getMessage().contains("FV_USAGE_BATCH_SIZE (500) must not exceed FV_USAGE_QUEUE_SIZE (100)"), cross.getMessage());
     }
 
+    /** Spec 014 (data-model.md §4): rate-limit settings, defaults and bounds. */
+    @Test
+    void throttleSettings() {
+        ApplicationConfig defaults = ConfigLoader.load(env("FV_PG_PASSWORD", "pw"));
+        assertEquals(1_000, defaults.throttleSyncIntervalMs());
+        assertEquals(10_000, defaults.throttleCapsRefreshMs());
+        assertEquals(100_000, defaults.throttleMaxTracked());
+        ApplicationConfig set = ConfigLoader.load(env("FV_PG_PASSWORD", "pw", "FV_THROTTLE_SYNC_INTERVAL_MS", "200",
+                "FV_THROTTLE_CAPS_REFRESH_MS", "30000", "FV_THROTTLE_MAX_TRACKED", "1000"));
+        assertEquals(200, set.throttleSyncIntervalMs());
+        assertEquals(30_000, set.throttleCapsRefreshMs());
+        assertEquals(1_000, set.throttleMaxTracked());
+        for (String[] bad : new String[][]{{"FV_THROTTLE_SYNC_INTERVAL_MS", "199"}, {"FV_THROTTLE_SYNC_INTERVAL_MS", "1001"},
+                {"FV_THROTTLE_CAPS_REFRESH_MS", "999"}, {"FV_THROTTLE_CAPS_REFRESH_MS", "30001"},
+                {"FV_THROTTLE_MAX_TRACKED", "999"}, {"FV_THROTTLE_MAX_TRACKED", "10000001"}}) {
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> ConfigLoader.load(env("FV_PG_PASSWORD", "pw", bad[0], bad[1])), bad[0] + "=" + bad[1]);
+            assertTrue(e.getMessage().contains(bad[0]), e.getMessage());
+        }
+    }
+
     /** Spec 008 FR-005: an invalid network in either list fails startup naming the variable and the entry. */
     @Test
     void invalidNetworksFailStartup() {
