@@ -160,7 +160,9 @@ public final class ThrottleSync {
                     throttle.peers(livePeers);
                     if (localMode) {
                         localMode = false;
-                        logger.info("throttle: request counts shared again after {} s", (now - localSinceMs) / 1000);
+                        // Measured now: a tick that hung while the database didn't answer started before local mode began.
+                        logger.info("throttle: request counts shared again after {} s",
+                                Math.max(0, clock.getAsLong() - localSinceMs) / 1000);
                     }
                     return (Void) null;
                 })

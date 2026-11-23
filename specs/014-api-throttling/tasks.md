@@ -534,7 +534,7 @@ back to local mode when sharing fails (research R4, R5). This cuts across US1 an
   SC-006 (others unaffected): the at-cap run also drives a second, concurrent k6 scenario at a steady low rate with a
   key of another organisation whose caps are far above its rate. Record that key's p95 and 429 count. Its p95 must stay
   within 5 ms of the uncapped baseline, with zero 429s.
-- [ ] T053 Run `mvn verify` and walk through quickstart.md §1–§9 by hand. Fix any drift between `openapi.yaml`, the
+- [X] T053 Run `mvn verify` and walk through quickstart.md §1–§9 by hand. Fix any drift between `openapi.yaml`, the
   contracts and the behaviour. Update `specs/014-api-throttling/checklists/requirements.md` notes if anything changed.
 
 ---
