@@ -42,7 +42,7 @@ public final class CliArgs {
 
     private static final Set<String> REPEATABLE = Set.of("address-line");
     /** Flags that take no value. */
-    private static final Set<String> SWITCHES = Set.of("key-stdin");
+    private static final Set<String> SWITCHES = Set.of("key-stdin", "default-key", "default-org");
     private static final Set<String> SELECTOR = Set.of("id", "name-short");
 
     /** Allowed flags of every {@code group command}. */
@@ -65,10 +65,14 @@ public final class CliArgs {
         COMMANDS.put("snapshot transfer", Set.of("fhir-version", "ig", "to"));
         // Spec 008 FR-022.
         COMMANDS.put("usage summary", Set.of("org", "key", "since"));
+        // Spec 014 FR-013 (contracts/operations.md §2).
+        COMMANDS.put("limit set", Set.of("key", "org", "default-key", "default-org", "per-minute"));
+        COMMANDS.put("limit remove", Set.of("key", "org", "default-key", "default-org"));
+        COMMANDS.put("limit list", Set.of("org"));
     }
 
     /** The command groups; {@code Bootstrap.main} runs the command line when the first argument is one of them. */
-    public static final Set<String> GROUPS = Set.of("org", "key", "package", "snapshot", "usage");
+    public static final Set<String> GROUPS = Set.of("org", "key", "package", "snapshot", "usage", "limit");
 
     private static Set<String> union(Set<String> a, Set<String> b) {
         Set<String> u = new LinkedHashSet<>(a);
@@ -121,7 +125,7 @@ public final class CliArgs {
      */
     public static Command parse(String[] args) {
         if (args.length < 2) {
-            throw CliException.usage("Usage: <org|key|package|snapshot> <command> [options] (see contracts/cli.md)");
+            throw CliException.usage("Usage: <org|key|package|snapshot|usage|limit> <command> [options] (see contracts/cli.md)");
         }
         String name = args[0] + " " + args[1];
         Set<String> allowed = COMMANDS.get(name);

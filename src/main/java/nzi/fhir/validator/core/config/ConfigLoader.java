@@ -89,6 +89,10 @@ public final class ConfigLoader {
             new Entry("FV_USAGE_QUEUE_SIZE", "usage.queueSize", Kind.INT, 100, 1_000_000),
             new Entry("FV_USAGE_BATCH_SIZE", "usage.batchSize", Kind.INT, 10, 5_000),
             new Entry("FV_USAGE_FLUSH_MS", "usage.flushMs", Kind.LONG, 100, 60_000),
+            // Spec 014 (data-model.md §4): rate limits on validation.
+            new Entry("FV_THROTTLE_SYNC_INTERVAL_MS", "throttle.syncIntervalMs", Kind.LONG, 200, 1_000),
+            new Entry("FV_THROTTLE_CAPS_REFRESH_MS", "throttle.capsRefreshMs", Kind.LONG, 1_000, 30_000),
+            new Entry("FV_THROTTLE_MAX_TRACKED", "throttle.maxTracked", Kind.INT, 1_000, 10_000_000),
             new Entry("FV_READINESS_DB_STALENESS_MS", "health.dbStalenessMs", Kind.LONG, 1_000, 600_000),
             new Entry("FV_SHUTDOWN_PRE_DRAIN_MS", "shutdown.preDrainMs", Kind.LONG, 0, 120_000),
             new Entry("FV_SHUTDOWN_GRACE_MS", "shutdown.graceMs", Kind.LONG, 0, 600_000),

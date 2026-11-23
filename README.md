@@ -664,9 +664,36 @@ The owner (or the system organisation) may change `shareable`; another organisat
 isn't the system organisation gets 403 for a transfer. Changes reach every instance within seconds and never rebuild a
 validator.
 
+### Rate limits
+
+`POST /{version}/validate` is limited per API key and per organisation, as validation requests per rolling minute
+(1.4.0). A request is served only when it fits both its key's cap and its organisation's cap (the organisation's keys
+together). Above a cap the answer is 429 `rate-limited` with `Retry-After`, nothing is validated, and the refused
+request counts towards no cap. Every response to a limited key carries `RateLimit-Limit`, `RateLimit-Remaining` and
+`RateLimit-Reset` (the tighter of the two levels).
+
+- A key or organisation without a cap of its own gets the service-wide default: 600 per key and 1200 per organisation
+  on a fresh installation. The trial organisation starts with 60 and the `trial validator` key with 30.
+- Keys of the system organisation (any role) are never limited. ADMIN keys of other organisations are.
+- With `FV_GLOBAL_DISABLED_ACL_SECURITY=true` nothing is limited.
+- Caps live in the database and reach every instance within `FV_THROTTLE_CAPS_REFRESH_MS` (10 s), without a restart.
+
+```bash
+$APP limit list                                         # defaults, every organisation and key, and the cap in effect
+$APP limit set --key acme-ci --per-minute 120
+$APP limit set --org acme --per-minute 300
+$APP limit set --default-key --per-minute 1000          # keys without a cap of their own
+$APP limit remove --key acme-ci                         # back to the default
+$APP limit remove --default-org                         # organisations without their own cap: not limited
+```
+
+Several instances share their counts through PostgreSQL once a second, so a cap holds fleet-wide within 10 % (at
+least one request). Details, metrics and what happens when the database is unreachable:
+[docs/operations.md](docs/operations.md#rate-limits).
+
 ### Usage accounting
 
-Every authorised validation can be recorded, attributed to its key and organisation, with its outcome, issue counts,
+Every authorised validation that is not refused by a rate limit (429) can be recorded, attributed to its key and organisation, with its outcome, issue counts,
 phase timings (`totalMs`, `queueMs`, `contextMs`, `validateMs`), CPU time and allocated bytes. "Memory" means bytes
 allocated by the request's work: the heap is shared, so resident memory can't be attributed to a request.
 `FV_USAGE_SINK` chooses where records go:
@@ -738,6 +765,9 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_ACL_MODE_CHANGE_CONFIRMED`                                               | `false`                                                         | allow a start that changes the stored access-control mode         |
 | `FV_USAGE_SINK`                                                              | `none`                                                          | usage records: `none`, `log`, `db`, `log,db`                      |
 | `FV_USAGE_QUEUE_SIZE` / `_BATCH_SIZE` / `_FLUSH_MS`                          | 10000 / 500 / 1000                                              | the `db` sink's bounded queue and batching                        |
+| `FV_THROTTLE_SYNC_INTERVAL_MS`                                               | 1000                                                            | how often instances share validation counts (200–1000 ms)         |
+| `FV_THROTTLE_CAPS_REFRESH_MS`                                                | 10000                                                           | how often rate limits are reloaded from the database              |
+| `FV_THROTTLE_MAX_TRACKED`                                                    | 100000                                                          | keys plus organisations whose recent counts are kept in memory    |
 | `FV_HTTP_PORT`                                                               | `8880`                                                          | HTTP port                                                         |
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
 | `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |

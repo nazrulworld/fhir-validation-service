@@ -81,6 +81,28 @@ public final class AppHarness {
         return request.putHeader("Authorization", "Bearer " + key);
     }
 
+    /**
+     * Spec 014 (T014): every rate-limit check reads {@code clock} (epoch ms) from now on, so a test can move time past
+     * a {@code Retry-After} without sleeping. No effect while access control is disabled (no rate limits).
+     */
+    public AppHarness withThrottleClock(java.util.concurrent.atomic.AtomicLong clock) {
+        bootstrap.services().throttle().ifPresent(t -> t.clock(clock::get));
+        return this;
+    }
+
+    /**
+     * Spec 014: removes every stored rate limit (own caps and the two defaults) and reloads them at once, for test
+     * classes that send many validations with the trial key. Rate limits themselves are tested in ValidationThrottleIT.
+     */
+    public Future<Void> withoutRateLimits() {
+        io.vertx.sqlclient.Pool pool = bootstrap.services().pool();
+        return pool.query("UPDATE fhir_validator_schema.api_keys SET rate_limit_per_minute = NULL").execute()
+                .compose(v -> pool.query("UPDATE fhir_validator_schema.organisations SET rate_limit_per_minute = NULL").execute())
+                .compose(v -> pool.query("DELETE FROM fhir_validator_schema.service_settings "
+                        + "WHERE name IN ('throttle_default_key_per_minute', 'throttle_default_org_per_minute')").execute())
+                .compose(v -> bootstrap.services().throttle().map(t -> t.reload()).orElse(Future.succeededFuture()));
+    }
+
     public Future<Void> stop() {
         return bootstrap.stop();
     }

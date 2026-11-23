@@ -362,4 +362,70 @@ public class ServiceMetrics {
         Gauge.builder("fv.usage.queue.size", queue, java.util.Collection::size).description("Usage records waiting to be written")
                 .register(registry);
     }
+
+    /**
+     * Spec 014 (FR-017, FR-019, contracts/operations.md §3): the rate-limit meters. No tag names a key, an organisation
+     * or an instance.
+     */
+    public void bindThrottle(nzi.fhir.validator.core.throttle.ThrottleService throttle) {
+        Counter checked = counter("fv.throttle.checked", "Validation requests checked against rate limits");
+        for (nzi.fhir.validator.core.throttle.ThrottleDecision.Scope scope : nzi.fhir.validator.core.throttle.ThrottleDecision.Scope.values()) {
+            for (nzi.fhir.validator.core.throttle.ThrottleDecision.Reason reason : nzi.fhir.validator.core.throttle.ThrottleDecision.Reason.values()) {
+                refusedCounter(scope, reason);
+            }
+        }
+        for (String step : new String[]{"flush", "heartbeat", "read", "caps", "cleanup", "start"}) {
+            syncFailures(step);
+        }
+        Counter skipped = counter("fv.throttle.ticks.skipped", "Count-sharing ticks skipped because the previous one was still running");
+        Timer sync = Timer.builder("fv.throttle.sync").description("Duration of one count-sharing tick").register(registry);
+        FunctionCounter.builder("fv.throttle.evictions", throttle.throttle(), nzi.fhir.validator.core.throttle.Throttle::evictions)
+                .description("Rate-limit windows evicted because FV_THROTTLE_MAX_TRACKED was reached").register(registry);
+        Gauge.builder("fv.throttle.tracked.subjects", throttle.throttle(), nzi.fhir.validator.core.throttle.Throttle::trackedSubjects)
+                .description("Keys and organisations whose recent requests are held in memory").register(registry);
+        Gauge.builder("fv.throttle.peers", throttle.throttle(), nzi.fhir.validator.core.throttle.Throttle::peers)
+                .description("Other live instances seen in the last 5 seconds").register(registry);
+        Gauge.builder("fv.throttle.local.mode", throttle, t -> t.sync() != null && t.sync().localMode() ? 1 : 0)
+                .description("1 while request counts can't be shared and caps are enforced on this instance's counts only")
+                .register(registry);
+        throttle.onDecision(new nzi.fhir.validator.core.throttle.ThrottleService.Metrics() {
+            @Override
+            public void checked() {
+                checked.increment();
+            }
+
+            @Override
+            public void refused(nzi.fhir.validator.core.throttle.ThrottleDecision.Scope scope,
+                                nzi.fhir.validator.core.throttle.ThrottleDecision.Reason reason) {
+                refusedCounter(scope, reason).increment();
+            }
+        });
+        throttle.onSync(new nzi.fhir.validator.core.throttle.ThrottleSync.Listener() {
+            @Override
+            public void failure(String step) {
+                syncFailures(step).increment();
+            }
+
+            @Override
+            public void skipped() {
+                skipped.increment();
+            }
+
+            @Override
+            public void tick(long nanos) {
+                sync.record(Duration.ofNanos(nanos));
+            }
+        });
+        throttle.onCapsFailure(() -> syncFailures("caps").increment());
+    }
+
+    private Counter refusedCounter(nzi.fhir.validator.core.throttle.ThrottleDecision.Scope scope,
+                                   nzi.fhir.validator.core.throttle.ThrottleDecision.Reason reason) {
+        return counter("fv.throttle.refused", "Validation requests refused with 429 by a rate limit", "scope", scope.label(),
+                "reason", reason.label());
+    }
+
+    private Counter syncFailures(String step) {
+        return counter("fv.throttle.sync.failures", "Failed count-sharing statements", "step", step);
+    }
 }

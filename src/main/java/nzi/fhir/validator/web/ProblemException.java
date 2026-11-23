@@ -75,6 +75,24 @@ public class ProblemException extends RuntimeException {
                 "At most 10 profiles may be requested, each at most 1024 characters");
     }
 
+    /** Spec 014: the problem type of a request over its key's or organisation's per-minute cap (429). */
+    public static final String TYPE_RATE_LIMITED = "rate-limited";
+
+    /**
+     * Spec 014 FR-008–FR-010 (contracts/http-api.md §3): 429 {@code rate-limited}, naming which cap was reached and
+     * when to retry. Nothing about other keys or organisations is included.
+     */
+    public static ProblemException rateLimited(nzi.fhir.validator.core.throttle.ThrottleDecision d) {
+        String who = d.scope() == nzi.fhir.validator.core.throttle.ThrottleDecision.Scope.ORGANISATION
+                ? "This organisation's" : "This API key's";
+        return new ProblemException(429, TYPE_RATE_LIMITED, who + " rate limit of " + d.limit()
+                + " validation requests per minute was reached; retry after " + d.retryAfterSeconds() + " s")
+                .withExtension("scope", d.scope().label())
+                .withExtension("limit", d.limit())
+                .withExtension("retryAfterSeconds", d.retryAfterSeconds())
+                .withHeader("Retry-After", String.valueOf(d.retryAfterSeconds()));
+    }
+
     public static final String TYPE_UNKNOWN_PROFILE = "unknown-profile";
     public static final String TYPE_PACKAGE_NOT_FOUND = "package-not-found";
     public static final String TYPE_DEPENDENCY_NOT_FOUND = "dependency-not-found";

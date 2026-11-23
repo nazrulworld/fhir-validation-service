@@ -111,6 +111,15 @@ public final class ApplicationConfig {
     /** Pooled connections per terminology server ({@code FV_TX_MAX_CONNECTIONS_PER_SERVER}). */
     public int txMaxConnectionsPerServer() { return section("tx").getInteger("maxConnectionsPerServer"); }
 
+    /** Spec 014: how often counts are shared between instances ({@code FV_THROTTLE_SYNC_INTERVAL_MS}). */
+    public long throttleSyncIntervalMs() { return section("throttle").getLong("syncIntervalMs"); }
+
+    /** Spec 014: how often caps are reloaded from the database ({@code FV_THROTTLE_CAPS_REFRESH_MS}). */
+    public long throttleCapsRefreshMs() { return section("throttle").getLong("capsRefreshMs"); }
+
+    /** Spec 014: most keys plus organisations whose recent counts are held in memory ({@code FV_THROTTLE_MAX_TRACKED}). */
+    public int throttleMaxTracked() { return section("throttle").getInteger("maxTracked"); }
+
     public String bootstrapAdminKey() { return section("auth").getString("bootstrapAdminKey"); }
     /** The trial organisation's shared VALIDATE key ({@code FV_VALIDATOR_API_KEY}, spec 008), or {@code null}. */
     public String validatorKey() { return section("auth").getString("validatorKey"); }

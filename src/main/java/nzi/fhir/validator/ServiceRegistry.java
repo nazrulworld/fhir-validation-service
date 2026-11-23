@@ -66,6 +66,8 @@ public final class ServiceRegistry {
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicBoolean refusingNewRequests = new AtomicBoolean();
     private ServiceMetrics metrics;
+    /** Spec 014: rate limits; empty while access control is disabled (FR-002). */
+    private java.util.Optional<nzi.fhir.validator.core.throttle.ThrottleService> throttle = java.util.Optional.empty();
     private nzi.fhir.validator.core.usage.UsageWriter usage = nzi.fhir.validator.core.usage.NoopUsageWriter.INSTANCE;
 
     private ServiceRegistry(ApplicationConfig config, Pool pool, Executors executors, HealthService healthService,
@@ -191,6 +193,15 @@ public final class ServiceRegistry {
         // Spec 008: usage accounting (FV_USAGE_SINK); closed by Bootstrap.stop() after the drain.
         services.usage = nzi.fhir.validator.core.usage.UsageWriter.create(vertx, pool, config, metrics);
         services.validationApi.setUsageWriter(services.usage);
+        // Spec 014: rate limits exist only while access control is enabled (FR-002, research R2). Readiness waits for the
+        // first cap snapshot (constitution VII).
+        if (config.aclMode() == nzi.fhir.validator.core.security.AclMode.ENABLED) {
+            nzi.fhir.validator.core.throttle.ThrottleService throttle = new nzi.fhir.validator.core.throttle.ThrottleService(
+                    vertx, pool, config);
+            services.throttle = java.util.Optional.of(throttle);
+            metrics.bindThrottle(throttle);
+            healthService.setValidatorReadiness(() -> throttle.notReadyReasons(registry.notReadyReasons()), registry::details);
+        }
         services.snapshotBuilder = builder;
         services.heapBudget = heap;
         services.txRegistry = txRegistry;
@@ -216,11 +227,29 @@ public final class ServiceRegistry {
         return txServices;
     }
 
+    /** Spec 014: the rate limits; empty while access control is disabled. */
+    public java.util.Optional<nzi.fhir.validator.core.throttle.ThrottleService> throttle() {
+        return throttle;
+    }
+
+    /** Spec 014: starts the rate limits (loads the caps); does nothing while access control is disabled. */
+    public Future<Void> startThrottle() {
+        if (throttle.isEmpty()) {
+            org.apache.logging.log4j.LogManager.getLogger(ServiceRegistry.class)
+                    .info("Rate limits are not applied: access control is disabled (FV_GLOBAL_DISABLED_ACL_SECURITY)");
+            return Future.succeededFuture();
+        }
+        return throttle.get().start();
+    }
+
     public Future<Void> stop() {
+        // Spec 014: removes this instance's heartbeat before the pool closes (Bootstrap closes it after this).
+        Future<Void> throttleStopped = throttle.map(nzi.fhir.validator.core.throttle.ThrottleService::stop)
+                .orElse(Future.succeededFuture());
         txRegistry.stop();
         validatorRegistry.close();
         healthService.stop();
-        return configSync.stop();
+        return Future.join(throttleStopped, configSync.stop()).mapEmpty();
     }
 
     public ApplicationConfig config() {

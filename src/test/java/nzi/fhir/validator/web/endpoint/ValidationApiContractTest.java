@@ -50,7 +50,8 @@ class ValidationApiContractTest extends BaseTestContainer {
         AppHarness.start(vertx, config)
                 .compose(a -> {
                     app = a;
-                    return a.awaitReady(90_000);
+                    // Spec 014: this class sends far more than the trial key's 30 validations a minute.
+                    return a.awaitReady(90_000).compose(v -> a.withoutRateLimits());
                 })
                 .onComplete(ctx.succeedingThenComplete());
     }

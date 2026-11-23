@@ -181,14 +181,19 @@ public class ApiKeyRepository {
             return Future.failedFuture(new nzi.fhir.validator.core.StartupException(
                     "'" + name + "': API keys must be 32-128 characters of [A-Za-z0-9_-]"));
         }
+        // Spec 014 (FR-015, research R7): the trial validator key gets its initial cap when it is first inserted; the
+        // update path below never touches the column, so an operator's change or removal survives restarts and rotations.
+        Integer rateLimit = nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_UUID.equals(id)
+                ? nzi.fhir.validator.core.Constant.TRIAL_ORG_VALIDATOR_API_KEY_RATE_LIMIT_PER_MINUTE : null;
         Tuple params = Tuple.of(id, name, Buffer.buffer(hash(key)), role.name(), owner,
                 expiresAt == null ? null : java.time.OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC))
-                .addBoolean(keepRevocation);
+                .addBoolean(keepRevocation)
+                .addInteger(rateLimit);
         // A value whose hash was revoked is never installed again (V13, code review): an instance still configured with a
         // leaked, revoked value can't bring it back, also after the key was rotated to a new value. A revoked key also
         // stays revoked while the configured value is unchanged; a new value un-revokes it (rotation).
-        String sql = "INSERT INTO " + TABLE + " AS k (id, name, key_hash, role, owner, expires_at) "
-                + "SELECT $1::uuid, $2::varchar, $3::bytea, $4::varchar, $5::uuid, $6::timestamptz "
+        String sql = "INSERT INTO " + TABLE + " AS k (id, name, key_hash, role, owner, expires_at, rate_limit_per_minute) "
+                + "SELECT $1::uuid, $2::varchar, $3::bytea, $4::varchar, $5::uuid, $6::timestamptz, $8::int "
                 + "WHERE NOT EXISTS (SELECT 1 FROM " + REVOKED_HASHES + " r WHERE r.key_hash = $3::bytea) "
                 + "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
                 + "role = EXCLUDED.role, owner = EXCLUDED.owner, expires_at = EXCLUDED.expires_at, "
