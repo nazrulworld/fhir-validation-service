@@ -40,21 +40,22 @@ public final class Throttle {
 
     private final Cache<SubjectKey, Window> windows;
     /**
-     * T054 (Constitution I): the windows changed since the last flush, each at most once, so a sync tick costs what
-     * changed, not every tracked window.
+     * T054 (Constitution I): the subjects changed since the last flush, so a sync tick costs what changed, not every
+     * tracked window. Keys, not windows: a flush always writes the window the cache holds now, so a window evicted and
+     * recreated for the same subject is never written twice. Marked while the window's lock is held, so a drain sees
+     * every admission or the next drain does. Bounded by {@link #maxChanged}; beyond it the next drain scans every
+     * window once instead (code review of #99).
      */
-    private final java.util.concurrent.ConcurrentLinkedQueue<Changed> changed = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Set<SubjectKey> changed = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final int maxChanged;
+    private volatile boolean changedOverflow;
     private volatile int lastDrained;
-
-    /** A window queued for the next flush, with the subject it counts. */
-    record Changed(SubjectKey key, Window window) {
-    }
     private final long syncIntervalMs;
     private final LongAdder evictions = new LongAdder();
 
     /** Live peers seen by the last sync; 0 for one instance and in local mode. */
     private volatile int peers;
-    /** Research R4: admissions are tagged with the flush generation they will be written in. */
+    /** Research R4: the flush generation; a drain moves admissions into the generation it closes. */
     private volatile long generation;
     /** Admissions of generations up to this one are visible to every live peer. */
     private volatile long confirmedThrough = Long.MIN_VALUE;
@@ -65,6 +66,7 @@ public final class Throttle {
      */
     public Throttle(int maxTracked, long syncIntervalMs) {
         this.syncIntervalMs = syncIntervalMs;
+        this.maxChanged = maxTracked;
         this.windows = Caffeine.newBuilder()
                 .maximumSize(maxTracked)
                 .expireAfterAccess(Duration.ofMinutes(2))
@@ -88,52 +90,74 @@ public final class Throttle {
         }
         long now = Math.floorDiv(nowMs, 1000);
         int p = peers;
-        Window keyWindow = keyCap.isPresent() && keyId != null ? window(KEY, keyId) : null;
-        Window orgWindow = orgCap.isPresent() && orgId != null ? window(ORG, orgId) : null;
+        SubjectKey keyKey = keyCap.isPresent() && keyId != null ? new SubjectKey(KEY, keyId) : null;
+        SubjectKey orgKey = orgCap.isPresent() && orgId != null ? new SubjectKey(ORG, orgId) : null;
+        Window keyWindow = keyKey == null ? null : windows.get(keyKey, k -> new Window());
+        Window orgWindow = orgKey == null ? null : windows.get(orgKey, k -> new Window());
         if (keyWindow == null && orgWindow == null) {
             return ThrottleDecision.unlimited();
         }
         // Fixed lock order: key, then organisation (research R3).
         Object first = keyWindow != null ? keyWindow : orgWindow;
         Object second = keyWindow != null && orgWindow != null ? orgWindow : null;
-        ThrottleDecision d;
         synchronized (first) {
             if (second == null) {
-                d = decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
-            } else {
-                synchronized (second) {
-                    d = decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
-                }
+                return decide(keyKey, keyWindow, keyCap, orgKey, orgWindow, orgCap, now, p);
+            }
+            synchronized (second) {
+                return decide(keyKey, keyWindow, keyCap, orgKey, orgWindow, orgCap, now, p);
             }
         }
-        if (d.admitted()) {
-            // After the locks: a flush that drained the window in between only finds nothing new (harmless).
-            queue(KEY, keyId, keyWindow);
-            queue(ORG, orgId, orgWindow);
-        }
-        return d;
     }
 
-    private void queue(char scope, UUID id, Window w) {
-        if (w != null && w.enqueue()) {
-            changed.add(new Changed(new SubjectKey(scope, id), w));
+    /** Marks {@code key} changed (called with its window's lock held, or after a failed flush). */
+    void markChanged(SubjectKey key) {
+        if (changedOverflow) {
+            return;
         }
+        if (changed.size() >= maxChanged) {
+            changedOverflow = true;
+            return;
+        }
+        changed.add(key);
     }
 
-    /** T054: hands every window changed since the last call to {@code action}, each once. */
+    /**
+     * T054: hands every subject changed since the last call, with the window the cache holds for it now, to
+     * {@code action}, each once. After an overflow, every tracked window instead (once).
+     */
     void drainChanged(BiConsumer<SubjectKey, Window> action) {
         int n = 0;
-        for (Changed c; (c = changed.poll()) != null; n++) {
-            action.accept(c.key(), c.window());
+        if (changedOverflow) {
+            changedOverflow = false;
+            changed.clear();
+            windows.cleanUp(); // pending evictions first, so the scan covers at most FV_THROTTLE_MAX_TRACKED windows
+            for (java.util.Map.Entry<SubjectKey, Window> e : windows.asMap().entrySet()) {
+                action.accept(e.getKey(), e.getValue());
+                n++;
+            }
+        } else {
+            for (java.util.Iterator<SubjectKey> it = changed.iterator(); it.hasNext(); ) {
+                SubjectKey key = it.next();
+                it.remove();
+                Window w = windows.getIfPresent(key);
+                if (w != null) {
+                    action.accept(key, w);
+                    n++;
+                }
+            }
         }
         lastDrained = n;
     }
 
-    /** Queues a window again (its flush failed). */
-    void requeue(SubjectKey key, Window w) {
-        if (w.enqueue()) {
-            changed.add(new Changed(key, w));
-        }
+    /** Subjects marked changed and not drained yet (tests). */
+    int changedSize() {
+        return changed.size();
+    }
+
+    /** Tests: drops a subject's window, as an eviction by size or age would. */
+    void evict(SubjectKey key) {
+        windows.invalidate(key);
     }
 
     /** Windows the last {@link #drainChanged} visited (tests). */
@@ -164,21 +188,23 @@ public final class Throttle {
         return new Level(scope, cap, v, v + 1 <= threshold, confirmedRoom, threshold);
     }
 
-    private ThrottleDecision decide(Window keyWindow, OptionalInt keyCap, Window orgWindow, OptionalInt orgCap,
-                                    long now, int p) {
+    private ThrottleDecision decide(SubjectKey keyKey, Window keyWindow, OptionalInt keyCap, SubjectKey orgKey,
+                                    Window orgWindow, OptionalInt orgCap, long now, int p) {
         Level key = keyWindow == null ? null : level(Scope.KEY, keyWindow, keyCap.getAsInt(), now, p);
         Level org = orgWindow == null ? null : level(Scope.ORGANISATION, orgWindow, orgCap.getAsInt(), now, p);
         boolean keyOk = key == null || key.admits();
         boolean orgOk = org == null || org.admits();
         if (keyOk && orgOk) {
-            long gen = generation;
+            // Under both windows' locks: a drain either sees this admission (counts, pending, mark) or the next one does.
             if (keyWindow != null) {
                 keyWindow.addLocal(now);
-                keyWindow.addPending(gen);
+                keyWindow.addPending();
+                markChanged(keyKey);
             }
             if (orgWindow != null) {
                 orgWindow.addLocal(now);
-                orgWindow.addPending(gen);
+                orgWindow.addPending();
+                markChanged(orgKey);
             }
             // Headers: the level with the least remaining; the key on a tie.
             Level shown = key == null ? org : org == null ? key
@@ -245,6 +271,10 @@ public final class Throttle {
     /** Starts a new flush generation and returns the one being closed. */
     long nextGeneration() {
         return generation++;
+    }
+
+    long confirmedThrough() {
+        return confirmedThrough;
     }
 
     void confirmThrough(long generation) {

@@ -51,7 +51,7 @@ class ThrottleSimulationTest {
     }
 
     /** The shared table: absolute counts per (scope, subject, second, instance), and heartbeats. */
-    static final class MemoryStore implements CountStore {
+    static class MemoryStore implements CountStore {
         final Map<List<Object>, Integer> counts = new HashMap<>();
         final Map<UUID, Long> seen = new HashMap<>();
         long now;

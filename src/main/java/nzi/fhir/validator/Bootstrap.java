@@ -190,6 +190,9 @@ public final class Bootstrap {
                             .compose(v -> services.startThrottle())
                             .compose(v -> services.startTerminology())
                             .compose(v -> services.configSync().start())
+                            // Spec 014 T056: warm-up ends once the other instances count this one (or local mode), as
+                            // readiness does; waited for last, so contexts and terminology aren't delayed by it.
+                            .compose(v -> services.throttleWarmed())
                             // Spec 009 FR-015: the total, counted by the sync's start, at every start (not only changes).
                             .onSuccess(v -> logger().info("{} validator context(s) inactive (FHIR version not enabled)",
                                     services.healthService().inactiveCount()))

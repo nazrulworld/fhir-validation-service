@@ -257,7 +257,13 @@ public class ApiKeyRepository {
 
     /** The error for a key name that doesn't exist. */
     public static nzi.fhir.validator.web.ProblemException notFound() {
-        return new nzi.fhir.validator.web.ProblemException(404, "not-found", "API key not found");
+        return notFound(null);
+    }
+
+    /** As {@link #notFound()}, naming the key the operator asked for (command line, spec 014). */
+    public static nzi.fhir.validator.web.ProblemException notFound(String name) {
+        return new nzi.fhir.validator.web.ProblemException(404, "not-found",
+                name == null ? "API key not found" : "API key '" + name + "' not found");
     }
 
     public Future<Void> revoke(String name) {

@@ -278,6 +278,12 @@ public class OrganisationRepository {
     }
 
     public static ProblemException notFound() {
-        return new ProblemException(404, "not-found", "Organisation not found");
+        return notFound(null);
+    }
+
+    /** As {@link #notFound()}, naming the organisation the operator asked for (command line, spec 014). */
+    public static ProblemException notFound(String nameShort) {
+        return new ProblemException(404, "not-found",
+                nameShort == null ? "Organisation not found" : "Organisation '" + nameShort + "' not found");
     }
 }
