@@ -54,6 +54,10 @@ public final class ThrottleSync {
         };
     }
 
+    /** One window a tick flushed, with the buckets it wrote. */
+    private record Flushed(Throttle.SubjectKey key, Window window, long[][] buckets) {
+    }
+
     private final Throttle throttle;
     private final CountStore store;
     private final long intervalMs;
@@ -94,7 +98,8 @@ public final class ThrottleSync {
      * fleet past its bound. Failed ticks count too: without a database nobody can see anyone, and local mode applies.
      */
     public boolean warm() {
-        return completedTicks >= WARM_TICKS;
+        // Local mode: nobody can see anyone, so there is nothing to wait for (and a hung first tick can't block start).
+        return completedTicks >= WARM_TICKS || localMode;
     }
 
     static final int WARM_TICKS = 2;
@@ -147,23 +152,29 @@ public final class ThrottleSync {
             throttle.confirmThrough(flushedGeneration);
         }
         long closing = throttle.nextGeneration();
+        long confirmed = throttle.confirmedThrough();
         List<CountStore.CountRow> rows = new ArrayList<>();
-        List<Throttle.Changed> flushed = new ArrayList<>();
-        // T054: only the windows changed since the last flush; the tick's cost follows traffic, not FV_THROTTLE_MAX_TRACKED.
+        List<Flushed> flushed = new ArrayList<>();
+        // T054: only the subjects changed since the last flush; the tick's cost follows traffic, not
+        // FV_THROTTLE_MAX_TRACKED. Each subject's current window, once, so no row is written twice.
         throttle.drainChanged((key, w) -> {
-            for (long[] bucket : w.drainDirty(nowSec)) {
-                rows.add(new CountStore.CountRow(key.scope(), key.id(), bucket[0], (int) bucket[1]));
-                flushed.add(new Throttle.Changed(key, w));
+            long[][] buckets = w.drainDirty(nowSec, closing, confirmed);
+            if (buckets.length > 0) {
+                flushed.add(new Flushed(key, w, buckets));
+                for (long[] bucket : buckets) {
+                    rows.add(new CountStore.CountRow(key.scope(), key.id(), bucket[0], (int) bucket[1]));
+                }
             }
         });
         String[] step = {"flush"};
         return store.flush(instanceId, rows)
                 .onFailure(err -> {
-                    // Written again on the next tick.
-                    for (int i = 0; i < rows.size(); i++) {
-                        Throttle.Changed c = flushed.get(i);
-                        c.window().markDirty(rows.get(i).second(), nowSec);
-                        throttle.requeue(c.key(), c.window());
+                    // Written again, and confirmed, with the next successful flush.
+                    for (Flushed f : flushed) {
+                        for (long[] bucket : f.buckets()) {
+                            f.window().markDirty(bucket[0], nowSec);
+                        }
+                        throttle.markChanged(f.key());
                     }
                 })
                 .compose(v -> {
@@ -232,6 +243,8 @@ public final class ThrottleSync {
             logger.warn("throttle: cannot share request counts ({}: {}); enforcing caps on this instance's counts only",
                     step, reason(err));
         }
+        // After localMode is set: whoever waits on warm-up sees warm() true (code review of #99).
+        warmed.tryComplete();
     }
 
     private static String reason(Throwable err) {
@@ -250,6 +263,8 @@ public final class ThrottleSync {
 
     /** Graceful stop: removes this instance's heartbeat, so peers stop reserving room for it at once. */
     public Future<Void> stop() {
+        // A stop during warm-up must not leave anything waiting for it.
+        warmed.tryComplete();
         return store.remove(instanceId).recover(err -> Future.succeededFuture());
     }
 }

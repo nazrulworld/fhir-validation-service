@@ -48,7 +48,8 @@ public final class ThrottleService {
     /**
      * Loads the caps, reads the other instances' counts of the last 60 s (research R4) and starts sharing counts every
      * {@code FV_THROTTLE_SYNC_INTERVAL_MS} and reloading caps every {@code FV_THROTTLE_CAPS_REFRESH_MS}. Completes once
-     * the instance is ready: after two sync ticks, when every peer counts it (T056).
+     * the caps are loaded, so the rest of the start (contexts, terminology) isn't delayed; {@link #ready()} and
+     * {@link #warmed()} follow the warm-up (T056, code review of #99).
      */
     public Future<Void> start() {
         sync = new ThrottleSync(throttle, new ThrottleCountsRepository(pool), syncIntervalMs, () -> clock.getAsLong(),
@@ -62,9 +63,15 @@ public final class ThrottleService {
                     label(loaded.defaultKey()), label(loaded.defaultOrg()), loaded.keyCaps().size(), loaded.orgCaps().size());
             capsTimer = vertx.setPeriodic(capsRefreshMs, id -> reloadCaps());
             return (Void) null;
-        })
-                // T056: complete (and so the service's warm-up) only once every peer counts this instance, as readiness.
-                .compose(v -> sync.warmed());
+        });
+    }
+
+    /**
+     * Completes when the instance is ready to take limited requests: every peer counts it (two sync ticks, T056), or
+     * counts can't be shared at all (local mode), or the service stops. Never before {@link #start()} has succeeded.
+     */
+    public Future<Void> warmed() {
+        return sync == null ? Future.failedFuture(new IllegalStateException("not started")) : sync.warmed();
     }
 
     private static String label(java.util.OptionalInt cap) {
@@ -168,20 +175,25 @@ public final class ThrottleService {
         }
     }
 
-    /** Readiness (constitution VII): {@code others}, plus {@code rate limits not loaded} until the first snapshot is in. */
+    /**
+     * Readiness (constitution VII): {@code others}, plus {@link #NOT_LOADED} until the first cap snapshot is in, then
+     * {@link #WARMING_UP} until every peer counts this instance.
+     */
     public java.util.List<String> notReadyReasons(java.util.List<String> others) {
         if (ready()) {
             return others;
         }
         java.util.List<String> all = new java.util.ArrayList<>(others);
-        all.add(NOT_LOADED);
+        all.add(ready ? WARMING_UP : NOT_LOADED);
         return all;
     }
 
     /** The readiness reason while the first cap snapshot is not loaded. */
     public static final String NOT_LOADED = "rate limits not loaded";
+    /** The readiness reason while the caps are loaded but the other instances don't count this one yet (T056). */
+    public static final String WARMING_UP = "rate limits warming up (waiting for the other instances to count this one)";
 
-    /** Whether the first cap snapshot has been loaded. */
+    /** Whether limited requests may be served: the caps are loaded and the instance is warm (T056). */
     public boolean ready() {
         // T056: also not before every peer counts this instance (two sync ticks), so a join can't exceed the bound.
         return ready && sync != null && sync.warm();

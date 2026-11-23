@@ -28,12 +28,13 @@ public final class Window {
     private int[] remoteW;
     /** Bit i: slot i's local count changed since the last {@link #drainDirty} (research R4). */
     private long dirty;
-    /** T054: this window is in the throttle's changed-window queue. */
-    private boolean queued;
 
-    // Research R4: admissions not yet visible to every peer, per flush generation (three generations in flight).
-    private long pg0 = Long.MIN_VALUE, pg1 = Long.MIN_VALUE, pg2 = Long.MIN_VALUE;
-    private int pc0, pc1, pc2;
+    // Research R4: admissions not yet visible to every peer. An admission is "unflushed" until a drain (under this
+    // window's lock) moves it into the bucket of the flush generation that writes it, so it can never be confirmed
+    // before it was flushed. Two buckets suffice: a generation is confirmed one tick after its flush.
+    private int unflushed;
+    private long genA = Long.MIN_VALUE, genB = Long.MIN_VALUE;
+    private int countA, countB;
 
     // FR-018: the bounded refusal log (at most one line per subject per minute).
     private long lastLogAtMs = Long.MIN_VALUE;
@@ -207,11 +208,14 @@ public final class Window {
 
     /**
      * Research R4: the local counts changed since the last call, as {@code [second, count]} pairs within the window,
-     * and clears the marks (and the queued flag, T054). The counts are absolute (this instance's total for that
-     * second), so a flush that is retried or repeated is harmless.
+     * and clears the marks. The counts are absolute (this instance's total for that second), so a flush that is
+     * retried or repeated is harmless. The admissions counted since the last drain move into flush generation
+     * {@code generation}'s bucket: they are written by that flush, and confirmed once {@code generation} is.
+     *
+     * @param confirmedThrough the generations confirmed so far; an older bucket that isn't is merged, never dropped
      */
-    public synchronized long[][] drainDirty(long now) {
-        queued = false;
+    public synchronized long[][] drainDirty(long now, long generation, long confirmedThrough) {
+        movePending(generation, confirmedThrough);
         if (dirty == 0 || head == Long.MIN_VALUE) {
             dirty = 0;
             return new long[0][];
@@ -228,6 +232,23 @@ public final class Window {
         return k == out.length ? out : java.util.Arrays.copyOf(out, k);
     }
 
+    private void movePending(long generation, long confirmedThrough) {
+        if (unflushed == 0) {
+            return;
+        }
+        boolean a = (generation & 1) == 0;
+        long old = a ? genA : genB;
+        int carried = old == generation || (old != Long.MIN_VALUE && old > confirmedThrough) ? (a ? countA : countB) : 0;
+        if (a) {
+            genA = generation;
+            countA = carried + unflushed;
+        } else {
+            genB = generation;
+            countB = carried + unflushed;
+        }
+        unflushed = 0;
+    }
+
     /** Marks {@code second}'s local count as changed again (its flush failed). */
     public synchronized void markDirty(long second, long now) {
         if (held(second) && second >= now - (SLOTS - 1) && local(slot(second)) > 0) {
@@ -235,55 +256,15 @@ public final class Window {
         }
     }
 
-    /** T054: marks this window as queued; whether it was not queued before (so the caller queues it). */
-    synchronized boolean enqueue() {
-        if (queued) {
-            return false;
-        }
-        queued = true;
-        return true;
+    /** Research R4: one admission, unflushed until the next drain of this window. */
+    synchronized void addPending() {
+        unflushed++;
     }
 
-    /** Research R4: one admission in flush generation {@code generation}. */
-    synchronized void addPending(long generation) {
-        switch ((int) Math.floorMod(generation, 3)) {
-            case 0 -> {
-                if (pg0 != generation) {
-                    pg0 = generation;
-                    pc0 = 0;
-                }
-                pc0++;
-            }
-            case 1 -> {
-                if (pg1 != generation) {
-                    pg1 = generation;
-                    pc1 = 0;
-                }
-                pc1++;
-            }
-            default -> {
-                if (pg2 != generation) {
-                    pg2 = generation;
-                    pc2 = 0;
-                }
-                pc2++;
-            }
-        }
-    }
-
-    /** Research R4: admissions of generations after {@code confirmedThrough}, i.e. not yet visible to every peer. */
+    /** Research R4: admissions not yet visible to every peer: unflushed, or flushed in a generation after the one given. */
     synchronized int unconfirmed(long confirmedThrough) {
-        int n = 0;
-        if (pg0 != Long.MIN_VALUE && pg0 > confirmedThrough) {
-            n += pc0;
-        }
-        if (pg1 != Long.MIN_VALUE && pg1 > confirmedThrough) {
-            n += pc1;
-        }
-        if (pg2 != Long.MIN_VALUE && pg2 > confirmedThrough) {
-            n += pc2;
-        }
-        return n;
+        return unflushed + (genA != Long.MIN_VALUE && genA > confirmedThrough ? countA : 0)
+                + (genB != Long.MIN_VALUE && genB > confirmedThrough ? countB : 0);
     }
 
     /** FR-018: a refusal log line to write: how many refusals it reports, and the request id of the first. */

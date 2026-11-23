@@ -217,6 +217,18 @@ class ValidationThrottleIT extends BaseTestContainer {
         assertEquals(java.util.List.of("x", ThrottleService.NOT_LOADED), unstarted.notReadyReasons(java.util.List.of("x")));
         assertTrue(throttle().ready());
         assertEquals(java.util.List.of(), throttle().notReadyReasons(java.util.List.of()));
+        // Code review of #99: start() completes once the caps are loaded; the instance then warms up (two sync ticks)
+        // with its own readiness reason, and is ready afterwards.
+        await(unstarted.start());
+        try {
+            assertFalse(unstarted.ready());
+            assertEquals(java.util.List.of(ThrottleService.WARMING_UP), unstarted.notReadyReasons(java.util.List.of()));
+            await(unstarted.warmed());
+            assertTrue(unstarted.ready());
+            assertEquals(java.util.List.of(), unstarted.notReadyReasons(java.util.List.of()));
+        } finally {
+            await(unstarted.stop());
+        }
         HttpResponse<Buffer> ready = await(app.client().get(app.port(), "localhost", "/health/readiness").send());
         assertEquals(200, ready.statusCode(), ready.bodyAsString());
         assertFalse(ready.bodyAsString().contains("rate limits not loaded"));

@@ -242,6 +242,11 @@ public final class ServiceRegistry {
         return throttle.get().start();
     }
 
+    /** Spec 014 T056: completes when the rate limits are warm; at once while access control is disabled. */
+    public Future<Void> throttleWarmed() {
+        return throttle.map(nzi.fhir.validator.core.throttle.ThrottleService::warmed).orElse(Future.succeededFuture());
+    }
+
     public Future<Void> stop() {
         // Spec 014: removes this instance's heartbeat before the pool closes (Bootstrap closes it after this).
         Future<Void> throttleStopped = throttle.map(nzi.fhir.validator.core.throttle.ThrottleService::stop)

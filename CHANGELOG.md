@@ -33,8 +33,8 @@ Rate limits on validation, per API key and per organisation (spec 014). Additive
   `fv_throttle_evictions_total`, `fv_throttle_peers`, `fv_throttle_local_mode`,
   `fv_throttle_sync_failures_total{step}`, `fv_throttle_sync_seconds`, `fv_throttle_ticks_skipped_total`; a refusal
   log line at most once a minute per key or organisation. Readiness reports `rate limits not loaded` until the caps
-  are read and the instance's peers count it (two sync ticks, about 2 s), so a starting instance never takes the
-  fleet past a cap.
+  are read, then `rate limits warming up …` until the instance's peers count it (two sync ticks, about 2 s), so a
+  starting instance never takes the fleet past a cap.
 
 ### Changed
 

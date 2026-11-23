@@ -173,6 +173,7 @@ Metrics: `fv_throttle_checked_total`, `fv_throttle_refused_total{scope,reason}`,
 Suggested alerts: `fv_throttle_local_mode == 1` for more than a minute; `rate(fv_throttle_evictions_total[5m]) > 0`
 (raise `FV_THROTTLE_MAX_TRACKED`).
 
-Readiness reports `rate limits not loaded` until an instance has read the caps and completed two sync ticks at
-startup (about 2 s).
+Readiness reports `rate limits not loaded` until an instance has read the caps, then `rate limits warming up (waiting
+for the other instances to count this one)` until it has completed two sync ticks (about 2 s). If counts can't be
+shared at all (local mode), warm-up ends at once, so a database outage never keeps an instance not ready.
 

@@ -56,6 +56,22 @@ p95 +0.9 ms against 1.3.0 (budget: 5 ms). Every request was checked (`fv_throttl
 tracked key or organisation, worst case (this instance's and the peers' counts): 562 bytes, cache entry included
 (`ThrottleFootprintTest`), so about 56 MB at the default 100 000 (SC-008).
 
+## After the code-review fixes — PASS
+
+The fixes for the code review of #99 change the request path again: changed subjects are marked under the window
+lock, with no second lock and no extra allocation per admission. Same setup, image built from
+`014-throttle-review-fixes`, both runs in the same session.
+
+| Run | Build | Requests/s | Median (ms) | p95 (ms) | Failed |
+|-----|-------|-----------:|------------:|---------:|-------:|
+| base | 1.3.0 | 213.6 | 35.8 | 50.5 | 0 |
+| caps | 1.4.0 (review fixes) | 221.4 | 34.6 | 46.2 | 0 |
+
+1.4.0 is not slower than 1.3.0 (p95 −4.3 ms). This session's 1.3.0 baseline is high next to the earlier 1.3.0 runs
+(40.6–44.0 ms), so read the difference as noise, not a speed-up. Every request was checked
+(`fv_throttle_checked_total` 16 001). Memory per tracked key or organisation, worst case: 545 bytes
+(`ThrottleFootprintTest`).
+
 ## Reproduce
 
 ```bash
