@@ -618,3 +618,7 @@ Task: "T020 [US1] CorsConfig exposed headers"       # parallel with T015
 - [X] T057 Name the key or organisation in the `limit` command's not-found errors (`error: not-found: API key '<name>' not found` / `Organisation '<o>' not found`) in `src/main/java/nzi/fhir/validator/cli/LimitCommands.java`, with a `LimitCommandsIT` assertion, per contracts/operations.md §2.1 (partial)
 - [X] T058 Assert in `src/test/java/nzi/fhir/validator/web/AclDisabledIT.java#notThrottled` that `/metrics` has no `fv_throttle_checked_total` (or it is 0) while access control is disabled, per tasks T033 (partial)
 - [X] T059 Record `core/throttle/RateLimitRepository.java` (cap setters and listing) and `core/throttle/CountStore.java` (sync store interface used by the simulation) in plan.md's Project Structure, or move the setters to `ApiKeyRepository`/`OrganisationRepository` as planned, per plan: Project Structure (unrequested)
+
+## Phase 12: Convergence
+
+- [X] T060 Update the check order in `specs/014-api-throttling/contracts/http-api.md` §2 (and the "still starting" row of §1) so the throttle's 503 `not-ready` covers both waits: until the caps are loaded, and until the instance's peers count it (two sync ticks, T056), per contracts/http-api.md §2 (partial)

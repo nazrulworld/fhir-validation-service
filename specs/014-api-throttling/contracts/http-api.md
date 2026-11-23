@@ -13,13 +13,14 @@ new response headers. Paths, parameters and request and response bodies are unch
 | Key of the system organisation (any role) | no | no | no |
 | Any other key (ADMIN or VALIDATE) with an effective cap at ≥ 1 level | yes | yes | yes |
 | Any other key with no effective cap at either level (defaults removed, no own caps) | no | no | no |
-| Request refused by auth (401, 403) or still starting (503 from the auth gate) | no | — | no |
+| Request refused by auth (401, 403) or still starting (503 from the auth gate, or from the throttle until it is ready: see §2) | no | — | no |
 | Any operation other than `POST /{version}/validate` | no | no | no |
 
 ## 2. Check order
 
-`auth (401/403)` → **throttle (429, or 503 until the first cap snapshot is loaded)** → contract validation (400) →
-content negotiation and parsing (406/415/400) → admission (503) → validation (200/4xx/5xx).
+`auth (401/403)` → **throttle (429; or 503 `not-ready` until the instance is ready: the caps are loaded and its
+peers count it, after two sync ticks, T056)** → contract validation (400) → content negotiation and parsing
+(406/415/400) → admission (503) → validation (200/4xx/5xx).
 
 - A 429 is answered without parsing or validating the body.
 - A 429 is not written to `validation_usage` (research R9).
