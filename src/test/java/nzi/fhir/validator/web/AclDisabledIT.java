@@ -120,6 +120,13 @@ class AclDisabledIT extends BaseTestContainer {
                         assertNull(r.getHeader("RateLimit-Limit"));
                         assertNull(r.getHeader("RateLimit-Remaining"));
                     }));
+                    return app.client().get(app.port(), "localhost", "/metrics").send();
+                })
+                .compose(metrics -> {
+                    // T033/T058: nothing is checked against caps, so the check counter doesn't even exist.
+                    ctx.verify(() -> assertFalse(metrics.bodyAsString().lines()
+                            .anyMatch(l -> l.startsWith("fv_throttle_checked_total") && !l.endsWith(" 0.0")),
+                            "fv_throttle_checked_total is absent or 0"));
                     return column("SELECT rate_limit_per_minute FROM fhir_validator_schema.api_keys WHERE id = '"
                             + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "' UNION ALL SELECT rate_limit_per_minute FROM "
                             + "fhir_validator_schema.organisations WHERE id = '" + Constant.TRIAL_ORG_ID + "'");

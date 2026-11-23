@@ -155,8 +155,9 @@ How it works:
   yet shared, so the fleet admits at most the cap plus 10 % (at least one request) per rolling minute. For very small
   caps on several instances this means admitting slightly fewer than the cap (cap 5 on 3 instances: 4 per minute), and
   a cap smaller than the number of instances (cap 1 on 3 instances) can be exceeded by up to the number of other
-  instances. In the first second after an instance joins, the others still count it out, so the bound can be exceeded
-  briefly.
+  instances (accepted in the spec).
+- A starting instance reports not ready until every running instance counts it (two sync intervals, about 2 s), so a
+  new instance never takes the fleet past the bound.
 - A refused request is counted in `fv_throttle_refused_total` and logged at most once a minute per key or
   organisation (`throttle: key <id> (org <id>) refused <n> request(s) …`). It is not written to `validation_usage`.
 
@@ -172,5 +173,6 @@ Metrics: `fv_throttle_checked_total`, `fv_throttle_refused_total{scope,reason}`,
 Suggested alerts: `fv_throttle_local_mode == 1` for more than a minute; `rate(fv_throttle_evictions_total[5m]) > 0`
 (raise `FV_THROTTLE_MAX_TRACKED`).
 
-Readiness reports `rate limits not loaded` until an instance has read the caps at startup.
+Readiness reports `rate limits not loaded` until an instance has read the caps and completed two sync ticks at
+startup (about 2 s).
 

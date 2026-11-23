@@ -40,6 +40,22 @@ key of another organisation (caps far above its rate) validates with 1 virtual u
   increase comes from the refusal flood itself (44 000 requests a second on the same 4 CPUs), not from validation
   work; a real client backing off on `Retry-After` sends far fewer. This is the worst case for the bystander.
 
+## After the convergence changes (T054–T056) — PASS
+
+The convergence pass changed the request path: a compact `Window` (T055) and the changed-window queue (T054).
+Same setup, image built from `014-throttle-convergence`. Two 1.3.0 baseline runs are reported; the first was an
+outlier (its p95 is 12 ms above every other 1.3.0 run on this machine), so the comparison uses the second.
+
+| Run | Build | Requests/s | Median (ms) | p95 (ms) | Failed |
+|-----|-------|-----------:|------------:|---------:|-------:|
+| base (outlier) | 1.3.0 | 209.0 | 35.0 | 56.4 | 0 |
+| base | 1.3.0 | 237.6 | 33.2 | 40.6 | 0 |
+| caps | 1.4.0 (convergence) | 235.6 | 33.5 | 41.5 | 0 |
+
+p95 +0.9 ms against 1.3.0 (budget: 5 ms). Every request was checked (`fv_throttle_checked_total` 16 956). Memory per
+tracked key or organisation, worst case (this instance's and the peers' counts): 562 bytes, cache entry included
+(`ThrottleFootprintTest`), so about 56 MB at the default 100 000 (SC-008).
+
 ## Reproduce
 
 ```bash

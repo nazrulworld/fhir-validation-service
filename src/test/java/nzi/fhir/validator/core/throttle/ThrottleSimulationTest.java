@@ -106,9 +106,15 @@ class ThrottleSimulationTest {
             throttles[i] = new Throttle(1_000, INTERVAL_MS);
             syncs[i] = new ThrottleSync(throttles[i], store, INTERVAL_MS, () -> clock[0], "sim-" + i);
         }
-        for (ThrottleSync s : syncs) {
-            store.now = clock[0];
-            s.start();
+        // T056: with 2–3 instances the last one joins after two minutes, while the others are under load.
+        long joinAt = instances > 1 ? T0 + 120_000 : T0;
+        boolean[] started = new boolean[instances];
+        for (int i = 0; i < instances; i++) {
+            if (i < instances - 1 || joinAt == T0) {
+                store.now = clock[0];
+                syncs[i].start();
+                started[i] = true;
+            }
         }
         ThrottleCaps caps = new ThrottleCaps(Map.of(KEY, cap), Map.of(), OptionalInt.empty(), OptionalInt.empty(), Instant.EPOCH);
         Random random = new Random(cap * 31L + instances * 7L + balancing.ordinal() * 3L + load.ordinal());
@@ -120,11 +126,22 @@ class ThrottleSimulationTest {
         for (long t = T0; t < T0 + DURATION_MS; t += STEP_MS) {
             clock[0] = t;
             store.now = t;
+            if (!started[instances - 1] && t >= joinAt) {
+                syncs[instances - 1].start();
+                started[instances - 1] = true;
+            }
             for (int i = 0; i < instances; i++) {
                 // Phases on the simulation's 10 ms grid (333 ms would never be hit).
                 long phase = i * INTERVAL_MS / instances / STEP_MS * STEP_MS;
-                if (Math.floorMod(t - T0 - phase, INTERVAL_MS) == 0) {
+                if (started[i] && Math.floorMod(t - T0 - phase, INTERVAL_MS) == 0) {
                     syncs[i].tick();
+                }
+            }
+            // The load balancer sends requests only to ready instances (T056: not before two sync ticks).
+            List<Integer> ready = new ArrayList<>();
+            for (int i = 0; i < instances; i++) {
+                if (started[i] && syncs[i].warm()) {
+                    ready.add(i);
                 }
             }
             int requests;
@@ -134,12 +151,16 @@ class ThrottleSimulationTest {
             if (load == Load.BURSTS && Math.floorMod(t - T0, 20_000) == 0) {
                 requests += cap * 2;
             }
-            for (int r = 0; r < requests; r++) {
+            for (int r = 0; r < requests && !ready.isEmpty(); r++) {
                 int target = switch (balancing) {
-                    case STICKY -> 0;
-                    case ROUND_ROBIN -> next++ % instances;
-                    case RANDOM -> random.nextInt(instances);
+                    // Sticky: the client is pinned to the first instance; after the join, half of the time to the new one.
+                    case STICKY -> ready.contains(instances - 1) && instances > 1 && (t / 30_000) % 2 == 1 ? instances - 1 : 0;
+                    case ROUND_ROBIN -> ready.get(next++ % ready.size());
+                    case RANDOM -> ready.get(random.nextInt(ready.size()));
                 };
+                if (!ready.contains(target)) {
+                    continue;
+                }
                 if (throttles[target].check(KEY, ORG, caps, t).admitted()) {
                     admitted.add(t);
                 }
@@ -161,5 +182,56 @@ class ThrottleSimulationTest {
         if (peers == 0 || cap >= 10 * peers) {
             assertTrue(max >= (peers == 0 ? cap : cap - peers), "the cap is used: " + max + " of " + cap);
         }
+    }
+
+    /**
+     * T056: an instance joins while the window has room. Before the old instances' next tick they still reserve room for
+     * one peer, not two; the newcomer must not be sent requests until they count it (it is ready only after two ticks).
+     * Without that, cap 30 (bound 33) admits 34 here.
+     */
+    @org.junit.jupiter.api.Test
+    void aJoiningInstanceDoesNotBreakTheBound() {
+        MemoryStore store = new MemoryStore();
+        long[] clock = {T0};
+        Throttle a = new Throttle(1_000, INTERVAL_MS);
+        Throttle b = new Throttle(1_000, INTERVAL_MS);
+        Throttle c = new Throttle(1_000, INTERVAL_MS);
+        ThrottleSync sa = new ThrottleSync(a, store, INTERVAL_MS, () -> clock[0], "a");
+        ThrottleSync sb = new ThrottleSync(b, store, INTERVAL_MS, () -> clock[0], "b");
+        ThrottleSync sc = new ThrottleSync(c, store, INTERVAL_MS, () -> clock[0], "c");
+        ThrottleCaps caps = new ThrottleCaps(Map.of(KEY, 30), Map.of(), OptionalInt.empty(), OptionalInt.empty(), Instant.EPOCH);
+        store.now = T0;
+        sa.start();
+        sb.start();
+        int admitted = 0;
+        // 27 admissions on a (paced by the burst guard), both instances ticking once a second.
+        for (long t = T0; t < T0 + 30_000; t += 100) {
+            clock[0] = t;
+            store.now = t;
+            if ((t - T0) % 1_000 == 0) {
+                sa.tick();
+                sb.tick();
+            }
+            if ((t - T0) % 200 == 0 && admitted < 27 && a.check(KEY, ORG, caps, t).admitted()) {
+                admitted++;
+            }
+        }
+        assertTrue(admitted == 27, "setup: " + admitted);
+        // c joins between the old instances' ticks; then 10 requests to each instance that is ready.
+        long t = T0 + 30_050;
+        clock[0] = t;
+        store.now = t;
+        sc.start();
+        for (Object[] inst : new Object[][]{{a, sa}, {b, sb}, {c, sc}}) {
+            if (!((ThrottleSync) inst[1]).warm()) {
+                continue;
+            }
+            for (int r = 0; r < 10; r++) {
+                if (((Throttle) inst[0]).check(KEY, ORG, caps, t).admitted()) {
+                    admitted++;
+                }
+            }
+        }
+        assertTrue(admitted <= 33, "fleet admitted " + admitted + " in the minute; bound 33");
     }
 }

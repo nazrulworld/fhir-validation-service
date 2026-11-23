@@ -172,9 +172,16 @@ class LimitCommandsIT extends BaseTestContainer {
         assertExit(cli("limit", "set", "--per-minute", "5"), 2);
         assertExit(cli("limit", "set", "--key", "acme-a", "--org", "acme", "--per-minute", "5"), 2);
         assertExit(cli("limit", "remove", "--default-key", "--default-org"), 2);
-        assertExit(cli("limit", "set", "--key", "no-such-key", "--per-minute", "5"), 3);
-        assertExit(cli("limit", "set", "--org", "no-such-org", "--per-minute", "5"), 3);
-        assertExit(cli("limit", "list", "--org", "no-such-org"), 3);
+        // contracts/operations.md §2.1: the error names what wasn't found.
+        Run noKey = cli("limit", "set", "--key", "no-such-key", "--per-minute", "5");
+        assertExit(noKey, 3);
+        assertTrue(noKey.err().contains("error: not-found: API key 'no-such-key' not found"), noKey.err());
+        Run noOrg = cli("limit", "set", "--org", "no-such-org", "--per-minute", "5");
+        assertExit(noOrg, 3);
+        assertTrue(noOrg.err().contains("error: not-found: Organisation 'no-such-org' not found"), noOrg.err());
+        Run listNoOrg = cli("limit", "list", "--org", "no-such-org");
+        assertExit(listNoOrg, 3);
+        assertTrue(listNoOrg.err().contains("error: not-found: Organisation 'no-such-org' not found"), listNoOrg.err());
     }
 
     /** FR-016: the audit line. */

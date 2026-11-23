@@ -136,18 +136,25 @@ src/main/java/nzi/fhir/validator/
 ├── core/Constant.java                        # CHANGE: initial caps (600, 1200, 60, 30) and settings names
 ├── core/config/ConfigLoader.java             # CHANGE: FV_THROTTLE_SYNC_INTERVAL_MS, _CAPS_REFRESH_MS, _MAX_TRACKED
 ├── core/config/ApplicationConfig.java        # CHANGE: getters
-├── core/security/ApiKeyRepository.java       # CHANGE: upsertWellKnown inserts rate_limit_per_minute (insert-only);
-│                                             #   setRateLimit / findForLimit
-├── core/org/OrganisationRepository.java      # CHANGE: setRateLimit
-├── core/settings/ServiceSettingsRepository.java  # CHANGE: THROTTLE_DEFAULT_KEY / _ORG names; delete(name)
+├── core/security/ApiKeyRepository.java       # CHANGE: upsertWellKnown inserts rate_limit_per_minute (insert-only)
+├── core/settings/ServiceSettingsRepository.java  # CHANGE: THROTTLE_DEFAULT_KEY / _ORG names; get(name), delete(name)
 ├── core/throttle/                            # NEW package
 │   ├── ThrottleCaps.java                     # immutable snapshot + effective-cap resolution
 │   ├── ThrottleCapsRepository.java           # one UNION query → snapshot
-│   ├── Window.java                           # 61 one-second buckets (local/remote), unconfirmed count, log state
+│   ├── RateLimitRepository.java              # cap reads/writes for the CLI: lock + set a key's or organisation's
+│   │                                         #   cap, list organisations and keys (one place for all cap SQL;
+│   │                                         #   replaces the setters first planned in ApiKeyRepository and
+│   │                                         #   OrganisationRepository)
+│   ├── Window.java                           # 61 one-second buckets (local/remote), unconfirmed count, log state;
+│   │                                         #   compact layout within SC-008 (T055)
 │   ├── ThrottleDecision.java                 # admit/refuse result: scope, limit, remaining, reset, retryAfter
 │   ├── Throttle.java                         # check-and-count for (key, org) under ordered locks; admission rule
-│   ├── ThrottleSync.java                     # periodic flush/heartbeat/read, cap reload, cleanup, local mode
-│   ├── ThrottleCountsRepository.java         # unnest upsert, read last N s, heartbeat, cleanup
+│   ├── ThrottleSync.java                     # periodic flush/heartbeat/read, cleanup, local mode; drains only
+│   │                                         #   changed windows (T054); warm after two ticks (T056)
+│   ├── CountStore.java                       # interface of the shared counts, so ThrottleSimulationTest can run
+│   │                                         #   a fleet on an in-memory table
+│   ├── ThrottleCountsRepository.java         # CountStore on PostgreSQL: unnest upsert, read last N s, heartbeat,
+│   │                                         #   cleanup
 │   └── ThrottleService.java                  # wiring, start (caps + 60 s read) / stop, metrics binding
 ├── core/metrics/ServiceMetrics.java          # CHANGE: bindThrottle(...) — fv_throttle_* meters
 ├── web/ThrottleHandler.java                  # NEW: root handler; headers; 429 problem; bounded refusal log

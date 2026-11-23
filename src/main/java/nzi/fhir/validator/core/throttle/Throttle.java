@@ -39,6 +39,16 @@ public final class Throttle {
     }
 
     private final Cache<SubjectKey, Window> windows;
+    /**
+     * T054 (Constitution I): the windows changed since the last flush, each at most once, so a sync tick costs what
+     * changed, not every tracked window.
+     */
+    private final java.util.concurrent.ConcurrentLinkedQueue<Changed> changed = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private volatile int lastDrained;
+
+    /** A window queued for the next flush, with the subject it counts. */
+    record Changed(SubjectKey key, Window window) {
+    }
     private final long syncIntervalMs;
     private final LongAdder evictions = new LongAdder();
 
@@ -86,14 +96,49 @@ public final class Throttle {
         // Fixed lock order: key, then organisation (research R3).
         Object first = keyWindow != null ? keyWindow : orgWindow;
         Object second = keyWindow != null && orgWindow != null ? orgWindow : null;
+        ThrottleDecision d;
         synchronized (first) {
             if (second == null) {
-                return decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
-            }
-            synchronized (second) {
-                return decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
+                d = decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
+            } else {
+                synchronized (second) {
+                    d = decide(keyWindow, keyCap, orgWindow, orgCap, now, p);
+                }
             }
         }
+        if (d.admitted()) {
+            // After the locks: a flush that drained the window in between only finds nothing new (harmless).
+            queue(KEY, keyId, keyWindow);
+            queue(ORG, orgId, orgWindow);
+        }
+        return d;
+    }
+
+    private void queue(char scope, UUID id, Window w) {
+        if (w != null && w.enqueue()) {
+            changed.add(new Changed(new SubjectKey(scope, id), w));
+        }
+    }
+
+    /** T054: hands every window changed since the last call to {@code action}, each once. */
+    void drainChanged(BiConsumer<SubjectKey, Window> action) {
+        int n = 0;
+        for (Changed c; (c = changed.poll()) != null; n++) {
+            action.accept(c.key(), c.window());
+        }
+        lastDrained = n;
+    }
+
+    /** Queues a window again (its flush failed). */
+    void requeue(SubjectKey key, Window w) {
+        if (w.enqueue()) {
+            changed.add(new Changed(key, w));
+        }
+    }
+
+    /** Windows the last {@link #drainChanged} visited (tests). */
+    int lastDrained() {
+        return lastDrained;
     }
 
     /** One level's verdict before counting. */
@@ -174,11 +219,6 @@ public final class Throttle {
     /** The window of a subject if it is tracked. */
     Window existingWindow(char scope, UUID id) {
         return windows.getIfPresent(new SubjectKey(scope, id));
-    }
-
-    /** Every tracked window (sync). */
-    void forEachWindow(BiConsumer<SubjectKey, Window> action) {
-        windows.asMap().forEach(action);
     }
 
     public long trackedSubjects() {

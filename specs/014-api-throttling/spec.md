@@ -57,6 +57,13 @@ own organisation, which owns the fixed system administrator key) are never throt
   validation response to a throttled key carries the cap, the remaining allowance and the seconds until reset, for
   whichever of the key's or organisation's cap is tighter.
 
+### Session 2026-11-24 (convergence, T056)
+
+- Q: How are the two exceptions to the fleet bound found while implementing resolved: a cap smaller than the number of
+  instances, and the first second after an instance joins? → A: The join case is fixed in code: a starting instance is
+  not ready (and gets no requests) until every peer counts it. A cap smaller than the number of instances is an
+  accepted exception: the fleet may exceed it by up to the number of other instances.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A key cannot exceed its per-minute validation cap (Priority: P1)
@@ -215,7 +222,10 @@ seconds with a system-organisation key (all served) and 2 with a key of another 
 - **Many instances**: caps apply to the whole service, not to each instance. Because instances share their counts
   about once per second rather than on every request, a key whose requests are spread over several instances may get
   slightly more than its cap: at most 10% over (at least 1 request), e.g. at most 11 for a cap of 10 or 6 for a cap of
-  5. The acceptance scenarios of User Stories 1, 2 and 5 assume a single instance, where the cap is exact.
+  5. The acceptance scenarios of User Stories 1, 2 and 5 assume a single instance, where the cap is exact. A cap
+  smaller than the number of instances is the accepted exception: it may be exceeded by up to the number of other
+  instances. A starting instance gets no requests until every running instance counts it (it is not ready before), so
+  a join doesn't break the bound.
 - **Bursts at minute boundaries**: the cap applies to any rolling 60-second period, so a client cannot get twice its
   cap by sending a burst just before and just after a full minute.
 - **Cap lowered below current usage**: if an operator lowers a cap below what the key has already used in the last
@@ -345,7 +355,9 @@ seconds with a system-organisation key (all served) and 2 with a key of another 
 
 - **SC-001**: For any key or organisation with a cap of N, the number of validation requests served in any rolling
   60-second period never exceeds N with one instance, and never exceeds N plus 10% of N (rounded up, at least N + 1)
-  with 2 or 3 instances running behind a load balancer.
+  with 2 or 3 instances running behind a load balancer, also while an instance joins. Accepted exception
+  (clarification 2026-11-24): a cap smaller than the number of instances (e.g. 1 on 3 instances) may be exceeded by up
+  to the number of other instances.
 - **SC-002**: Clients within their caps see no change in results, and the cap check adds no more than 5 ms to the
   95th-percentile response time of a single-resource validation.
 - **SC-003**: 100% of refusals tell the client which cap was reached and how long to wait; a client that waits the
