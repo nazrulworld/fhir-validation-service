@@ -19,8 +19,15 @@ COPY src ./src
 # Packaged into the jar root (pom.xml <resources>).
 COPY LICENSE.md ./
 # Tests run in CI before the image is built (see .github/workflows).
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -DskipTests \
-    && cp target/fhir-validation-service-*.jar /build/app.jar
+# Retried like the step above: when that step's layer comes from the build cache, the /root/.m2 cache mount can be
+# empty (a fresh CI runner), so this step downloads Maven and the dependencies itself. A real build failure fails
+# three times, about 30 s later than without the retry.
+RUN --mount=type=cache,target=/root/.m2 \
+    for attempt in 1 2 3; do \
+      ./mvnw -B -q package -DskipTests && cp target/fhir-validation-service-*.jar /build/app.jar && exit 0; \
+      [ "$attempt" = 3 ] || { echo "Maven build failed (attempt $attempt of 3); retrying" >&2; sleep $((attempt * 10)); }; \
+    done; \
+    exit 1
 
 # License and third-party notices, taken from the jar so the image carries exactly what the jar carries
 # (specs/002-polyform-noncommercial-license/contracts/distribution-layout.md).
