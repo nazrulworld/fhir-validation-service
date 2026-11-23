@@ -5,9 +5,7 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.SqlClient;
 import nzi.fhir.validator.core.Constant;
-import nzi.fhir.validator.core.org.OrganisationRepository;
 import nzi.fhir.validator.core.org.Organisations;
-import nzi.fhir.validator.core.security.ApiKeyRepository;
 import nzi.fhir.validator.core.settings.ServiceSettingsRepository;
 import nzi.fhir.validator.core.throttle.RateLimitRepository;
 import org.apache.logging.log4j.LogManager;
@@ -98,6 +96,12 @@ final class LimitCommands {
         });
     }
 
+    /** contracts/operations.md §2.1: names the key or organisation (the operator typed it; nothing is disclosed). */
+    private static nzi.fhir.validator.web.ProblemException notFound(boolean key, String name) {
+        return new nzi.fhir.validator.web.ProblemException(404, "not-found",
+                (key ? "API key '" : "Organisation '") + name + "' not found");
+    }
+
     private static String label(Integer cap) {
         return cap == null ? "none" : String.valueOf(cap);
     }
@@ -107,7 +111,7 @@ final class LimitCommands {
         return (key ? RateLimitRepository.lockKey(tx, name) : RateLimitRepository.lockOrganisation(tx, name))
                 .compose(found -> {
                     if (found.isEmpty()) {
-                        return Future.failedFuture(key ? ApiKeyRepository.notFound() : OrganisationRepository.notFound());
+                        return Future.failedFuture(notFound(key, name));
                     }
                     RateLimitRepository.Target t = found.get();
                     if (Organisations.SYSTEM_ID.equals(t.owner())) {
@@ -161,7 +165,7 @@ final class LimitCommands {
                         .compose(dorg -> RateLimitRepository.organisations(c, only)
                                 .compose(orgs -> {
                                     if (only != null && orgs.isEmpty()) {
-                                        return Future.failedFuture(OrganisationRepository.notFound());
+                                        return Future.failedFuture(notFound(false, only));
                                     }
                                     return RateLimitRepository.keys(c).map(keys -> listJson(parse(dk), parse(dorg), orgs, keys));
                                 }))));

@@ -87,6 +87,25 @@ public final class ThrottleSync {
         return instanceId;
     }
 
+    /**
+     * T056: whether every live peer has counted this instance by now. Its heartbeat is written at {@link #start()}; each
+     * peer reads heartbeats once per interval, so after two completed ticks of this instance every peer reserves room
+     * for it. Until then the instance is not ready, and the load balancer sends it no requests, so a join can't take the
+     * fleet past its bound. Failed ticks count too: without a database nobody can see anyone, and local mode applies.
+     */
+    public boolean warm() {
+        return completedTicks >= WARM_TICKS;
+    }
+
+    static final int WARM_TICKS = 2;
+    private volatile int completedTicks;
+    private final io.vertx.core.Promise<Void> warmed = io.vertx.core.Promise.promise();
+
+    /** Completes once {@link #warm()} is true. */
+    public Future<Void> warmed() {
+        return warmed.future();
+    }
+
     public boolean localMode() {
         return localMode;
     }
@@ -129,11 +148,12 @@ public final class ThrottleSync {
         }
         long closing = throttle.nextGeneration();
         List<CountStore.CountRow> rows = new ArrayList<>();
-        List<Window> flushed = new ArrayList<>();
-        throttle.forEachWindow((key, w) -> {
+        List<Throttle.Changed> flushed = new ArrayList<>();
+        // T054: only the windows changed since the last flush; the tick's cost follows traffic, not FV_THROTTLE_MAX_TRACKED.
+        throttle.drainChanged((key, w) -> {
             for (long[] bucket : w.drainDirty(nowSec)) {
                 rows.add(new CountStore.CountRow(key.scope(), key.id(), bucket[0], (int) bucket[1]));
-                flushed.add(w);
+                flushed.add(new Throttle.Changed(key, w));
             }
         });
         String[] step = {"flush"};
@@ -141,7 +161,9 @@ public final class ThrottleSync {
                 .onFailure(err -> {
                     // Written again on the next tick.
                     for (int i = 0; i < rows.size(); i++) {
-                        flushed.get(i).markDirty(rows.get(i).second(), nowSec);
+                        Throttle.Changed c = flushed.get(i);
+                        c.window().markDirty(rows.get(i).second(), nowSec);
+                        throttle.requeue(c.key(), c.window());
                     }
                 })
                 .compose(v -> {
@@ -175,6 +197,9 @@ public final class ThrottleSync {
                 })
                 .compose(v -> cleanupIfDue(now, nowSec))
                 .onComplete(ar -> {
+                    if (completedTicks < WARM_TICKS && ++completedTicks == WARM_TICKS) {
+                        warmed.tryComplete();
+                    }
                     staleReadCheck(now);
                     listener.tick(System.nanoTime() - started);
                     running = false;

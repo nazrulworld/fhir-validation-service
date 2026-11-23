@@ -7,80 +7,160 @@ package nzi.fhir.validator.core.throttle;
  * sum over the buckets of the seconds {@code now - 60 .. now}. Whole seconds make the window up to one second longer
  * than 60 s, so the count is never lower than an exact rolling minute's: a cap is never exceeded on one instance.
  * <p>
+ * Compact (SC-008, T055): the ring remembers only its newest second ({@code head}); a slot belongs to the one second
+ * of {@code head - 60 .. head} it maps to, and slots are cleared as {@code head} moves on. Counts are kept as
+ * {@code char} and widened to {@code int} only when a second's count exceeds 65 535; the remote counts are allocated
+ * when a peer first reports one; the changed-since-flush marks are one bit each.
+ * <p>
  * Every method is {@code synchronized} and does no I/O: windows are touched from every HTTP event loop, and a request
  * holds at most two of them (its key's, then its organisation's; never the other way round).
  */
 public final class Window {
     /** 61 buckets: the current second and the 60 before it. */
     static final int SLOTS = 61;
+    private static final int CHAR_MAX = 0xFFFF;
 
-    private final long[] seconds = new long[SLOTS];
-    private final int[] local = new int[SLOTS];
-    private final int[] remote = new int[SLOTS];
-    /** Whether a slot's {@code local} count changed since the last {@link #drainDirty} (spec 014 research R4). */
-    private final boolean[] dirty = new boolean[SLOTS];
+    /** The newest second the ring holds; {@link Long#MIN_VALUE} while empty. */
+    private long head = Long.MIN_VALUE;
+    private char[] localC = new char[SLOTS];
+    private int[] localW;
+    private char[] remoteC;
+    private int[] remoteW;
+    /** Bit i: slot i's local count changed since the last {@link #drainDirty} (research R4). */
+    private long dirty;
+    /** T054: this window is in the throttle's changed-window queue. */
+    private boolean queued;
 
-    // Research R4: admissions not yet visible to every peer, per flush generation (see Throttle).
-    private final long[] pendingGeneration = new long[3];
-    private final int[] pendingCount = new int[3];
+    // Research R4: admissions not yet visible to every peer, per flush generation (three generations in flight).
+    private long pg0 = Long.MIN_VALUE, pg1 = Long.MIN_VALUE, pg2 = Long.MIN_VALUE;
+    private int pc0, pc1, pc2;
 
     // FR-018: the bounded refusal log (at most one line per subject per minute).
     private long lastLogAtMs = Long.MIN_VALUE;
     private int refusedSinceLog;
     private String firstRefusedRequestId;
 
-    public Window() {
-        java.util.Arrays.fill(seconds, Long.MIN_VALUE);
-        java.util.Arrays.fill(pendingGeneration, Long.MIN_VALUE);
-    }
-
     private static int slot(long second) {
         return (int) Math.floorMod(second, SLOTS);
     }
 
-    private static boolean inWindow(long second, long now) {
-        return second <= now && second >= now - (SLOTS - 1);
+    // ---- counts ----
+
+    private int local(int i) {
+        return localW != null ? localW[i] : localC[i];
     }
 
-    /** The slot for {@code second}, cleared first if it still holds an older second. */
-    private int claim(long second) {
-        int i = slot(second);
-        if (seconds[i] != second) {
-            seconds[i] = second;
-            local[i] = 0;
-            remote[i] = 0;
-            dirty[i] = false;
+    private void local(int i, int v) {
+        if (localW != null) {
+            localW[i] = v;
+        } else if (v <= CHAR_MAX) {
+            localC[i] = (char) v;
+        } else {
+            localW = widen(localC);
+            localC = null;
+            localW[i] = v;
         }
-        return i;
     }
 
-    /** Requests counted (local + remote) in the seconds {@code now - 60 .. now}. */
-    public synchronized int count(long now) {
-        int n = 0;
-        for (int i = 0; i < SLOTS; i++) {
-            if (inWindow(seconds[i], now)) {
-                n += local[i] + remote[i];
+    private int remote(int i) {
+        return remoteW != null ? remoteW[i] : remoteC != null ? remoteC[i] : 0;
+    }
+
+    private void remote(int i, int v) {
+        if (remoteW != null) {
+            remoteW[i] = v;
+        } else if (v <= CHAR_MAX) {
+            if (remoteC == null) {
+                if (v == 0) {
+                    return;
+                }
+                remoteC = new char[SLOTS];
             }
+            remoteC[i] = (char) v;
+        } else {
+            remoteW = remoteC == null ? new int[SLOTS] : widen(remoteC);
+            remoteC = null;
+            remoteW[i] = v;
+        }
+    }
+
+    private static int[] widen(char[] c) {
+        int[] w = new int[SLOTS];
+        for (int i = 0; i < SLOTS; i++) {
+            w[i] = c[i];
+        }
+        return w;
+    }
+
+    private void clear(int i) {
+        local(i, 0);
+        remote(i, 0);
+        dirty &= ~(1L << i);
+    }
+
+    /** Moves the ring's newest second to {@code second}, clearing the slots of the seconds that left. */
+    private void advance(long second) {
+        if (head != Long.MIN_VALUE && second <= head) {
+            return;
+        }
+        if (head == Long.MIN_VALUE || second - head >= SLOTS) {
+            for (int i = 0; i < SLOTS; i++) {
+                clear(i);
+            }
+        } else {
+            for (long s = head + 1; s <= second; s++) {
+                clear(slot(s));
+            }
+        }
+        head = second;
+    }
+
+    /** Whether {@code second} is one of the seconds the ring holds. */
+    private boolean held(long second) {
+        return head != Long.MIN_VALUE && second <= head && second > head - SLOTS;
+    }
+
+    /** Sum of local + remote over the held seconds {@code from .. to}. */
+    private int sum(long from, long to) {
+        if (head == Long.MIN_VALUE) {
+            return 0;
+        }
+        long lo = Math.max(from, head - SLOTS + 1);
+        long hi = Math.min(to, head);
+        int n = 0;
+        for (long s = lo; s <= hi; s++) {
+            int i = slot(s);
+            n += local(i) + remote(i);
         }
         return n;
     }
 
+    /** Requests counted (local + remote) in the seconds {@code now - 60 .. now}. */
+    public synchronized int count(long now) {
+        return sum(now - (SLOTS - 1), now);
+    }
+
     /** Requests this instance admitted in the seconds {@code now - 60 .. now}. */
     public synchronized int localCount(long now) {
+        if (head == Long.MIN_VALUE) {
+            return 0;
+        }
         int n = 0;
-        for (int i = 0; i < SLOTS; i++) {
-            if (inWindow(seconds[i], now)) {
-                n += local[i];
-            }
+        for (long s = Math.max(now - (SLOTS - 1), head - SLOTS + 1); s <= Math.min(now, head); s++) {
+            n += local(slot(s));
         }
         return n;
     }
 
     /** One request admitted by this instance at second {@code now}. */
     public synchronized void addLocal(long now) {
-        int i = claim(now);
-        local[i]++;
-        dirty[i] = true;
+        advance(now);
+        if (!held(now)) {
+            return; // a clock that jumped back more than a minute: nothing sensible to count it in
+        }
+        int i = slot(now);
+        local(i, local(i) + 1);
+        dirty |= 1L << i;
     }
 
     /**
@@ -89,14 +169,13 @@ public final class Window {
      * later tick, once that second is no longer in this instance's future.
      */
     public synchronized void setRemote(long second, int count, long now) {
-        if (!inWindow(second, now)) {
+        if (second > now || second < now - (SLOTS - 1)) {
             return;
         }
-        int i = slot(second);
-        if (seconds[i] > second) {
-            return;
+        advance(second);
+        if (held(second)) {
+            remote(slot(second), count);
         }
-        remote[claim(second)] = count;
     }
 
     /**
@@ -105,14 +184,7 @@ public final class Window {
      */
     public synchronized int secondsUntilBelow(int cap, long now) {
         for (int t = 0; t <= SLOTS; t++) {
-            long from = now + t - (SLOTS - 1);
-            int n = 0;
-            for (int i = 0; i < SLOTS; i++) {
-                if (seconds[i] >= from && seconds[i] <= now) {
-                    n += local[i] + remote[i];
-                }
-            }
-            if (n <= cap - 1) {
+            if (sum(now + t - (SLOTS - 1), now) <= cap - 1) {
                 return t;
             }
         }
@@ -121,65 +193,95 @@ public final class Window {
 
     /** Seconds until the oldest counted request leaves the window (the allowance next grows); 0 when none is counted. */
     public synchronized int resetSeconds(long now) {
-        long oldest = Long.MAX_VALUE;
-        for (int i = 0; i < SLOTS; i++) {
-            if (inWindow(seconds[i], now) && local[i] + remote[i] > 0) {
-                oldest = Math.min(oldest, seconds[i]);
+        if (head == Long.MIN_VALUE) {
+            return 0;
+        }
+        for (long s = Math.max(now - (SLOTS - 1), head - SLOTS + 1); s <= Math.min(now, head); s++) {
+            int i = slot(s);
+            if (local(i) + remote(i) > 0) {
+                return (int) (s + SLOTS - now);
             }
         }
-        return oldest == Long.MAX_VALUE ? 0 : (int) (oldest + SLOTS - now);
+        return 0;
     }
 
     /**
      * Research R4: the local counts changed since the last call, as {@code [second, count]} pairs within the window,
-     * and clears the marks. The counts are absolute (this instance's total for that second), so a flush that is
-     * retried or repeated is harmless.
+     * and clears the marks (and the queued flag, T054). The counts are absolute (this instance's total for that
+     * second), so a flush that is retried or repeated is harmless.
      */
     public synchronized long[][] drainDirty(long now) {
-        int n = 0;
-        for (int i = 0; i < SLOTS; i++) {
-            if (dirty[i] && inWindow(seconds[i], now)) {
-                n++;
-            }
+        queued = false;
+        if (dirty == 0 || head == Long.MIN_VALUE) {
+            dirty = 0;
+            return new long[0][];
         }
-        long[][] out = new long[n][];
+        long[][] out = new long[Long.bitCount(dirty)][];
         int k = 0;
-        for (int i = 0; i < SLOTS; i++) {
-            if (dirty[i]) {
-                if (inWindow(seconds[i], now)) {
-                    out[k++] = new long[]{seconds[i], local[i]};
-                }
-                dirty[i] = false;
+        for (long s = head - SLOTS + 1; s <= head; s++) {
+            int i = slot(s);
+            if ((dirty & (1L << i)) != 0 && s >= now - (SLOTS - 1) && s <= now) {
+                out[k++] = new long[]{s, local(i)};
             }
         }
-        return out;
+        dirty = 0;
+        return k == out.length ? out : java.util.Arrays.copyOf(out, k);
     }
 
     /** Marks {@code second}'s local count as changed again (its flush failed). */
     public synchronized void markDirty(long second, long now) {
-        int i = slot(second);
-        if (seconds[i] == second && inWindow(second, now) && local[i] > 0) {
-            dirty[i] = true;
+        if (held(second) && second >= now - (SLOTS - 1) && local(slot(second)) > 0) {
+            dirty |= 1L << slot(second);
         }
+    }
+
+    /** T054: marks this window as queued; whether it was not queued before (so the caller queues it). */
+    synchronized boolean enqueue() {
+        if (queued) {
+            return false;
+        }
+        queued = true;
+        return true;
     }
 
     /** Research R4: one admission in flush generation {@code generation}. */
     synchronized void addPending(long generation) {
-        int i = (int) Math.floorMod(generation, pendingGeneration.length);
-        if (pendingGeneration[i] != generation) {
-            pendingGeneration[i] = generation;
-            pendingCount[i] = 0;
+        switch ((int) Math.floorMod(generation, 3)) {
+            case 0 -> {
+                if (pg0 != generation) {
+                    pg0 = generation;
+                    pc0 = 0;
+                }
+                pc0++;
+            }
+            case 1 -> {
+                if (pg1 != generation) {
+                    pg1 = generation;
+                    pc1 = 0;
+                }
+                pc1++;
+            }
+            default -> {
+                if (pg2 != generation) {
+                    pg2 = generation;
+                    pc2 = 0;
+                }
+                pc2++;
+            }
         }
-        pendingCount[i]++;
     }
 
     /** Research R4: admissions of generations after {@code confirmedThrough}, i.e. not yet visible to every peer. */
     synchronized int unconfirmed(long confirmedThrough) {
         int n = 0;
-        for (int i = 0; i < pendingGeneration.length; i++) {
-            if (pendingGeneration[i] != Long.MIN_VALUE && pendingGeneration[i] > confirmedThrough) {
-                n += pendingCount[i];
-            }
+        if (pg0 != Long.MIN_VALUE && pg0 > confirmedThrough) {
+            n += pc0;
+        }
+        if (pg1 != Long.MIN_VALUE && pg1 > confirmedThrough) {
+            n += pc1;
+        }
+        if (pg2 != Long.MIN_VALUE && pg2 > confirmedThrough) {
+            n += pc2;
         }
         return n;
     }

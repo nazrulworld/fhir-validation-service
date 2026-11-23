@@ -609,3 +609,16 @@ Task: "T020 [US1] CorsConfig exposed headers"       # parallel with T015
 - No database access on the request path. `ThrottleHandler` and `Throttle` must never call a repository.
 - Do not edit V15–V17. Every schema change is in V18.
 - Commit after each task or checkpoint. Do not tag a release until Phase 10 is done.
+
+## Phase 11: Convergence
+
+- [X] T054 Make the count-sharing tick touch only windows changed since the last flush: keep a bounded dirty set in `src/main/java/nzi/fhir/validator/core/throttle/Throttle.java` (filled by `check`, drained by `ThrottleSync.tick`) instead of `forEachWindow` over every tracked window. Add a test that times one tick with `FV_THROTTLE_MAX_TRACKED` windows of which only a few changed, per Constitution I and plan constraint "a tick never blocks an event loop" (partial)
+- [X] T055 Bring the memory per tracked subject within SC-008 (about 60 MB at 100 000 subjects, i.e. ≲ 0.6 KB each). Shrink `src/main/java/nzi/fhir/validator/core/throttle/Window.java` (e.g. an `int` second offset instead of `long[]`, a bitmask instead of `boolean[]`), or lower the `FV_THROTTLE_MAX_TRACKED` default and its docs. Add a test that measures the retained size of a full window cache, per SC-008 (partial)
+- [X] T056 Resolve the two fleet-bound exceptions recorded in research R4: a cap smaller than the number of instances, and the first sync interval after an instance joins. Either remove them in `Throttle`/`ThrottleSync` (e.g. a joining instance holds no unconfirmed admissions until its peers have seen its heartbeat) with `ThrottleSimulationTest` cases for cap 1 on 3 instances and a mid-run join, or record them as accepted exceptions in spec.md through `/speckit-clarify`, per SC-001 (partial)
+- [X] T057 Name the key or organisation in the `limit` command's not-found errors (`error: not-found: API key '<name>' not found` / `Organisation '<o>' not found`) in `src/main/java/nzi/fhir/validator/cli/LimitCommands.java`, with a `LimitCommandsIT` assertion, per contracts/operations.md §2.1 (partial)
+- [X] T058 Assert in `src/test/java/nzi/fhir/validator/web/AclDisabledIT.java#notThrottled` that `/metrics` has no `fv_throttle_checked_total` (or it is 0) while access control is disabled, per tasks T033 (partial)
+- [X] T059 Record `core/throttle/RateLimitRepository.java` (cap setters and listing) and `core/throttle/CountStore.java` (sync store interface used by the simulation) in plan.md's Project Structure, or move the setters to `ApiKeyRepository`/`OrganisationRepository` as planned, per plan: Project Structure (unrequested)
+
+## Phase 12: Convergence
+
+- [X] T060 Update the check order in `specs/014-api-throttling/contracts/http-api.md` §2 (and the "still starting" row of §1) so the throttle's 503 `not-ready` covers both waits: until the caps are loaded, and until the instance's peers count it (two sync ticks, T056), per contracts/http-api.md §2 (partial)

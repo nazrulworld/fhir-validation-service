@@ -13,7 +13,8 @@ import java.util.function.LongSupplier;
 /**
  * Spec 014: the rate limits of one instance. Holds the current cap snapshot (reloaded every
  * {@code FV_THROTTLE_CAPS_REFRESH_MS}) and the {@link Throttle}; built and started only while access control is enabled
- * (FR-002). Until the first snapshot is loaded it is not {@link #ready()}: the handler answers 503 and readiness
+ * (FR-002). Until the first snapshot is loaded, and (T056) its peers have counted it, it is not {@link #ready()}: the
+ * handler answers 503 and readiness
  * reports it (constitution VII).
  */
 public final class ThrottleService {
@@ -28,6 +29,7 @@ public final class ThrottleService {
     private ThrottleSync sync;
     private long syncTimer = -1;
     private volatile ThrottleCaps caps = ThrottleCaps.EMPTY;
+    /** The first cap snapshot is loaded. */
     private volatile boolean ready;
     private volatile LongSupplier clock = System::currentTimeMillis;
     private long capsTimer = -1;
@@ -44,9 +46,9 @@ public final class ThrottleService {
     }
 
     /**
-     * Loads the caps, reads the other instances' counts of the last 60 s (research R4), then becomes ready; from then
-     * on the caps are reloaded every {@code FV_THROTTLE_CAPS_REFRESH_MS} and counts shared every
-     * {@code FV_THROTTLE_SYNC_INTERVAL_MS}.
+     * Loads the caps, reads the other instances' counts of the last 60 s (research R4) and starts sharing counts every
+     * {@code FV_THROTTLE_SYNC_INTERVAL_MS} and reloading caps every {@code FV_THROTTLE_CAPS_REFRESH_MS}. Completes once
+     * the instance is ready: after two sync ticks, when every peer counts it (T056).
      */
     public Future<Void> start() {
         sync = new ThrottleSync(throttle, new ThrottleCountsRepository(pool), syncIntervalMs, () -> clock.getAsLong(),
@@ -59,8 +61,10 @@ public final class ThrottleService {
             logger.info("Rate limits: default key {}/min, default organisation {}/min; {} key cap(s), {} organisation cap(s)",
                     label(loaded.defaultKey()), label(loaded.defaultOrg()), loaded.keyCaps().size(), loaded.orgCaps().size());
             capsTimer = vertx.setPeriodic(capsRefreshMs, id -> reloadCaps());
-            return null;
-        });
+            return (Void) null;
+        })
+                // T056: complete (and so the service's warm-up) only once every peer counts this instance, as readiness.
+                .compose(v -> sync.warmed());
     }
 
     private static String label(java.util.OptionalInt cap) {
@@ -166,7 +170,7 @@ public final class ThrottleService {
 
     /** Readiness (constitution VII): {@code others}, plus {@code rate limits not loaded} until the first snapshot is in. */
     public java.util.List<String> notReadyReasons(java.util.List<String> others) {
-        if (ready) {
+        if (ready()) {
             return others;
         }
         java.util.List<String> all = new java.util.ArrayList<>(others);
@@ -179,7 +183,8 @@ public final class ThrottleService {
 
     /** Whether the first cap snapshot has been loaded. */
     public boolean ready() {
-        return ready;
+        // T056: also not before every peer counts this instance (two sync ticks), so a join can't exceed the bound.
+        return ready && sync != null && sync.warm();
     }
 
     public ThrottleCaps caps() {

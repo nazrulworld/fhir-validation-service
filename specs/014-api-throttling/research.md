@@ -127,9 +127,12 @@ allowed overshoot.
 **Limits found while implementing** (documented in `docs/operations.md`):
 - A cap smaller than the number of instances (e.g. cap 1 on 3 instances) has `cap + B − p·r < 1`. The threshold is
   floored at 1 so the subject is not refused for ever, and the fleet may then exceed such a cap by up to `p`.
+  Accepted in the spec (clarification 2026-11-24).
 - `p` is each instance's own view. In the first sync interval after an instance joins, the existing instances still
-  count it out, so the bound can be exceeded briefly, by about `B/p` per joining instance. Steady fleets keep the bound.
-  `ThrottleSimulationTest` starts all instances together.
+  count it out. **Fixed (T056)**: a starting instance is not ready until it has completed two sync ticks
+  (`ThrottleSync.warm()`); by then every peer has read its heartbeat and reserves room for it, and the load balancer
+  sends it no requests before. `ThrottleSimulationTest#aJoiningInstanceDoesNotBreakTheBound` admits 34 against a bound
+  of 33 without this, and the parameterised cases now let the last instance join after two minutes.
 
 **Verification**: `ThrottleSimulationTest`, a pure unit test with a deterministic clock and scripted sync delays,
 drives 1–3 simulated instances for the caps {1, 5, 10, 30, 60, 600, 1200}. It covers bursts and round-robin, random
