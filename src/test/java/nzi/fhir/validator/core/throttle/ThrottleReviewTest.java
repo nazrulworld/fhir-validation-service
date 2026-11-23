@@ -116,7 +116,15 @@ class ThrottleReviewTest {
             th.start();
             threads.add(th);
         }
-        for (int i = 0; i < 300; i++) {
+        // The ticks must overlap the admissions: wait until every key has been admitted (all threads running), then
+        // tick for at least 300 ms as well as 300 times (300 ticks alone can finish before the threads get going).
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (admitted.size() < keys.length) {
+            assertTrue(System.currentTimeMillis() < deadline, "admitting threads didn't start");
+            Thread.onSpinWait();
+        }
+        long minUntil = System.currentTimeMillis() + 300;
+        for (int i = 0; i < 300 || System.currentTimeMillis() < minUntil; i++) {
             sync.tick();
             // Confirmed admissions must already be in the store: unconfirmed ≥ admitted − flushed, per key.
             long confirmed = t.confirmedThrough();
@@ -141,7 +149,9 @@ class ThrottleReviewTest {
             int expected = admitted.getOrDefault(k, new AtomicInteger()).get();
             assertEquals(expected, (int) store.counts.getOrDefault(List.of(Throttle.KEY, k, NOW / 1000, sync.instanceId()), 0),
                     "every admission is flushed");
-            assertEquals(0, t.existingWindow(Throttle.KEY, k).unconfirmed(t.confirmedThrough()), "and confirmed");
+            Window w = t.existingWindow(Throttle.KEY, k);
+            // No window: the key was never admitted (expected is 0 and checked above), so there is nothing to confirm.
+            assertEquals(0, w == null ? 0 : w.unconfirmed(t.confirmedThrough()), "and confirmed");
         }
     }
 
