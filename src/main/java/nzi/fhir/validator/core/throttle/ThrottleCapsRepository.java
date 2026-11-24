@@ -23,7 +23,7 @@ public final class ThrottleCapsRepository {
             + "WHERE rate_limit_per_minute IS NOT NULL "
             + "UNION ALL SELECT 'O', id, rate_limit_per_minute FROM " + DB_POSTGRES_SCHEMA_NAME + ".organisations "
             + "WHERE rate_limit_per_minute IS NOT NULL "
-            // The WHERE runs before the select list, so value::int only sees the two throttle rows (V18 constraint).
+            // The WHERE runs before the select list, so value::int only sees the two throttle rows (the baseline's service_settings_throttle_chk).
             + "UNION ALL SELECT name, NULL::uuid, value::int FROM " + DB_POSTGRES_SCHEMA_NAME + ".service_settings "
             + "WHERE name = ANY($1)";
 

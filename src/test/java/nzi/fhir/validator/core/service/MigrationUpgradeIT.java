@@ -16,7 +16,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The 1.0.0 baseline (V15) applies cleanly to an empty database and enforces the schema's rules, even against
+ * The 1.0.0 baseline (V18) applies cleanly to an empty database and enforces the schema's rules, even against
  * hand-written SQL. Databases with an earlier migration history are covered by SquashedBaselineIT.
  */
 class MigrationUpgradeIT extends BaseTestContainer {
@@ -241,20 +241,16 @@ class MigrationUpgradeIT extends BaseTestContainer {
     }
 
     /**
-     * Spec 010 (V16, data-model §7): on a populated 1.0.0 (V15) database the three terminology columns are added as
-     * nullable without a default; existing rows keep NULL and new rows can carry the values.
+     * Spec 010 (data-model §7): the three terminology columns of a usage row are nullable without a default; a row
+     * written without them (a request refused before validation) keeps NULL.
      */
     @Test
-    void v16AddsTheTerminologyColumnsToAPopulated100Database() throws SQLException {
-        PgConnectOptions db = freshDatabase();
-        DatabaseService.flywayBuilder(db).target("15").load().migrate();
+    void usageTerminologyColumnsAreOptional() throws SQLException {
+        PgConnectOptions db = migrated();
         try (Connection c = jdbc(db); Statement st = c.createStatement()) {
             st.execute("INSERT INTO " + S + ".validation_usage (started_at, request_id, org_id, profile_count, request_bytes, "
                     + "outcome, http_status, total_ms, queue_ms, context_ms, validate_ms, cpu_time_ns, allocated_bytes) "
                     + "VALUES (now(), 'before', '" + SYSTEM_ID + "', 0, 1, 'valid', 200, 1, 0, 0, 1, 1, 1)");
-        }
-        DatabaseService.flyway(db).migrate();
-        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
             assertEquals(List.of("tx_mode|YES|16|null", "tx_server|YES|512|null", "tx_source|YES|8|null"),
                     column(c, "SELECT column_name || '|' || is_nullable || '|' || character_maximum_length || '|' "
                             + "|| coalesce(column_default, 'null') FROM information_schema.columns WHERE table_schema='" + S
@@ -271,19 +267,15 @@ class MigrationUpgradeIT extends BaseTestContainer {
     }
 
     /**
-     * Spec 012 (V17, data-model §3, T041): on a populated 1.1.0 (V16) database the key columns are widened to 256 and the
-     * two partial unique indexes are added; existing single-IG rows are untouched and never match them.
+     * Spec 012 (data-model §3, T041): context keys are up to 256 characters, and the two partial unique indexes guard
+     * two-IG contexts; single-IG rows never match them.
      */
     @Test
-    void v17WidensKeysAndGuardsTwoIgContextsOnAPopulated110Database() throws SQLException {
-        PgConnectOptions db = freshDatabase();
-        DatabaseService.flywayBuilder(db).target("16").load().migrate();
+    void twoIgContextKeysAndGuards() throws SQLException {
+        PgConnectOptions db = migrated();
         try (Connection c = jdbc(db); Statement st = c.createStatement()) {
             st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES "
                     + "('R4', 'a.ig#1.0.0'), ('R4', 'a.ig#2.0.0'), ('R5', 'a.ig#1.0.0')");
-        }
-        DatabaseService.flyway(db).migrate();
-        try (Connection c = jdbc(db); Statement st = c.createStatement()) {
             assertEquals(List.of("ig|256", "ig_package|256"), column(c, "SELECT column_name || '|' || character_maximum_length "
                     + "FROM information_schema.columns WHERE table_schema='" + S + "' AND ((table_name='fhir_validator_snapshots' "
                     + "AND column_name='ig_package') OR (table_name='validation_usage' AND column_name='ig')) ORDER BY column_name"));
@@ -328,7 +320,7 @@ class MigrationUpgradeIT extends BaseTestContainer {
             st.execute("INSERT INTO " + S + ".fhir_validator_snapshots (fhir_version, ig_package) VALUES ('R4', 'a.ig#1.0.0')");
             assertEquals(List.of("true|"), column(c, "SELECT is_active || '|' || coalesce(inactive_reason, '') FROM " + S
                     + ".fhir_validator_snapshots"));
-            // Spec 014: V18 seeds the two rate-limit defaults; no other setting is stored by the migrations.
+            // Spec 014: the baseline seeds the two rate-limit defaults; no other setting is stored by the migrations.
             assertEquals(List.of("0"), column(c, "SELECT count(*)::text FROM " + S + ".service_settings "
                     + "WHERE name NOT IN ('throttle_default_key_per_minute', 'throttle_default_org_per_minute')"));
             assertThrows(SQLException.class, () -> st.execute("UPDATE " + S

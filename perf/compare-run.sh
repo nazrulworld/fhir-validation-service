@@ -37,9 +37,9 @@ for i in $(seq 1 300); do
 done
 if [ $ready != 1 ]; then echo "$LABEL: not ready"; docker logs --tail 40 $SVC; exit 1; fi
 
-# Spec 014 (1.4.0+): THROTTLE_CAP=<n> sets the trial key's, the trial organisation's and the default caps to n before the
+# Spec 014: THROTTLE_CAP=<n> sets the trial key's, the trial organisation's and the default caps to n before the
 # run (e.g. 1000000 so nothing is refused, or a low value to measure 429 throughput). Unset: the shipped caps (the trial
-# key is limited to 30 a minute). Leave it unset for images before 1.4.0, which have no caps.
+# key is limited to 30 a minute). Leave it unset for development images built before spec 014, which have no caps.
 if [ -n "${THROTTLE_CAP:-}" ]; then
   docker exec $PG psql -U postgres -d fhir_validator -v ON_ERROR_STOP=1 -qc "
     UPDATE fhir_validator_schema.api_keys SET rate_limit_per_minute = $THROTTLE_CAP WHERE name = 'trial validator';

@@ -171,7 +171,7 @@ public final class ConfigRevisionRepository {
         String[] sorted = included.stream().sorted().toArray(String[]::new);
         Future<?> child = KIND_IG.equals(kind)
                 ? tx.preparedQuery("INSERT INTO " + SNAPSHOTS + " (fhir_version, ig_package, owner, is_shareable, tx_mode, tx_server) "
-                        // Only a row left for the same key is ignored; a V17 two-IG index violation must fail.
+                        // Only a row left for the same key is ignored; a two-IG index violation (spec 012) must fail.
                         + "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (fhir_version, ig_package) DO NOTHING")
                 .execute(Tuple.of(version.name(), key, owner, shareable, terminology.mode().name(), terminology.server()))
                 .recover(err -> Future.failedFuture(twoIgConflict(err, key, version)))
@@ -188,7 +188,7 @@ public final class ConfigRevisionRepository {
                 .compose(revision -> notify(tx, version, revision, kind, key).map(revision));
     }
 
-    /** The V17 partial unique indexes on two-IG keys (spec 012 research R3). */
+    /** The partial unique indexes on two-IG keys (spec 012 research R3). */
     static final String FIRST_MEMBER_INDEX = "fhir_validator_snapshots_first_member_uq";
     static final String PAIR_INDEX = "fhir_validator_snapshots_pair_uq";
 

@@ -42,8 +42,8 @@ public final class Constant {
     public final static String TRIAL_ORG_VALIDATOR_API_KEY_NAME = "trial validator";
     public final static UUID TRIAL_ORG_VALIDATOR_API_KEY_UUID = UUID.fromString(TRIAL_ORG_VALIDATOR_API_KEY_ID);
 
-    // Spec 014 (FR-015, clarification Q3): the caps installed by V18. The migration repeats them as SQL literals;
-    // ConstantMigrationConsistencyTest keeps the two in step. Operators change them with 'limit set'.
+    // Spec 014 (FR-015, clarification Q3): the caps installed by the 1.0.0 baseline. The migration repeats them as SQL
+    // literals; ConstantMigrationConsistencyTest keeps the two in step. Operators change them with 'limit set'.
     public final static int THROTTLE_DEFAULT_KEY_PER_MINUTE = 600;
     public final static int THROTTLE_DEFAULT_ORG_PER_MINUTE = 1200;
     public final static int TRIAL_ORG_RATE_LIMIT_PER_MINUTE = 60;
