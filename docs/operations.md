@@ -117,7 +117,7 @@ The service stops (exit 1) instead of running half-configured when:
 - **`FV_VALIDATOR_API_KEY` is malformed or equals `FV_ADMIN_API_KEY`**: a configuration error names the variable.
 - **the served FHIR versions or the access-control mode changed** without the matching confirmation setting (see
   above).
-- **the database schema is from an unsupported early build** (its migration history stops before V15): this release
+- **the database schema is from an unsupported early build** (its migration history stops before V18): this release
   cannot upgrade it, and nothing is changed. Keep running the build that created it, or back up the database and
   recreate it from empty.
 - **a migration failed earlier** (a failed row in `flyway_schema_history`): repair the database, then start again.
@@ -139,7 +139,7 @@ DELETE FROM fhir_validator_schema.validation_usage WHERE created_at < now() - in
 ## Rate limits
 
 Validation requests (`POST /{version}/validate`) are limited per API key and per organisation, per rolling minute
-(spec 014, 1.4.0). The caps are stored in the database: `rate_limit_per_minute` on `api_keys` and `organisations`,
+(spec 014). The caps are stored in the database: `rate_limit_per_minute` on `api_keys` and `organisations`,
 and the two defaults in `service_settings` (`throttle_default_key_per_minute`, `throttle_default_org_per_minute`; an
 absent row means "not limited at that level"). Manage them with `fv-admin limit set | remove | list`
 ([contracts](../specs/014-api-throttling/contracts/operations.md)). The system organisation and its keys are never

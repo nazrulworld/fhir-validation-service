@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Spec 014 (T004, research R6/R7, data-model §1–§2): V18 adds the cap columns, constraints and the UNLOGGED count
- * tables, and seeds the initial caps; on an empty database and on top of a 1.3.0 (V17) schema with data.
+ * Spec 014 (T004, research R6/R7, data-model §1–§2): the 1.0.0 baseline has the cap columns, constraints and the
+ * UNLOGGED count tables, and seeds the initial caps. (Upgrades from development-build schemas: SquashedBaselineIT.)
  */
 class ThrottleMigrationIT extends BaseTestContainer {
     private static final String S = "fhir_validator_schema.";
@@ -35,12 +35,8 @@ class ThrottleMigrationIT extends BaseTestContainer {
         return DriverManager.getConnection(getPostgresJdbcUrl(), POSTGRES_USERNAME, POSTGRES_PASSWORD);
     }
 
-    private static void migrate(String target) {
-        var builder = DatabaseService.flywayBuilder(connectOptions());
-        if (target != null) {
-            builder.target(target);
-        }
-        builder.load().migrate();
+    private static void migrate() {
+        DatabaseService.flywayBuilder(connectOptions()).load().migrate();
     }
 
     private static Object scalar(Connection c, String sql, Object... args) throws SQLException {
@@ -63,7 +59,7 @@ class ThrottleMigrationIT extends BaseTestContainer {
     /** (a) the empty-database path: columns, seeds, UNLOGGED tables. */
     @Test
     void emptyDatabase() throws SQLException {
-        migrate(null);
+        migrate();
         try (Connection c = connect()) {
             for (String table : new String[]{"api_keys", "organisations"}) {
                 assertEquals("YES|integer", scalar(c, "SELECT is_nullable || '|' || data_type FROM information_schema.columns "
@@ -84,32 +80,10 @@ class ThrottleMigrationIT extends BaseTestContainer {
         }
     }
 
-    /** (b) on top of 1.3.0 with data: the existing trial key gets 30, other keys stay without a cap. */
-    @Test
-    void upgradeFromV17WithData() throws SQLException {
-        migrate("17");
-        try (Connection c = connect()) {
-            exec(c, "INSERT INTO " + S + "organisations (id, name_short, name_long, type) VALUES ('" + OTHER_ORG
-                    + "', 'acme', 'Acme', 'COMMERCIAL')");
-            exec(c, "INSERT INTO " + S + "api_keys (id, name, key_hash, role, owner) VALUES ('"
-                    + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "', 'trial validator', '\\x01', 'VALIDATE', '"
-                    + Constant.TRIAL_ORG_ID + "'), ('" + OTHER_KEY + "', 'acme-a', '\\x02', 'VALIDATE', '" + OTHER_ORG + "')");
-        }
-        migrate(null);
-        try (Connection c = connect()) {
-            assertEquals(Constant.TRIAL_ORG_VALIDATOR_API_KEY_RATE_LIMIT_PER_MINUTE, scalar(c,
-                    "SELECT rate_limit_per_minute FROM " + S + "api_keys WHERE id = ?::uuid", Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID));
-            assertNull(scalar(c, "SELECT rate_limit_per_minute FROM " + S + "api_keys WHERE id = ?::uuid", OTHER_KEY));
-            assertNull(scalar(c, "SELECT rate_limit_per_minute FROM " + S + "organisations WHERE id = ?::uuid", OTHER_ORG));
-            assertEquals(Constant.TRIAL_ORG_RATE_LIMIT_PER_MINUTE, scalar(c,
-                    "SELECT rate_limit_per_minute FROM " + S + "organisations WHERE id = ?::uuid", Constant.TRIAL_ORG_ID));
-        }
-    }
-
     /** (c) the constraints: bounds, the system organisation, the setting values. */
     @Test
     void constraintsReject() throws SQLException {
-        migrate(null);
+        migrate();
         try (Connection c = connect()) {
             exec(c, "INSERT INTO " + S + "organisations (id, name_short, name_long, type) VALUES ('" + OTHER_ORG
                     + "', 'acme', 'Acme', 'COMMERCIAL')");
@@ -137,7 +111,7 @@ class ThrottleMigrationIT extends BaseTestContainer {
     /** T011: the cap snapshot of a fresh database (read through the Vert.x client, as the service does). */
     @Test
     void capsSnapshotOfAFreshDatabase() throws Exception {
-        migrate(null);
+        migrate();
         io.vertx.core.Vertx vertx = io.vertx.core.Vertx.vertx();
         io.vertx.sqlclient.Pool pool = createPgPool(vertx);
         try {
@@ -199,7 +173,7 @@ class ThrottleMigrationIT extends BaseTestContainer {
     /** (d) research D1: the CASE-guarded constraint never casts the other settings' values. */
     @Test
     void otherSettingsStillWork() throws SQLException {
-        migrate(null);
+        migrate();
         try (Connection c = connect()) {
             for (String[] kv : new String[][]{{"acl_security", "enabled"}, {"acl_security", "disabled"}, {"fhir_versions", "R4,R5"}}) {
                 exec(c, "INSERT INTO " + S + "service_settings (name, value) VALUES ('" + kv[0] + "', '" + kv[1]

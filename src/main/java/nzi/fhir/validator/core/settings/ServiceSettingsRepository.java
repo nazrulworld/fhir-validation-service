@@ -9,7 +9,7 @@ import java.util.Optional;
 import static nzi.fhir.validator.core.config.ApplicationConfig.DB_POSTGRES_SCHEMA_NAME;
 
 /**
- * Service-wide settings shared by every instance ({@code service_settings}, V15, spec 009 data-model §2). The calls
+ * Service-wide settings shared by every instance ({@code service_settings}, the 1.0.0 baseline, spec 009 data-model §2). The calls
  * take a {@link SqlClient} so they run inside the caller's transaction.
  */
 public final class ServiceSettingsRepository {

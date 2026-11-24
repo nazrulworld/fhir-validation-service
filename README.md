@@ -13,9 +13,8 @@ PostgreSQL database; IG changes reach every instance within seconds, without res
 reference pages for configuration, the OpenAPI definition, the changelog and load tests). It is generated from the
 [project wiki](https://github.com/nazrulworld/fhir-validation-service/wiki).
 
-> **1.3.0** stops load from turning a valid resource into an invalid one: a result hit by the validation engine's
-> 500 ms regex time limit is re-checked before it is answered (see [CHANGELOG.md](CHANGELOG.md)). Settings, API
-> and behaviour details are below; procedures for operating the service are in [docs/operations.md](docs/operations.md).
+> **1.0.0** is the first release (see [CHANGELOG.md](CHANGELOG.md)). Settings, API and behaviour details are below;
+> procedures for operating the service are in [docs/operations.md](docs/operations.md).
 
 - REST API defined in [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml)
 - Results as a JSON summary or a FHIR `OperationOutcome` (JSON or XML)
@@ -65,8 +64,8 @@ Images are published to `ghcr.io/nazrulworld/fhir-validation-service` for `linux
 
 | Tag            | Meaning                                                    |
 |----------------|------------------------------------------------------------|
-| `1.3.0`        | an exact release (recommended for production: pin it)      |
-| `1.3`          | the newest patch release of 1.3                            |
+| `1.0.0`        | an exact release (recommended for production: pin it)      |
+| `1.0`          | the newest patch release of 1.0                            |
 | `latest`       | the newest release                                         |
 | `sha-<commit>` | a build of `main` at that commit (unreleased; for testing) |
 
@@ -78,7 +77,7 @@ Pin `FV_TAG` to an exact release in production, so a pull never upgrades without
 mkdir fhir-validation && cd fhir-validation
 
 cat > .env <<EOF
-FV_TAG=1.3.0
+FV_TAG=1.0.0
 PG_PASSWORD=$(openssl rand -hex 24)
 FV_ADMIN_API_KEY=$(openssl rand -hex 32)
 # Every validation needs a key: this shared trial key, or keys created per client with 'fv-admin key create'.
@@ -220,7 +219,7 @@ or `verify-full`.
 **3. Download the jar**
 
 ```bash
-VERSION=1.3.0
+VERSION=1.0.0
 curl -fLO "https://github.com/nazrulworld/fhir-validation-service/releases/download/v${VERSION}/fhir-validation-service-${VERSION}.jar"
 ```
 
@@ -241,7 +240,7 @@ export FV_VALIDATOR_API_KEY='<another output of openssl rand -hex 32>'   # optio
 export FV_HTTP_PORT=8880
 
 java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Xms512m -Xmx3g \
-  -jar fhir-validation-service-1.3.0.jar
+  -jar fhir-validation-service-1.0.0.jar
 ```
 
 ```bash
@@ -289,7 +288,7 @@ WantedBy=multi-user.target
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin fhir
-sudo install -D -m 0444 fhir-validation-service-1.3.0.jar /opt/fhir-validator/fhir-validation-service.jar
+sudo install -D -m 0444 fhir-validation-service-1.0.0.jar /opt/fhir-validator/fhir-validation-service.jar
 sudo systemctl daemon-reload && sudo systemctl enable --now fhir-validator
 journalctl -u fhir-validator -f
 ```
@@ -308,7 +307,7 @@ does not need to be running) and applies pending migrations first.
 In the shell from step 4, with the variables still exported:
 
 ```bash
-java -jar fhir-validation-service-1.3.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
+java -jar fhir-validation-service-1.0.0.jar org create --name-short acme --name-long "Acme Health ApS" --type COMMERCIAL
 ```
 
 For a systemd installation, a small wrapper gives the same `fv-admin` command the container image has, reading the
@@ -550,8 +549,7 @@ curl -H "$AUTH" -H 'Content-Type: application/fhir+json' --data @observation.jso
 A server named in `tx` must be on the allowlist (otherwise **400** `tx-server-not-registered`, or **503**
 `tx-registry-unavailable` while no registry list was ever obtained); no call is made to a server that is not allowed.
 Malformed values answer **400** `invalid-request`. The response headers `X-Tx-Mode`, `X-Tx-Server` and
-`X-Tx-Source` (`request` or `context`) report the setting used; the body is unchanged. During a rolling upgrade from
-1.0.0, instances still on 1.0.0 ignore `tx`/`txMode`: rely on them once every instance runs 1.1.0.
+`X-Tx-Source` (`request` or `context`) report the setting used; the body is unchanged.
 
 **Shared package definitions.** Contexts of one FHIR version that contain the same package content (same
 `name#version` and content hash) share its parsed definitions on an instance, so a second context costs about its own
@@ -666,8 +664,8 @@ validator.
 
 ### Rate limits
 
-`POST /{version}/validate` is limited per API key and per organisation, as validation requests per rolling minute
-(1.4.0). A request is served only when it fits both its key's cap and its organisation's cap (the organisation's keys
+`POST /{version}/validate` is limited per API key and per organisation, as validation requests per rolling minute.
+A request is served only when it fits both its key's cap and its organisation's cap (the organisation's keys
 together). Above a cap the answer is 429 `rate-limited` with `Retry-After`, nothing is validated, and the refused
 request counts towards no cap. Every response to a limited key carries `RateLimit-Limit`, `RateLimit-Remaining` and
 `RateLimit-Reset` (the tighter of the two levels).
@@ -772,7 +770,7 @@ and [`.env.example`](.env.example). The most important ones:
 | `FV_VALIDATION_WORKERS` / `FV_VALIDATION_MAX_PENDING`                        | cores / 4 × workers                                             | parallel validations / admission limit                            |
 | `FV_ADMIN_MAX_PENDING`                                                       | 4                                                               | administrative operations in progress; beyond it 503 `overloaded` |
 | `FV_TX_TIMEOUT_MS` / `FV_TX_REQUEST_BUDGET_MS`                               | 5000 / 10000                                                    | one terminology call / a request's total terminology time         |
-| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 50000 / 600000                                                  | code results cached per instance (1.1.0; was 5000 per context)    |
+| `FV_TX_CACHE_SIZE` / `FV_TX_CACHE_TTL_MS`                                    | 50000 / 600000                                                  | code results cached per instance                                  |
 | `FV_TX_REGISTRY_REFRESH_MS`                                                  | 21600000 (6 h)                                                  | how often the registry's server list is refreshed                 |
 | `FV_TX_MAX_CONNECTIONS_PER_SERVER`                                           | 10                                                              | pooled connections per terminology server                         |
 | `FV_PACKAGE_SOURCES`                                                         | `packages.fhir.org,packages2.fhir.org`                          | registries and approved download hosts                            |

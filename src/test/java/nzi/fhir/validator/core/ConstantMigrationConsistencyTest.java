@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConstantMigrationConsistencyTest {
 
     private String baseline() throws IOException {
-        try (InputStream in = getClass().getResourceAsStream("/db/migration/V15__baseline_1_0.sql")) {
+        try (InputStream in = getClass().getResourceAsStream("/db/migration/V18__baseline_1_0.sql")) {
             assertNotNull(in, "the baseline is on the classpath");
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
@@ -43,25 +43,23 @@ class ConstantMigrationConsistencyTest {
         }
     }
 
-    /** Spec 014 (FR-015): V18 seeds the initial caps with the constant values and ids. */
+    /**
+     * Spec 014 (FR-015): the baseline seeds the initial caps with the constant values and ids. The trial validator key's
+     * cap is not in the baseline: the key is installed at startup (ApiKeyRepository.upsertWellKnown).
+     */
     @Test
-    void v18SeedsTheInitialCaps() throws IOException {
-        String sql;
-        try (InputStream in = getClass().getResourceAsStream("/db/migration/V18__validation_rate_limits.sql")) {
-            assertNotNull(in, "V18 is on the classpath");
-            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
+    void baselineSeedsTheInitialCaps() throws IOException {
+        String sql = baseline();
         String settings = nzi.fhir.validator.core.settings.ServiceSettingsRepository.THROTTLE_DEFAULT_KEY;
         String orgSettings = nzi.fhir.validator.core.settings.ServiceSettingsRepository.THROTTLE_DEFAULT_ORG;
         assertTrue(sql.contains("('" + settings + "', '" + Constant.THROTTLE_DEFAULT_KEY_PER_MINUTE + "'"), "default key cap");
         assertTrue(sql.contains("('" + orgSettings + "', '" + Constant.THROTTLE_DEFAULT_ORG_PER_MINUTE + "'"), "default org cap");
-        assertTrue(sql.contains("SET rate_limit_per_minute = " + Constant.TRIAL_ORG_RATE_LIMIT_PER_MINUTE + "\nWHERE id = '"
-                + Constant.TRIAL_ORG_ID + "'"), "trial organisation cap");
-        assertTrue(sql.contains("SET rate_limit_per_minute = " + Constant.TRIAL_ORG_VALIDATOR_API_KEY_RATE_LIMIT_PER_MINUTE
-                + "\nWHERE id = '" + Constant.TRIAL_ORG_VALIDATOR_API_KEY_ID + "'"), "trial validator key cap");
-        for (String literal : List.of("'" + Constant.SYSTEM_ORG_ID + "'", "BETWEEN 1 AND " + Constant.RATE_LIMIT_MAX_PER_MINUTE,
+        assertTrue(sql.contains("('" + Constant.TRIAL_ORG_ID + "', '" + Constant.TRIAL_ORG_SHORT_NAME + "', '"
+                + Constant.TRIAL_ORG_LONG_NAME + "', '" + Constant.TRIAL_ORG_TYPE + "', true, "
+                + Constant.TRIAL_ORG_RATE_LIMIT_PER_MINUTE + ")"), "trial organisation cap");
+        for (String literal : List.of("BETWEEN 1 AND " + Constant.RATE_LIMIT_MAX_PER_MINUTE,
                 "value::int <= " + Constant.RATE_LIMIT_MAX_PER_MINUTE)) {
-            assertTrue(sql.contains(literal), "V18 contains " + literal);
+            assertTrue(sql.contains(literal), "the baseline contains " + literal);
         }
     }
 

@@ -6,172 +6,69 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.4.0] - 2026-11-23
-
-Rate limits on validation, per API key and per organisation (spec 014). Additive contract change: `POST
-/{version}/validate` may now answer 429, and its responses carry rate-limit headers.
-
-### Added
-
-- Per-minute caps on `POST /{version}/validate` for each API key and for each organisation (all its keys together).
-  Above a cap the answer is 429 `rate-limited` (problem members `scope`, `limit`, `retryAfterSeconds`) with
-  `Retry-After`; nothing is validated and the refused request counts towards no cap. Responses to a limited key carry
-  `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (also exposed through CORS).
-- Caps are stored in the database (migration `V18`): `rate_limit_per_minute` on `api_keys` and `organisations`, and
-  service-wide defaults in `service_settings`. Initial values: 600 per key and 1200 per organisation by default, 60
-  for the trial organisation and 30 for the `trial validator` key. Operator changes are never overwritten.
-- Keys of the system organisation are never limited; nothing is limited while `FV_GLOBAL_DISABLED_ACL_SECURITY=true`.
-- Command line `limit set | remove | list` (`--key`, `--org`, `--default-key`, `--default-org`, `--per-minute`). Changes
-  apply on every instance within `FV_THROTTLE_CAPS_REFRESH_MS` without a restart, and are logged with old and new
-  values.
-- Instances share their counts through PostgreSQL (UNLOGGED tables `throttle_counts`, `throttle_instances`) every
-  `FV_THROTTLE_SYNC_INTERVAL_MS`; a cap holds fleet-wide within 10 % (at least one request). When the database can't
-  be reached, each instance enforces caps on its own counts (local mode) and nothing is refused because of it.
-- Settings `FV_THROTTLE_SYNC_INTERVAL_MS` (1000), `FV_THROTTLE_CAPS_REFRESH_MS` (10000), `FV_THROTTLE_MAX_TRACKED`
-  (100000).
-- Metrics `fv_throttle_checked_total`, `fv_throttle_refused_total{scope,reason}`, `fv_throttle_tracked_subjects`,
-  `fv_throttle_evictions_total`, `fv_throttle_peers`, `fv_throttle_local_mode`,
-  `fv_throttle_sync_failures_total{step}`, `fv_throttle_sync_seconds`, `fv_throttle_ticks_skipped_total`; a refusal
-  log line at most once a minute per key or organisation. Readiness reports `rate limits not loaded` until the caps
-  are read, then `rate limits warming up …` until the instance's peers count it (two sync ticks, about 2 s), so a
-  starting instance never takes the fleet past a cap.
-
-### Changed
-
-- `POST /{version}/validate` can answer 429. Clients of the trial key are limited to 30 validations per minute.
-- Requests refused with 429 are not written to `validation_usage` (an amendment to spec 008).
-
-## [1.3.0] - 2026-11-20
-
-No spurious regex timeout errors under load (spec 013). No path, payload or status code changes.
-
-### Fixed
-
-- A valid resource could be reported invalid because a regex check ran past the validation engine's fixed 500 ms limit
-  while the instance was busy ("Exception evaluating regex … Regex evaluation timed out", "The regex … could not be
-  executed", or a constraint failing with "Timeout evaluating regex"). The result depended on load, not on the
-  resource. The service now validates such a resource again before answering: at once, then, if needed, with no other
-  validation running on the instance. The answer is one attempt's complete result; nothing is filtered or downgraded.
-- When the timeout persists (the input makes the regex run too long), the response is the last attempt's result as the
-  engine reports it, with status 200. Re-checks stay within the request timeout and the validation budget, wait at most
-  one second for other validations and hold them back for at most one second, are limited to 6 quiet re-checks per minute per instance, and are skipped for a
-  result with more than 3 regex timeouts, so a hostile input can't pause the instance.
-
-### Added
-
-- Metrics `fv_validation_regex_rechecks_total{fhir_version, kind}` and
-  `fv_validation_regex_timeouts_total{fhir_version, outcome, reason}`, and a WARN log line per persistent timeout
-  (context key and request id, never the resource content).
-
-### Upgrading from 1.2.0
-
-- No migration and no new setting.
-
-## [1.2.0] - 2026-11-20
-
-Validator contexts built from two IGs (spec 012). No path, payload or status code of an existing request changes.
-
-### Added
-
-- `POST /{version}/validator` takes `igPackages`, a list of one or two `{igPackageId, igPackageVersion}` entries,
-  instead of `igPackageId`/`igPackageVersion` (exactly one of the two forms; one entry behaves like `igPackageId`).
-  Two entries build one validator context from both IGs, every dependency of each and the core specification, like
-  the validator CLI's repeated `-ig`. Its key is `A#a|B#b` in the order given.
-- Aliases: a two-IG context is also found by the reversed pair `B#b|A#a` and, for a validation request naming an exact
-  `A#a` while no single-IG context `A#a` is included, by its first IG. A name without a version (or `latest`) only
-  considers single-IG contexts, as before.
-- `ig` on `POST /{version}/validate` accepts two IGs, `name#version|name#version` (URL-encode `|` as `%7C`): the key is
-  looked up first, then the reversed pair; neither included is 400 `invalid-request`. `X-Validation-Context` always
-  reports the key. PATCH and DELETE `/{version}/validator` and the `snapshot share|transfer` commands take the key or
-  the reversed pair.
-- Include responses and the `/health` context listings report `igPackages` (the context's IGs) and `aliases`.
-- New problem types: 400 `dependency-conflict` (the two IGs need different versions of one package; the `conflicts`
-  extension names it and the versions) and 409 `alias-conflict` (another two-IG context already starts with the same
-  IG). Differences in `hl7.terminology*` and `hl7.fhir.uv.extensions*` are not conflicts: the highest version is used
-  and named in `warnings`. That exception covers dependencies only, not an IG named in the request.
-
-### Changed
-
-- Database migration V17: `fhir_validator_snapshots.ig_package` and `validation_usage.ig` are `VARCHAR(256)` (were
-  192), and two partial unique indexes keep two-IG contexts unique per first IG and per pair. Existing rows are not
-  changed. Usage records keep `ig` values up to 256 characters.
-
-### Documentation
-
-- The user guide is published at <https://nazrulworld.github.io/fhir-validation-service/>, generated from the project
-  wiki on every wiki edit (spec 011). It has search, a dark mode and a phone layout, and publishes the repository
-  files the wiki links to as reference pages: the configuration contract, a rendered OpenAPI reference, the changelog
-  and the load-test results. No change to the service.
-- The problem `type` URIs in error responses
-  (`https://nazrulworld.github.io/fhir-validation-service/problems/<type>`) now resolve: each redirects to its row in
-  the API Documentation's problem-type table, which says what the problem means and what to do. Before, they
-  answered 404. No change to the service.
-
-### Upgrading from 1.1.0
-
-- Migration V17 runs at start: it widens two `VARCHAR` columns (no table rewrite) and adds two partial unique indexes
-  on `fhir_validator_snapshots`.
-
-## [1.1.0] - 2026-11-16
-
-Shared package definitions and a terminology setting per request (spec 010). No path, payload or status code of an
-existing request changes.
-
-### Added
-
-- `POST /{version}/validate` takes `tx` (a terminology server base URL) and `txMode` (`none`, `server`,
-  `ecosystem`) to choose the terminology setting for one request; the context's setting is the default. A server
-  named in `tx` must be on the allowlist (400 `tx-server-not-registered`, or 503 `tx-registry-unavailable` while no
-  registry list was ever obtained), and no call is made to a server that is not allowed. Malformed values answer 400
-  `invalid-request` with a fixed text that never contains the address.
-- 200 validation responses carry `X-Tx-Mode`, `X-Tx-Server` and `X-Tx-Source` (`request` or `context`); they are
-  exposed to browsers through CORS. The body is unchanged.
-- Usage records (log and `db` sinks) record `txMode`, `txServer` and `txSource`; migration **V16** adds the nullable
-  columns `tx_mode`, `tx_server`, `tx_source` to `validation_usage`.
-- Contexts of one FHIR version share the parsed definitions of identical package content (same `name#version` and
-  content hash) on an instance, so a second context costs about its own packages. Profiles a context completes stay
-  private to it; results are identical to 1.0.0 (checked against a corpus recorded from 1.0.0). The memory check
-  before a build counts shared packages for their indexes only.
-- Metrics: `fv_packages_shared_entries`, `fv_packages_shared_expanded_bytes`,
-  `fv_packages_shared_retained_estimate_bytes`, `fv_packages_shared_lookups_total`, `fv_tx_code_cache_misses_total`,
-  `fv_tx_code_cache_size`, `fv_tx_code_cache_invalidations_total`, `fv_validations_tx_source_total`.
-
-### Changed
-
-- A context's terminology setting is no longer part of what it is built from: changing it (PATCH or include) takes
-  effect on the next request on every instance, without a rebuild (amends spec 007 FR-004). A default server that is
-  no longer on the allowlist is detected per request and fails closed for terminology only, as before, without a
-  rebuild (amends spec 007 FR-010b).
-- Code results are cached once per instance, separately per terminology scope (mode and server) and per context build,
-  instead of per context (amends spec 007 FR-018). A "not checked" answer is never cached.
-- **`FV_TX_CACHE_SIZE` now bounds the one cache of the instance**, and its default changes from 5000 (per context) to
-  **50,000** (per instance, about 50 MB, reserved once in the memory budget). If you set it explicitly for a fleet with
-  several terminology contexts, raise it accordingly.
-
-### Upgrading from 1.0.0
-
-- Migration V16 runs at start (nullable columns only; no table rewrite).
-- During a rolling upgrade, instances still on 1.0.0 ignore `tx`/`txMode` (they answer with the context's setting and
-  without the `X-Tx-*` headers) and still rebuild a context when its terminology setting changes. Rely on
-  `tx`/`txMode` once every instance runs 1.1.0.
-
-## [1.0.0] - 2026-11-13
+## [1.0.0] - 2026-11-24
 
 First release. Version numbering starts here: earlier development builds are not supported. The database schema is
-created by one baseline migration (V15); a database from a development build keeps its migration history, and one
-whose schema stops before V15 is refused at startup.
+created by one baseline migration (`V18__baseline_1_0.sql`); a database from a development build keeps its migration
+history, and one whose schema stops before V18 is refused at startup.
 
-- FHIR resource validation for STU3, R4, R4B and R5, against the core specification or one included IG package per
-  request (`?ig=name#version`), with its dependencies; results as a JSON summary or a FHIR `OperationOutcome`.
-- IG packages: upload, register from the FHIR package registries (exact versions, `latest` and version series), size
-  and safety checks before unpacking, and validator contexts included per FHIR version and shared by every instance.
-- Terminology servers per included IG, chosen from the official HL7 terminology registry, with a per-request budget
-  and a code cache.
-- Organisations owning API keys, packages and contexts, with private and shareable content; a system and a trial
-  organisation; `fv-admin` command line for organisations, keys, sharing and usage.
-- API keys (hashed, optional expiry, last use recorded), administrative network allowlist and trusted proxies.
-- Usage accounting to the log and/or the database.
+### Validation
+
+- FHIR resource validation for STU3, R4, R4B and R5 at `POST /{version}/validate`, against the core specification or
+  an included IG (`?ig=name#version`) with its dependencies. Results as a JSON summary or a FHIR `OperationOutcome`
+  (JSON or XML); errors as RFC 9457 `application/problem+json` with an `X-Request-Id` correlation id. Every problem
+  `type` URI resolves to its row in the user guide's problem-type table.
+- Validator contexts built from two IGs: `POST /{version}/validator` takes `igPackages` with one or two entries, like
+  the validator CLI's repeated `-ig`. Its key is `A#a|B#b`; it is also found by the reversed pair and, for an exact
+  `A#a` with no single-IG context of that name, by its first IG. `ig` on validate accepts `name#version|name#version`.
+  Conflicting dependency versions answer 400 `dependency-conflict`; a second two-IG context with the same first IG
+  answers 409 `alias-conflict`.
+- No spurious regex timeouts under load: a result hit by the validation engine's 500 ms regex limit is validated
+  again before it is answered, at once and then, if needed, with no other validation running. Nothing is filtered or
+  downgraded; re-checks are bounded in time and rate, so a hostile input can't pause the instance.
+- Contexts of one FHIR version share the parsed definitions of identical package content on an instance, so a second
+  context costs about its own packages. Results are identical to unshared contexts.
+
+### IG packages
+
+- Upload, or register from the FHIR package registries (exact versions, `latest` and version series `N.x`, `N.x.x`,
+  `N.N.x`), with size and safety checks before unpacking. Validator contexts are included per FHIR version and shared
+  by every instance.
+
+### Terminology
+
+- Terminology servers per included context, chosen from the official HL7 terminology registry, with a per-request
+  budget and one code cache per instance (`FV_TX_CACHE_SIZE`, default 50,000).
+- `tx` and `txMode` (`none`, `server`, `ecosystem`) on validate choose the terminology setting for one request; the
+  context's setting is the default. A server must be on the allowlist (400 `tx-server-not-registered`, or 503
+  `tx-registry-unavailable`). 200 responses report the setting used in `X-Tx-Mode`, `X-Tx-Server` and `X-Tx-Source`.
+- Changing a context's terminology setting takes effect on the next request on every instance, without a rebuild.
+
+### Access, organisations and usage
+
+- Organisations own API keys, packages and contexts, with private and shareable content; a system and a trial
+  organisation are built in. The `fv-admin` command line manages organisations, keys, sharing, usage and rate limits.
+- API keys (hashed, optional expiry, last use recorded), an administrative network allowlist and trusted proxies.
+- Usage accounting to the log and/or the database (`FV_USAGE_SINK`), including the terminology setting used.
 - Operator switches: `FV_ENABLED_FHIR_VERSIONS` (serve fewer FHIR versions) and `FV_GLOBAL_DISABLED_ACL_SECURITY`
   (public mode), each guarded against an accidental fleet-wide change.
-- Horizontal scaling on one PostgreSQL database, configuration propagation without restarts, liveness, readiness
-  and Prometheus metrics, graceful shutdown; container images for `linux/amd64` and `linux/arm64`.
+
+### Rate limits
+
+- Per-minute caps on `POST /{version}/validate` for each API key and each organisation (all its keys together). Above
+  a cap the answer is 429 `rate-limited` with `Retry-After`; nothing is validated, the refused request counts towards
+  no cap and is not written to `validation_usage`. Responses to a limited key carry `RateLimit-Limit`,
+  `RateLimit-Remaining` and `RateLimit-Reset`.
+- Initial caps: 600 per key and 1200 per organisation by default, 60 for the trial organisation and 30 for the
+  `trial validator` key. Keys of the system organisation are never limited; nothing is limited in public mode.
+  `fv-admin limit set | remove | list` changes them on every instance within `FV_THROTTLE_CAPS_REFRESH_MS`, without a
+  restart.
+- Instances share their counts through PostgreSQL every `FV_THROTTLE_SYNC_INTERVAL_MS`; a cap holds fleet-wide within
+  10 % (at least one request). When counts can't be shared, each instance enforces caps on its own counts.
+
+### Operations
+
+- Horizontal scaling on one PostgreSQL database, configuration propagation without restarts, liveness and readiness
+  probes, Prometheus metrics (validation, packages, terminology, regex re-checks, rate limits), graceful shutdown.
+- Container images for `linux/amd64` and `linux/arm64`; the user guide at
+  <https://nazrulworld.github.io/fhir-validation-service/>, generated from the project wiki.

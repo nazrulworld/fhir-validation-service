@@ -79,10 +79,10 @@ public final class DatabaseService {
     }
 
     /**
-     * The last retired migration version: the migrations of development builds (V1 to V15) are merged into
-     * {@code V15__baseline_1_0.sql}, which builds the same schema. New migrations start at V16.
+     * The last retired migration version: the migrations of development builds (V1 to V18) are merged into
+     * {@code V18__baseline_1_0.sql}, which builds the same schema. New migrations start at V19.
      */
-    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("15");
+    static final MigrationVersion LAST_RETIRED = MigrationVersion.fromVersion("18");
 
     /**
      * One migration attempt. A new database runs the baseline. A database that ran the earlier migrations keeps its

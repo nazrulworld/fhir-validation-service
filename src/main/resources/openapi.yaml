@@ -4,7 +4,7 @@ info:
   description: >-
     A Vert.x-based FHIR validation service with PostgreSQL. Every error response is an RFC 9457 problem document
     (application/problem+json). Every response carries an X-Request-Id header.
-  version: 1.4.0
+  version: 1.0.0
 
 servers:
   - url: http://localhost:8880
@@ -110,7 +110,7 @@ paths:
         (404), and a dependency the caller may not use gives 424 without naming it. 403 forbidden means the API key's
         organisation is deactivated. X-Validation-Context-Owner and X-Validation-Context-Shareable report the owner
         (short name) and sharing of the context used.
-        Terminology per request (1.1.0): a context's terminology setting is its default; `tx` and `txMode` choose
+        Terminology per request: a context's terminology setting is its default; `tx` and `txMode` choose
         another setting for one request without a rebuild. Effective setting, with D the context's setting (`none`
         for the base context and a context without one): no parameters = D; only `tx` = D's mode if `server` or
         `ecosystem`, else `server`, with server `tx`; `txMode=server` = `tx`, else D's server (400 invalid-request if
@@ -154,7 +154,7 @@ paths:
             the highest version you may use is chosen. The version must be exact (or `latest`, or omitted): a version
             series such as `name#1.2.x` is rejected with 400 invalid-request; use the concrete version reported
             when the IG was included (POST /{version}/validator).
-            Two IGs (1.2.0): `name#version|name#version`, both with exact versions (URL-encode `|` as %7C). The
+            Two IGs: `name#version|name#version`, both with exact versions (URL-encode `|` as %7C). The
             context included with exactly these two IGs is used, looked up by its key first and then by the
             reversed order; neither included is 400 invalid-request. A single exact `name#version` uses the single-IG
             context when one is included, otherwise the two-IG context whose first IG it is. A name without a version,
@@ -233,7 +233,7 @@ paths:
                 type: string
                 enum: ['true', 'false']
             X-Tx-Mode:
-              description: Terminology mode used for this validation (1.1.0)
+              description: Terminology mode used for this validation
               schema:
                 type: string
                 enum: [none, server, ecosystem]
@@ -241,11 +241,11 @@ paths:
               description: >-
                 Normalised base URL of the terminology server used (mode server). For mode ecosystem, the `tx` value
                 if given, else the context's server, else absent (the registry's own default server is not reported).
-                Absent for mode none. (1.1.0)
+                Absent for mode none.
               schema:
                 type: string
             X-Tx-Source:
-              description: Where the setting came from, `request` (tx or txMode given) or `context` (the default) (1.1.0)
+              description: Where the setting came from, `request` (tx or txMode given) or `context` (the default)
               schema:
                 type: string
                 enum: [request, context]
@@ -329,7 +329,7 @@ paths:
         applies when an inactive context for it is already stored. Public mode: while access control is
         disabled (FV_GLOBAL_DISABLED_ACL_SECURITY), `shareable: false` is ignored and the context is stored as
         shareable, with a warning in `warnings`.
-        Two IGs (1.2.0): send `igPackages` with two entries instead of `igPackageId`/`igPackageVersion` (exactly one
+        Two IGs: send `igPackages` with two entries instead of `igPackageId`/`igPackageVersion` (exactly one
         of the two forms; one entry behaves like `igPackageId`). One context is built from both IGs, every dependency
         of each and the core specification. Its key is `A#a|B#b` in the order given (at most 256 characters); it is
         also found under the aliases `B#b|A#a` and, for a single-IG request with an exact version when no single-IG
@@ -362,7 +362,7 @@ paths:
                   minItems: 1
                   maxItems: 2
                   description: >-
-                    One or two IG packages for one context (1.2.0). Two entries may not name the same igPackageId.
+                    One or two IG packages for one context. Two entries may not name the same igPackageId.
                   items:
                     type: object
                     required:
@@ -413,7 +413,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           description: >-
-            alias-conflict: another two-IG context for this FHIR version already has the same first IG (1.2.0)
+            alias-conflict: another two-IG context for this FHIR version already has the same first IG
           content:
             application/problem+json:
               schema:
@@ -458,7 +458,7 @@ paths:
           required: true
           description: >-
             The exact IG package version to exclude, name#version (URL-encode `#` as %23); no `latest`. A two-IG
-            context (1.2.0): its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
+            context: its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
             addresses a two-IG context.
           schema:
             type: string
@@ -495,7 +495,7 @@ paths:
         private context of an IG package owned by another organisation, or a malformed terminology setting), then
         400 tx-server-not-registered and 503 tx-registry-unavailable for the terminology server. Access changes take
         effect on every instance within the propagation window without a rebuild. Changing `terminology` takes
-        effect on the next validation on every instance within the same window; the context is not rebuilt (1.1.0).
+        effect on the next validation on every instance within the same window; the context is not rebuilt.
         It is the context's default: a validation request can override it with `tx`/`txMode`. Setting the same
         terminology again changes nothing. Enabled FHIR versions: also works for a context that is inactive
         because its FHIR version is not enabled (FV_ENABLED_FHIR_VERSIONS); the change is stored, nothing is built,
@@ -511,7 +511,7 @@ paths:
           required: true
           description: >-
             The exact included IG package version, name#version (URL-encode `#` as %23); no `latest`. A two-IG
-            context (1.2.0): its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
+            context: its key `A#a|B#b` or `B#b|A#a` (URL-encode `|` as %7C); a single name#version never
             addresses a two-IG context. `shareable: false` on a two-IG context needs ownership of both IG packages.
           schema:
             type: string
@@ -1115,12 +1115,12 @@ components:
                         description: name#version, or A#a|B#b for a two-IG context
                       igPackages:
                         type: array
-                        description: The context's IGs (name#version) in key order (1.2.0)
+                        description: The context's IGs (name#version) in key order
                         items:
                           type: string
                       aliases:
                         type: array
-                        description: Other values that find this context (1.2.0); empty for a single-IG context
+                        description: Other values that find this context; empty for a single-IG context
                         items:
                           type: string
                       owner:
@@ -1204,7 +1204,7 @@ components:
               description: concrete name#version, or A#a|B#b for a two-IG context
         igPackages:
           type: array
-          description: The context's IGs with concrete versions, in key order (1.2.0)
+          description: The context's IGs with concrete versions, in key order
           items:
             type: object
             properties:
@@ -1218,7 +1218,7 @@ components:
         aliases:
           type: array
           description: >-
-            Other values that find this context (1.2.0): `B#b|A#a` and `A#a` for a two-IG context, empty otherwise
+            Other values that find this context: `B#b|A#a` and `A#a` for a two-IG context, empty otherwise
           items:
             type: string
         requestedVersion:
