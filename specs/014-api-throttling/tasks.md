@@ -626,3 +626,7 @@ Task: "T020 [US1] CorsConfig exposed headers"       # parallel with T015
 ## Phase 13: Convergence
 
 - [X] T061 Log the default-organisation audit line as `cli: limit <set|remove> default-organisation=default id=- old=<n|none> new=<n|none>` (the `target` label used in the JSON result) instead of the hard-coded `default-org=default` in `src/main/java/nzi/fhir/validator/cli/LimitCommands.java#change`, and add a `LimitCommandsIT` assertion for the default-organisation audit line (only the default-key line is asserted today), per contracts/operations.md §2.4 and FR-016 (contradicts)
+
+## Phase 14: Convergence
+
+- [X] T062 Record the 1.0.0 release reset (PR #106) in the spec 014 artifacts without rewriting their history: add a dated note under the header of `specs/014-api-throttling/plan.md` (and update its Constitution Check "Workflow gate" row) stating that the feature ships in **1.0.0**, that `V18__validation_rate_limits.sql` was folded into `src/main/resources/db/migration/V18__baseline_1_0.sql` (the original kept in `src/test/resources/db/legacy/v16-v18/`), that the V17 upgrade case of `ThrottleMigrationIT` is replaced by `SquashedBaselineIT` (baseline vs the original V1–V18, V9-squashed and V15-squashed histories), and that the results are in `perf/results-1.0.0.md`; add the same one-line pointer to `spec.md` Assumptions (Release), `research.md` (the V18 and perf sections) and `quickstart.md` (§8, the 1.3.0/1.4.0 image names and `perf/results-1.4.0.md`), per plan: Summary, Project Structure and Constitution Check (contradicts)

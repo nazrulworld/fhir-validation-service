@@ -394,6 +394,8 @@ seconds with a system-organisation key (all served) and 2 with a key of another 
   operators only.
 - **Release**: ships in the next 1.x minor release; adding a 429 response to the validation endpoint is a
   non-breaking addition to the contract. The database change goes through the normal versioned migration.
+  *Release reset (2026-11-24, PR #106)*: all releases were folded into one 1.0.0, which includes this feature; its
+  schema is part of the baseline migration `V18__baseline_1_0.sql`.
 - **Existing behaviour unchanged**: authentication, authorisation and validation results are unchanged, and so is
   usage accounting (spec 008) for every request that is not refused with 429 (see FR-018a). Throttling only adds the
   refusal path.
