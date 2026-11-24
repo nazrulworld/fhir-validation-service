@@ -622,3 +622,7 @@ Task: "T020 [US1] CorsConfig exposed headers"       # parallel with T015
 ## Phase 12: Convergence
 
 - [X] T060 Update the check order in `specs/014-api-throttling/contracts/http-api.md` §2 (and the "still starting" row of §1) so the throttle's 503 `not-ready` covers both waits: until the caps are loaded, and until the instance's peers count it (two sync ticks, T056), per contracts/http-api.md §2 (partial)
+
+## Phase 13: Convergence
+
+- [X] T061 Log the default-organisation audit line as `cli: limit <set|remove> default-organisation=default id=- old=<n|none> new=<n|none>` (the `target` label used in the JSON result) instead of the hard-coded `default-org=default` in `src/main/java/nzi/fhir/validator/cli/LimitCommands.java#change`, and add a `LimitCommandsIT` assertion for the default-organisation audit line (only the default-key line is asserted today), per contracts/operations.md §2.4 and FR-016 (contradicts)

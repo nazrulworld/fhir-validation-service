@@ -191,12 +191,15 @@ class LimitCommandsIT extends BaseTestContainer {
         try (LogCapture logs = LogCapture.start()) {
             assertExit(cli("limit", "set", "--key", "acme-a", "--per-minute", "5"), 0);
             assertExit(cli("limit", "remove", "--default-key"), 0);
+            assertExit(cli("limit", "set", "--default-org", "--per-minute", "900"), 0);
             java.util.List<String> lines = logs.events().stream().map(LogCapture.Captured::message)
                     // LogCapture sees an event once per configured logger it passes through (root and nzi.fhir.validator).
                     .filter(m -> m.startsWith("cli: limit")).distinct().toList();
-            assertEquals(2, lines.size(), lines.toString());
+            assertEquals(3, lines.size(), lines.toString());
             assertTrue(lines.get(0).matches("cli: limit set key=acme-a id=[0-9a-f-]{36} old=none new=5"), lines.get(0));
             assertEquals("cli: limit remove default-key=default id=- old=600 new=none", lines.get(1));
+            // contracts/operations.md §2.4: <target> is the JSON result's target label.
+            assertEquals("cli: limit set default-organisation=default id=- old=1200 new=900", lines.get(2));
         }
     }
 
