@@ -131,7 +131,7 @@ public class ServiceMetrics {
      * Spec 010 meters (FR-025, data-model §10): shared package definitions per served version and the instance's code
      * cache. No label carries a server address, package name or code.
      *
-     * @param retainedPerExpandedByte measured heap held per unpacked package byte (research R9, perf/results-1.1.0.md),
+     * @param retainedPerExpandedByte measured heap held per unpacked package byte (research R9, perf/results-1.0.0.md),
      *                                for the estimate gauge only
      */
     public void bindSpec010(nzi.fhir.validator.core.npm.SharedPackageDefinitions shared,
