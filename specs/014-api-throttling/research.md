@@ -2,6 +2,11 @@
 
 **Feature**: `014-api-throttling` | **Date**: 2026-11-23 | **Spec**: [spec.md](./spec.md)
 
+> **Release reset (2026-11-24, PR #106)**: this feature ships in **1.0.0**, not 1.4.0. `V18__validation_rate_limits.sql` (R7) is
+> folded into `V18__baseline_1_0.sql`, which seeds the defaults and the trial organisation's cap directly; the trial
+> key still gets 30 when it is first installed. The results of R13 are in `perf/results-1.0.0.md`. R14's version
+> decision is superseded; the rest is kept as written.
+
 The Technical Context had no open unknowns after `/speckit-clarify`. The decisions below settle the design questions
 that the spec deliberately left to planning.
 

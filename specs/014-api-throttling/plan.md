@@ -4,6 +4,13 @@
 
 **Input**: Feature specification from `specs/014-api-throttling/spec.md`
 
+> **Release reset (2026-11-24, PR #106)**: nothing earlier was in use, so every release was folded into one **1.0.0**, and
+> this feature ships in it. Where this plan says 1.4.0 and `V18__validation_rate_limits.sql`, read 1.0.0 and
+> `src/main/resources/db/migration/V18__baseline_1_0.sql`, the one baseline that holds the whole schema (the original
+> file is kept in `src/test/resources/db/legacy/v16-v18/`). The V17 upgrade case of `ThrottleMigrationIT` is replaced
+> by `SquashedBaselineIT`, which checks the baseline against every earlier development history. The performance
+> results are in `perf/results-1.0.0.md`. The rest of this plan is kept as written.
+
 ## Summary
 
 `POST /{version}/validate` gets per-minute caps per API key and per organisation, shared by every instance through
@@ -101,7 +108,7 @@ Design details: [research.md](./research.md) R1–R14.
 | **VII. Observability** | PASS | Nine `fv_throttle_*` meters, none with per-key, per-organisation or per-instance tags. Refusal logs are bounded to one line per subject per minute and carry the request id. Local mode logs WARN and INFO and sets a gauge. Readiness reports not-ready: "rate limits not loaded" until the first cap snapshot is loaded (T019), then "rate limits warming up" until the instance's peers count it, after two sync ticks or at once in local mode (T056; spec clarification 2026-11-24; code review of #99). All configuration comes from env vars. No secrets or resource content are logged. |
 | **VIII. Simplicity and dependency discipline** | PASS | No new dependency: Caffeine and Micrometer are already used. No new infrastructure: rejected alternatives were Redis, Bucket4j and per-request database counters (research R1, R4). Schema changes go only through the new `V18`; V15–V17 are untouched. |
 | **Security & compliance** | PASS | A 429 never reveals other keys, organisations or usage. Caps can't be set for the system organisation (CLI check plus CHECK constraints). Usage rows still hold no resource content, and throttle rows hold only ids and counts. |
-| **Workflow gate: migrations on top of the previous release** | PASS | `ThrottleMigrationIT` applies V18 to an empty database and on top of a 1.3.0 (V17) schema with data. |
+| **Workflow gate: migrations on top of the previous release** | PASS | `ThrottleMigrationIT` applies V18 to an empty database and on top of a 1.3.0 (V17) schema with data. **After the 1.0.0 reset** (see the note above): there is no previous release; `MigrationUpgradeIT` and `ThrottleMigrationIT` apply the baseline to an empty database, and `SquashedBaselineIT` applies it against the original V1–V18, V9-squashed and V15-squashed histories (same schema and seed rows, history and data kept, a database stopped before V18 refused). |
 
 **Post-design re-check**: no violations. Two behaviour changes are recorded for the changelog:
 - 429 is a new possible status of validate;

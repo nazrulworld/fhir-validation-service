@@ -4,6 +4,11 @@
 [http-api.md](./contracts/http-api.md) and [operations.md](./contracts/operations.md). Schema and in-memory model:
 [data-model.md](./data-model.md). Design decisions: [research.md](./research.md).
 
+> **Release reset (2026-11-24, PR #106)**: the feature ships in **1.0.0**. In §1, "V18" is the baseline
+> `V18__baseline_1_0.sql`, and the upgrade from a 1.3.0 schema is covered by `SquashedBaselineIT`. In §8, the 1.3.0
+> image no longer exists: compare an image built from a commit before spec 014 (no rate limits) with the image under
+> test at `THROTTLE_CAP=1000000` (checked, nothing refused), and record the results in `perf/results-1.0.0.md`.
+
 ## 0. Prerequisites
 
 - Docker (Testcontainers PostgreSQL), JDK 17, Maven.
