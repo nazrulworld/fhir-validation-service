@@ -91,7 +91,8 @@ final class LimitCommands {
             case KEY, ORGANISATION -> changeSubject(tx, target, cmd.required(target == Target.KEY ? "key" : "org"), perMinute);
             case DEFAULT_KEY, DEFAULT_ORG -> changeDefault(tx, target, perMinute);
         }).map(result -> {
-            logger.info("cli: limit {} {}={} id={} old={} new={}", verb, target == Target.DEFAULT_ORG ? "default-org" : target.label,
+            // contracts/operations.md §2.4: <target> is the result's target label (FR-016).
+            logger.info("cli: limit {} {}={} id={} old={} new={}", verb, target.label,
                     result.getString("name", "default"), result.getString("id", "-"), label(result.getInteger("previous")),
                     label(result.getInteger("perMinute")));
             return result;
