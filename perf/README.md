@@ -2,6 +2,8 @@
 
 Constitution Principle VI: attach these results to any PR that changes the validation hot path.
 
+The recorded results are in [results-1.0.0.md](results-1.0.0.md); add a section there for each new measurement.
+
 `perf/compare-run.sh` runs `validate.js` once against a fresh PostgreSQL + service container pair (4 CPUs, 4 GB) with
 the `grafana/k6` image, for comparing two builds on the same machine.
 

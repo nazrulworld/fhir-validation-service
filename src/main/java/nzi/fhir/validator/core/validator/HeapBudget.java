@@ -30,13 +30,13 @@ public class HeapBudget {
     static final long BUILD_OVERHEAD_BYTES = 64 * MB;
     /**
      * Heap a shared package definition set holds per unpacked byte, for the estimate gauge only (spec 010 FR-025). From
-     * the measurement in {@code perf/results-1.1.0.md}.
+     * the measurement in {@code perf/results-1.0.0.md}.
      */
     public static final double SHARED_RETAINED_PER_EXPANDED_BYTE = 3.6;
     /**
      * Heap a build needs per unpacked byte of a package whose definitions are already shared on the instance (spec 010
      * FR-024, research R9): the context's own lookup indexes, chain caches and private copies of the profiles it
-     * completes. Checked against the per-context part measured for SC-005 ({@code perf/results-1.1.0.md}); never lower
+     * completes. Checked against the per-context part measured for SC-005 ({@code perf/results-1.0.0.md}); never lower
      * than that measurement.
      */
     static final int SHARED_HEAP_PER_EXPANDED_BYTE = 1;

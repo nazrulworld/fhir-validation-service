@@ -4,7 +4,7 @@
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$REPO/target/perf014
-IMAGE=fhir-validation-service:014-api-throttling
+IMAGE=${IMAGE:-fhir-validation-service:014-api-throttling}   # the image under test
 NET=fvperf PG=fvperf-pg-atcap SVC=fvperf-svc-atcap
 ADMIN=perf-admin-key-0123456789abcdefghijklmnop
 VKEY=perf-validator-key-0123456789abcdefghijkl
