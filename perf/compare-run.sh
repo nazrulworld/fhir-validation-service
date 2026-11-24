@@ -5,7 +5,10 @@
 # IG_REGISTER="name#version ..." fetches them from the registries beforehand), and every
 # request then names it in ?ig=. With IG2=name#version both are included as one two-IG context and requests name
 # ig=IG|IG2. The context's build time and the memory before and after the include are recorded.
+# Optional: VUS=<n> concurrent k6 virtual users (default 8). MAX_PENDING=<n> sets FV_VALIDATION_MAX_PENDING (default 4 ×
+# workers = 16 here); keep VUS at or below it, or the extra requests are refused with 503 overloaded.
 set -u
+VUS=${VUS:-8}
 LABEL=$1 IMAGE=$2 SINK=$3 OUT=$4
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 NET=fvperf
@@ -23,6 +26,7 @@ for i in $(seq 1 60); do docker exec $PG pg_isready -U postgres >/dev/null 2>&1 
 
 ENV=(-e FV_PG_HOST=$PG -e FV_PG_PASSWORD=perfpw -e FV_PG_SSL_MODE=disable -e FV_VALIDATION_WORKERS=4
      -e FV_ADMIN_API_KEY=$ADMIN -e FV_SHUTDOWN_PRE_DRAIN_MS=0)
+[ -n "${MAX_PENDING:-}" ] && ENV+=(-e FV_VALIDATION_MAX_PENDING=$MAX_PENDING)
 KEYARG=()
 if [ "$SINK" != "-" ]; then
   ENV+=(-e FV_VALIDATOR_API_KEY=$VKEY -e FV_USAGE_SINK=$SINK)
@@ -89,7 +93,7 @@ if [ -n "${IG:-}" ]; then
   KEYARG+=(-e "IG=$KEY")
 fi
 K6=(docker run --rm --network $NET -v "$REPO":/work -w /work/perf grafana/k6:0.54.0 run --quiet
-    -e BASE=http://$SVC:8880 ${KEYARG[@]+"${KEYARG[@]}"} -e VUS=8)
+    -e BASE=http://$SVC:8880 ${KEYARG[@]+"${KEYARG[@]}"} -e VUS=$VUS)
 "${K6[@]}" -e DURATION=15s validate.js >/dev/null 2>&1   # warm-up
 "${K6[@]}" -e DURATION=60s --summary-export /work/target/perf-$LABEL.json validate.js > "$OUT/$LABEL.k6.txt" 2>&1
 mv "$REPO/target/perf-$LABEL.json" "$OUT/$LABEL.json"

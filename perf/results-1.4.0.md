@@ -72,6 +72,29 @@ lock, with no second lock and no extra allocation per admission. Same setup, ima
 (`fv_throttle_checked_total` 16 001). Memory per tracked key or organisation, worst case: 545 bytes
 (`ThrottleFootprintTest`).
 
+## 20 concurrent validations — PASS
+
+20 virtual users, each sending its next request as soon as the last one is answered (no think time), against the same
+4 CPU / 4 workers. The default admission limit (`FV_VALIDATION_MAX_PENDING` = 4 × workers = 16) would refuse the
+extra requests with 503 `overloaded`, so this run raises it to 32 (`MAX_PENDING=32`). Requests beyond the 4 workers
+then wait in the queue instead of being refused. An 8-VU run in the same session is the reference. Image built from
+`main` after #103, caps at 1,000,000/min (`THROTTLE_CAP`), 2026-11-24.
+
+| Run | VUs | Requests/s | Median (ms) | p90 (ms) | p95 (ms) | Max (ms) | Failed |
+|-----|----:|-----------:|------------:|---------:|---------:|---------:|-------:|
+| reference | 8 | 234.7 | 33.6 | 39.6 | 41.5 | 66.7 | 0 |
+| 20 concurrent | 20 | 237.0 | 82.9 | 93.9 | 97.5 | 150.6 | 0 |
+
+- All 14 241 requests got 200. There were no 503s, no 429s (`fv_throttle_refused_total` 0) and no failed checks.
+  Every request, warm-up included, went through the rate-limit check (`fv_throttle_checked_total` 17 047) and has a
+  `validation_usage` row (17 047).
+- p95 is 97.5 ms, within the 200 ms target.
+- Throughput stays the same: 4 workers are already busy at 8 VUs, so more clients don't add capacity. The extra
+  clients wait in the queue instead. Latency grows with the queue: median 33.6 → 82.9 ms (2.5×), about what 20 clients
+  sharing 4 workers predicts (20 / 8 × 33.6 ≈ 84 ms).
+- To serve 20 concurrent clients faster, add CPUs and workers or instances, not a higher admission limit. A higher
+  limit only lengthens the queue.
+
 ## Reproduce
 
 ```bash
@@ -79,4 +102,7 @@ docker build -t fhir-validation-service:014-api-throttling .
 perf/compare-run.sh base-130 ghcr.io/nazrulworld/fhir-validation-service:1.3.0 db target/perf014
 THROTTLE_CAP=1000000 perf/compare-run.sh caps-140 fhir-validation-service:014-api-throttling db target/perf014
 perf/atcap-014.sh     # the at-cap and bystander runs (two k6 clients at once)
+# 20 concurrent validations, with the 8-VU reference
+THROTTLE_CAP=1000000 perf/compare-run.sh vu8 fhir-validation-service:014-api-throttling db target/perf20
+THROTTLE_CAP=1000000 VUS=20 MAX_PENDING=32 perf/compare-run.sh vu20 fhir-validation-service:014-api-throttling db target/perf20
 ```
