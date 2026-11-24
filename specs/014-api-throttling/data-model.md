@@ -2,6 +2,10 @@
 
 **Feature**: `014-api-throttling` | **Migration**: `V18__validation_rate_limits.sql` | **Research**: [research.md](./research.md)
 
+> **Release reset (2026-11-24, PR #106)**: the feature ships in **1.0.0**. `V18__validation_rate_limits.sql` is folded into the
+> baseline `src/main/resources/db/migration/V18__baseline_1_0.sql`, which creates the same columns, constraints,
+> settings and tables; the original is kept in `src/test/resources/db/legacy/v16-v18/`. The model below is unchanged.
+
 All tables live in `fhir_validator_schema`. V15–V17 are never edited (Principle VIII).
 
 ## 1. Stored caps (shared, durable)

@@ -2,6 +2,9 @@
 
 **Feature**: `014-api-throttling` | **Operation**: `validationApiValidate` (`POST /{version}/validate`) only (FR-001)
 
+> **Release reset (2026-11-24, PR #106)**: the feature ships in **1.0.0** (`openapi.yaml` `info.version` 1.0.0), not 1.4.0. The
+> contract below is unchanged.
+
 The `openapi.yaml` change lands before (or with) the code (Principle IV). The change is **additive**: a new status and
 new response headers. Paths, parameters and request and response bodies are unchanged.
 

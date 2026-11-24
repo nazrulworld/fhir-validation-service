@@ -2,6 +2,9 @@
 
 **Feature**: `014-api-throttling` | **Release**: 1.4.0
 
+> **Release reset (2026-11-24, PR #106)**: the feature ships in **1.0.0**, and the migration of §5 is part of the baseline
+> `V18__baseline_1_0.sql`. The operator surface below is unchanged.
+
 ## 1. Environment variables
 
 The bounds are in [data-model.md](../data-model.md) §4. A value outside its bounds fails startup, like every other
@@ -116,7 +119,7 @@ ever logged.
 ## 5. Database
 
 - `V18__validation_rate_limits.sql` adds columns, constraints and two UNLOGGED tables, and seeds the initial caps
-  ([data-model.md](../data-model.md)).
+  ([data-model.md](../data-model.md)). Since the 1.0.0 reset, the baseline `V18__baseline_1_0.sql` does this.
 - The UNLOGGED tables are emptied after a database crash or failover, which is harmless: windows restart.
 - They are not part of logical backups that matter.
 - Retention: no operator action is needed. Instances delete rows older than 2 minutes themselves.

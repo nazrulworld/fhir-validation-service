@@ -630,3 +630,7 @@ Task: "T020 [US1] CorsConfig exposed headers"       # parallel with T015
 ## Phase 14: Convergence
 
 - [X] T062 Record the 1.0.0 release reset (PR #106) in the spec 014 artifacts without rewriting their history: add a dated note under the header of `specs/014-api-throttling/plan.md` (and update its Constitution Check "Workflow gate" row) stating that the feature ships in **1.0.0**, that `V18__validation_rate_limits.sql` was folded into `src/main/resources/db/migration/V18__baseline_1_0.sql` (the original kept in `src/test/resources/db/legacy/v16-v18/`), that the V17 upgrade case of `ThrottleMigrationIT` is replaced by `SquashedBaselineIT` (baseline vs the original V1–V18, V9-squashed and V15-squashed histories), and that the results are in `perf/results-1.0.0.md`; add the same one-line pointer to `spec.md` Assumptions (Release), `research.md` (the V18 and perf sections) and `quickstart.md` (§8, the 1.3.0/1.4.0 image names and `perf/results-1.4.0.md`), per plan: Summary, Project Structure and Constitution Check (contradicts)
+
+## Phase 15: Convergence
+
+- [X] T063 Add the 1.0.0 release-reset pointer (as in T062) to the headers of `specs/014-api-throttling/data-model.md` ("Migration: `V18__validation_rate_limits.sql`", now part of `V18__baseline_1_0.sql`), `specs/014-api-throttling/contracts/operations.md` ("Release: 1.4.0", and the §5 Database bullet naming `V18__validation_rate_limits.sql`) and `specs/014-api-throttling/contracts/http-api.md` (title "1.4.0"), keeping the existing text as history, per plan: Project Structure (contradicts)
