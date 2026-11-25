@@ -10,7 +10,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - The container runtime is pinned to `eclipse-temurin:17.0.21.1_2-jre-jammy` (by tag and digest), the Temurin build that
   fixes Java4Shell (CVE-2026-114938). The moving `17-jre-jammy` tag and the build cache could otherwise put an affected
-  JDK into a rebuilt image.
+  JDK into a rebuilt image. Dependabot now checks the Dockerfile base images weekly and opens PRs that bump tag and
+  digest together, staying on Java 17 and Maven 3.
 
 ## [1.0.0] - 2026-11-24
 
