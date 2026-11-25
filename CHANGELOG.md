@@ -72,3 +72,12 @@ history, and one whose schema stops before V18 is refused at startup.
   probes, Prometheus metrics (validation, packages, terminology, regex re-checks, rate limits), graceful shutdown.
 - Container images for `linux/amd64` and `linux/arm64`; the user guide at
   <https://nazrulworld.github.io/fhir-validation-service/>, generated from the project wiki.
+
+### Security
+
+- The container runtime is pinned by tag and digest for each CPU architecture. linux/amd64 uses
+  `eclipse-temurin:17.0.21.1_2-jre-jammy`, the Temurin build that fixes Java4Shell (CVE-2026-114938). linux/arm64 stays
+  on `17.0.21_9-jre-jammy`: ARM64 is not affected by Java4Shell, and Temurin's arm64 17.0.21.1+2 build fails to start
+  JCE. The moving `17-jre-jammy` tag and the build cache could otherwise put a different JDK into a rebuilt image.
+  Dependabot now checks the Dockerfile base images weekly and opens PRs that bump tag and digest together, staying on
+  Java 17 and Maven 3.

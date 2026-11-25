@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Container base images in the root Dockerfile. The runtime stage is pinned by tag and digest
+  # (eclipse-temurin:<version>-jre-jammy@sha256:...); Dependabot bumps both together, so JDK security
+  # builds and refreshed Ubuntu layers arrive as PRs instead of silently through a moving tag.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(docker)"
+    ignore:
+      # Stay on the Java 17 line and Maven 3: a major JDK or Maven move is a deliberate change, not a bump.
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
+      - dependency-name: maven
+        update-types: ["version-update:semver-major"]

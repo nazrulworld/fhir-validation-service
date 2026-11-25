@@ -41,7 +41,20 @@ RUN jar xf /build/app.jar LICENSE.md NOTICE META-INF/NOTICE META-INF/THIRD-PARTY
     && chmod -R a-w,a+rX /build/notices/app
 
 # --- Stage 2: runtime — the service JVM only (no database, no shell supervisor) ---------------------------------
-FROM eclipse-temurin:17-jre-jammy AS runtime
+# The JRE base is pinned per CPU architecture (tag + index digest); BuildKit picks the stage from TARGETARCH.
+# - amd64: the Temurin build that fixes Java4Shell (CVE-2026-114938, OpenJDK Base64 decoder RCE on x86-64 with
+#   AVX-512 VBMI).
+# - arm64: stays on 17.0.21+9. Java4Shell does not affect ARM64, and Temurin's arm64 17.0.21.1+2 build fails to start
+#   JCE ("Couldn't iterate through the jurisdiction policy files: unlimited"). Move it to the amd64 version once a
+#   working arm64 build ships; the arm64 smoke test in CI shows whether it starts.
+# A moving tag (17-jre-jammy) plus the GitHub Actions build cache can put a different JDK into a rebuilt image, so
+# neither stage uses one. To update: pick a tag and take its index digest from
+# `docker buildx imagetools inspect eclipse-temurin:<tag>`. Dependabot proposes these bumps weekly.
+FROM eclipse-temurin:17.0.21.1_2-jre-jammy@sha256:0197d17ef5317724fda570ba2263b5e011fa32663339a880414fdb186884a611 AS jre-amd64
+FROM eclipse-temurin:17.0.21_9-jre-jammy@sha256:57587209f7b7f291c66fe80c9779efa9dde4ec199160cbb5c38ec2fe27a78bc4 AS jre-arm64
+
+# hadolint ignore=DL3006
+FROM jre-${TARGETARCH} AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown
