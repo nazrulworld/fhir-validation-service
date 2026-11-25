@@ -1,8 +1,8 @@
 version: 2
 updates:
-  # Container base images in the root Dockerfile. The runtime stage is pinned by tag and digest
-  # (eclipse-temurin:<version>-jre-jammy@sha256:...); Dependabot bumps both together, so JDK security
-  # builds and refreshed Ubuntu layers arrive as PRs instead of silently through a moving tag.
+  # Container base images in the root Dockerfile. The runtime JRE is pinned per CPU architecture by tag and digest
+  # (eclipse-temurin:<version>-jre-jammy@sha256:...); Dependabot bumps both together, so JDK security builds and
+  # refreshed Ubuntu layers arrive as PRs instead of silently through a moving tag.
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -12,8 +12,13 @@ updates:
     commit-message:
       prefix: "build(docker)"
     ignore:
-      # Stay on the Java 17 line and Maven 3: a major JDK or Maven move is a deliberate change, not a bump.
+      # The builder image only compiles the jar; its JDK never ships. Dependabot also reads the JDK suffix in
+      # `3.9-eclipse-temurin-17` as part of the version and proposes newer JDKs (it opened a bump to -26), which the
+      # semver-major rule does not catch.
+      - dependency-name: maven
       - dependency-name: eclipse-temurin
         update-types: ["version-update:semver-major"]
-      - dependency-name: maven
-        update-types: ["version-update:semver-major"]
+      # Temurin's arm64 17.0.21.1+2 JRE fails to start JCE, so the arm64 stage stays on 17.0.21+9 (see the Dockerfile).
+      # Remove this once a later 17.0.x build is out and passes the arm64 smoke test.
+      - dependency-name: eclipse-temurin
+        versions: ["17.0.21.1_2-jre-jammy"]
