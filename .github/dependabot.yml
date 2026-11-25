@@ -19,6 +19,8 @@ updates:
       - dependency-name: eclipse-temurin
         update-types: ["version-update:semver-major"]
       # Temurin's arm64 17.0.21.1+2 JRE fails to start JCE, so the arm64 stage stays on 17.0.21+9 (see the Dockerfile).
-      # Remove this once a later 17.0.x build is out and passes the arm64 smoke test.
+      # Docker ignore rules take a version requirement, not a tag: Dependabot drops the `_N` build number and the
+      # `-jre-jammy` suffix, so "17.0.21.1" covers every 17.0.21.1 build (17.0.21.1_2, a re-spin _3, ...) and still
+      # allows 17.0.21.2 and 17.0.22. Remove this once a later 17.0.x build is out and passes the arm64 smoke test.
       - dependency-name: eclipse-temurin
-        versions: ["17.0.21.1_2-jre-jammy"]
+        versions: ["17.0.21.1"]
