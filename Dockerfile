@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # --- Stage 1: build the shaded jar on the native build platform -------------------------------------------------
-FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-17 AS builder
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-26 AS builder
 WORKDIR /build
 
 COPY pom.xml mvnw ./
