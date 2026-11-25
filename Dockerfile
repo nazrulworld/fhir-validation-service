@@ -41,7 +41,10 @@ RUN jar xf /build/app.jar LICENSE.md NOTICE META-INF/NOTICE META-INF/THIRD-PARTY
     && chmod -R a-w,a+rX /build/notices/app
 
 # --- Stage 2: runtime — the service JVM only (no database, no shell supervisor) ---------------------------------
-FROM eclipse-temurin:17-jre-jammy AS runtime
+# Pinned to the Temurin build that fixes Java4Shell (CVE-2026-114938, OpenJDK Base64 decoder RCE on x86-64 with
+# AVX-512 VBMI). The moving 17-jre-jammy tag plus the GitHub Actions build cache let an affected JDK back into an image.
+# To update: pick a new tag and take its index digest from `docker buildx imagetools inspect eclipse-temurin:<tag>`.
+FROM eclipse-temurin:17.0.21.1_2-jre-jammy@sha256:0197d17ef5317724fda570ba2263b5e011fa32663339a880414fdb186884a611 AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown
